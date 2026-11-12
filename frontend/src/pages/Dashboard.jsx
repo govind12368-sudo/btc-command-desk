@@ -8,6 +8,8 @@ import { PillarCard, DirectionPanel } from "@/components/desk/Pillars";
 import { CandleChart } from "@/components/desk/CandleChart";
 import { n, usd, pct, ist, ago, sgn } from "@/lib/fmt";
 import { Sparkles } from "lucide-react";
+import { Ring, Sparkline, PillarBars, MtfStrip, VIZ } from "@/components/desk/charts";
+import { PILLAR_NAMES } from "@/components/desk/Pillars";
 
 const TONE = { BULLISH: "text-teal-300 border-teal-500/40 bg-teal-500/10", "LEAN BULLISH": "text-teal-300 border-teal-500/30 bg-teal-500/5",
   BEARISH: "text-red-300 border-red-500/40 bg-red-500/10", "LEAN BEARISH": "text-red-300 border-red-500/30 bg-red-500/5", NEUTRAL: "text-slate-300 border-slate-500/40 bg-slate-500/10" };
@@ -42,21 +44,60 @@ function DeskBrief({ b }) {
 }
 
 
-function Decision({ s }) {
+function useDay() {
+  const { data } = useFetch("/candles?tf=1h", 60000);
+  const bars = (data?.bars || []).slice(-24);
+  if (!bars.length) return { bars: null };
+  return { bars, open: bars[0].o, high: Math.max(...bars.map((b) => b.h)), low: Math.min(...bars.map((b) => b.l)) };
+}
+
+function DecisionHero({ s }) {
   const d = s.decision?.decision;
-  const col = d === "BUY" ? "text-teal-400" : d === "SELL" ? "text-red-400" : d === "MONITOR" ? "text-indigo-300" : "text-amber-300";
+  const day = useDay();
+  const price = s.price;
+  const chg = day.open && price ? (price / day.open - 1) * 100 : null;
+  const tone = d === "BUY" ? "text-teal-300" : d === "SELL" ? "text-red-300" : d === "MONITOR" ? "text-indigo-300" : "text-amber-300";
+  const edge = d === "BUY" ? "before:bg-teal-400" : d === "SELL" ? "before:bg-red-400" : d === "MONITOR" ? "before:bg-indigo-400" : "before:bg-amber-400";
+  const total = (ev) => ev.total_checks ?? ev.checks?.length ?? 11;
   return (
-    <Card title="BTC Trade Decision" sub="Execution market: Delta Exchange India BTCUSD perpetual (USD)" testid="decision-panel">
-      <div data-testid="decision-value" className={`font-mono text-4xl sm:text-5xl font-extrabold tracking-tight ${col}`}>{d || "—"}</div>
-      <p className="mt-2 text-sm text-slate-300" data-testid="decision-reason">{s.decision?.reason}</p>
-      <p className="mt-1 text-[11px] text-slate-500">{s.decision?.note}</p>
-      <div className="mt-4 grid grid-cols-2 gap-x-6">
-        <KV k="Readiness (checklist)" v={pct(s.readiness?.score, 0)} testid="readiness-score" />
-        {s.limits && <KV k="Entries today" v={`${s.limits?.entries_today ?? "—"}`} />}
-        {s.limits && <KV k="Realized net today" v={usd(s.limits?.realized_net_today)} />}
+    <section data-testid="decision-panel" className={`desk-card relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-1 ${edge}`}>
+      <div className="grid gap-0 lg:grid-cols-[1.15fr_1fr_1.05fr]">
+        <div className="p-5 lg:border-r lg:border-[#1e2a4a]">
+          <div className="text-[13px] font-medium text-slate-400">Trade decision now</div>
+          <div data-testid="decision-value" className={`mt-1 font-mono text-5xl font-extrabold tracking-tight sm:text-6xl ${tone}`}>{d || "—"}</div>
+          <p className="mt-2 text-[14px] leading-snug text-slate-200" data-testid="decision-reason">{s.decision?.reason}</p>
+          <p className="mt-1 text-[11.5px] text-slate-500">{s.decision?.note}</p>
+          {s.limits && (
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px]">
+              <span className="text-slate-400">Entries today <b className="font-mono text-slate-100">{s.limits?.entries_today ?? "—"}</b></span>
+              <span className="text-slate-400">Realized net today <b className="font-mono text-slate-100">{usd(s.limits?.realized_net_today)}</b></span>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-[#1e2a4a] p-5 lg:border-r lg:border-t-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[13px] font-medium text-slate-400">BTC price · Delta BTCUSD</div>
+            {chg != null && <span data-testid="stat-change" className={`rounded px-1.5 py-0.5 font-mono text-[12px] font-semibold ${chg >= 0 ? "bg-teal-500/10 text-teal-300" : "bg-red-500/10 text-red-300"}`}>{chg >= 0 ? "▲" : "▼"} {sgn(chg, 2)}% 24h</span>}
+          </div>
+          <div data-testid="stat-price" className="mt-1 font-mono text-4xl font-bold tracking-tight text-slate-50">{n(price, 1)}</div>
+          <div className="mt-0.5 font-mono text-[11.5px] text-slate-400">bid {n(s.quote?.bid, 1)} · ask {n(s.quote?.ask, 1)}</div>
+          <div className="mt-2"><Sparkline bars={day.bars} height={58} testid="price-24h" /></div>
+          {day.bars && <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-500"><span>24h low {n(day.low, 0)}</span><span>24h high {n(day.high, 0)}</span></div>}
+        </div>
+        <div className="grid grid-cols-2 gap-4 border-t border-[#1e2a4a] p-5 lg:border-t-0">
+          <div data-testid="readiness-score" className="col-span-2"><Ring value={s.readiness?.score ?? 0} max={1} size={68} color={VIZ.brand} label="Readiness" sub="checklist completion, not a win chance" /></div>
+          <Ring testid="stat-scalp" value={s.scalp.passed} max={total(s.scalp)} size={54} stroke={5} color={s.scalp.status === "BUY" ? VIZ.up : s.scalp.status === "SELL" ? VIZ.down : VIZ.s1} label="Scalping" sub={`${s.scalp.passed}/${total(s.scalp)} · ${String(s.scalp.status).toLowerCase()}`} />
+          <Ring testid="stat-swing" value={s.swing.passed} max={total(s.swing)} size={54} stroke={5} color={s.swing.status === "BUY" ? VIZ.up : s.swing.status === "SELL" ? VIZ.down : VIZ.s1} label="Swing" sub={`${s.swing.passed}/${total(s.swing)} · ${String(s.swing.status).toLowerCase()}`} />
+          <Ring testid="stat-coverage" value={s.live_direction.coverage} max={5} size={54} stroke={5} color={VIZ.s3} label="Pillars" sub={s.live_direction.partial ? "partial coverage" : "complete"} />
+          <div data-testid="stat-six" className="flex flex-col justify-center">
+            <div className="text-[13px] font-semibold text-slate-100">Six-factor</div>
+            <div className={`font-mono text-lg font-bold ${!s.six_factor.complete ? "text-slate-500" : s.six_factor.score > 0 ? "text-teal-300" : s.six_factor.score < 0 ? "text-red-300" : "text-slate-200"}`}>{s.six_factor.complete ? sgn(s.six_factor.score) : "n/a"}</div>
+            <div className="text-[11.5px] text-slate-400">{s.six_factor.complete ? s.six_factor.direction.toLowerCase() : "inputs missing"}</div>
+          </div>
+        </div>
       </div>
-      <p className="mt-2 text-[10.5px] text-slate-500">{s.readiness?.note}</p>
-    </Card>
+      <p className="border-t border-[#1e2a4a] px-5 py-2 text-[11px] text-slate-500">{s.readiness?.note}</p>
+    </section>
   );
 }
 
@@ -138,18 +179,16 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <PageHead title="BTC Dashboard" sub={`Delta BTCUSD perpetual · computed ${ist(s.computed_at)} · quote ${s.quote?.source || "—"} (exchange time ${ist(s.quote?.event_time)})`} />
+      <DecisionHero s={s} />
       <DeskBrief b={s.brief} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Decision s={s} />
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card title="BTC Direction · confirmed 15-minute model" sub="Completed-candle confirmation · OKX market data + Fed/EIA macro data · news/calendar excluded" testid="direction-card"><DirectionPanel live={s.live_direction} /></Card>
+        <Card title="Five-pillar balance" sub="Each bar = pillar score × weight. Hatched = data unavailable." testid="pillar-balance" right={<Link to="/pillars" className="text-xs text-amber-400">Pillar details</Link>}>
+          <PillarBars pillars={s.pillars} names={PILLAR_NAMES} />
+          <div className="mt-4"><div className="mb-1.5 text-[12px] text-slate-400">Trend by timeframe (Delta completed candles)</div><MtfStrip rows={s.mtf?.rows} /></div>
+        </Card>
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Stat label="BTC price (Delta BTCUSD)" value={n(s.price, 1)} sub={`bid ${n(s.quote?.bid, 1)} · ask ${n(s.quote?.ask, 1)} USD`} testid="stat-price" />
-        <Stat label="Scalping checks" value={`${s.scalp.passed}/${s.scalp.total_checks ?? s.scalp.checks?.length ?? "—"}`} sub={s.scalp.status} testid="stat-scalp" />
-        <Stat label="Swing checks" value={`${s.swing.passed}/${s.swing.total_checks ?? s.swing.checks?.length ?? "—"}`} sub={s.swing.status} testid="stat-swing" />
-        <Stat label="Five-pillar coverage" value={`${s.live_direction.coverage}/5`} sub={s.live_direction.partial ? "PARTIAL COVERAGE" : "complete"} testid="stat-coverage" />
-        <Stat label="Original six-factor" value={s.six_factor.complete ? sgn(s.six_factor.score) : "N/A"} sub={s.six_factor.complete ? s.six_factor.direction : "UNAVAILABLE — inputs missing"} testid="stat-six" />
-      </div>
+      <Card title="Price chart" sub="Hover a candle for its open, high, low, close and volume" testid="chart-card"><CandleChart levels={lv} /></Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <StrategyCard ev={s.scalp} title="Scalping Trade Signal" to="/scalping" />
         <StrategyCard ev={s.swing} title="Swing Trade Signal" to="/swing" />
@@ -168,11 +207,10 @@ export default function Dashboard() {
         </Card>
       </div>
       <Card title="Active checks — Scalping vs Swing" sub="Click a check on strategy pages to expand. Every active check must pass; F31 review/journal is excluded." testid="compare-card"><CompareTable scalp={s.scalp} swing={s.swing} /></Card>
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <Card title="Completed-candle price chart" testid="chart-card"><CandleChart levels={lv} /></Card>
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <NewsRadar />
+        <SourceHealth sources={s.sources} recovery={s.recovery} />
       </div>
-      <SourceHealth sources={s.sources} recovery={s.recovery} />
       <Note>{s.monitoring_note}</Note>
     </div>
   );

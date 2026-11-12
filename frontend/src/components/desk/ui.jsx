@@ -36,7 +36,7 @@ export function Chip({ status, label, testid, className = "" }) {
 
 export function Card({ title, right, children, className = "", testid, sub }) {
   return (
-    <section data-testid={testid} className={`desk-card p-4 sm:p-5 fade-up ${className}`}>
+    <section data-testid={testid} className={`desk-card p-4 sm:p-5 ${className}`}>
       {(title || right) && (
         <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
@@ -62,7 +62,7 @@ export function KV({ k, v, mono = true, testid, className = "" }) {
 
 export function Stat({ label, value, sub, testid, valueClass = "" }) {
   return (
-    <div className="desk-card px-4 py-3 fade-up">
+    <div className="desk-card px-4 py-3">
       <div className="font-mono text-[10.5px] uppercase tracking-wider text-slate-500">{label}</div>
       <div data-testid={testid} className={`mt-1 font-mono text-xl sm:text-2xl font-bold text-slate-50 ${valueClass}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-slate-500">{sub}</div>}

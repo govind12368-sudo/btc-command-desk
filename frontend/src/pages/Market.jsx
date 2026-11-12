@@ -3,6 +3,26 @@ import { useDesk } from "@/context/DeskContext";
 import { useFetch } from "@/hooks/useFetch";
 import { Card, Chip, KV, PageHead, Empty, Note } from "@/components/desk/ui";
 import { n, usd, ist, sgn, ago } from "@/lib/fmt";
+import { LineChart, SignedBars, VIZ } from "@/components/desk/charts";
+
+function OiCharts({ funding }) {
+  const { data } = useFetch("/oi-history?hours=24", 60000);
+  const pts = (data?.points || []).map((p) => ({ t: p.t, v: p.oi_btc }));
+  const first = pts[0]?.v, last = pts[pts.length - 1]?.v;
+  const ch = first && last ? (last / first - 1) * 100 : null;
+  const fund = [...(funding || [])].sort((a, b) => String(a.time).localeCompare(String(b.time))).map((f) => ({ t: f.time, v: (f.realized_fraction ?? f.funding_fraction ?? 0) * 10000 }));
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <Card title="Open interest · last 24 h" sub="OKX BTC-USDT-SWAP, stored by this server every ~5 min" testid="oi-chart"
+        right={ch != null && <span className={`rounded px-1.5 py-0.5 font-mono text-[12px] ${ch >= 0 ? "bg-teal-500/10 text-teal-300" : "bg-red-500/10 text-red-300"}`}>{ch >= 0 ? "▲" : "▼"} {sgn(ch, 2)}%</span>}>
+        <LineChart series={[{ name: "OI (BTC)", color: VIZ.s1, points: pts }]} yFmt={(v) => n(v, 0)} unit=" BTC" />
+      </Card>
+      <Card title="Funding settlements" sub="OKX, basis points per 8 h · positive = longs pay shorts" testid="funding-chart">
+        <SignedBars points={fund} fmt={(v) => sgn(v, 2)} unit=" bps" />
+      </Card>
+    </div>
+  );
+}
 
 function Book({ b }) {
   if (!b) return <Empty>Order book unavailable</Empty>;
@@ -68,6 +88,7 @@ export default function Market() {
           <p className="mt-2 font-mono text-[10.5px] text-slate-500">ticker time {ist(m?.okx?.ticker_time)} · OI time {ist(m?.okx?.oi_time)}</p>
         </Card>
       </div>
+      <OiCharts funding={m?.okx?.funding_history} />
       <Card title="OI history (stored snapshots, every ~5 min)" testid="oi-history">
         <div className="max-h-[300px] overflow-auto scroll-thin">
           <table className="desk-table"><thead><tr><th>Stored (IST)</th><th>Venue</th><th>Instrument</th><th>OI BTC</th><th>OI USD</th><th>Funding fraction</th></tr></thead>

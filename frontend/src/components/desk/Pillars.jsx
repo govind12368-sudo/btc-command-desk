@@ -8,7 +8,7 @@ export function PillarCard({ k, p, compact }) {
   const sc = p.score;
   const st = !p.valid ? "UNAVAILABLE" : sc > 0 ? "BULLISH" : sc < 0 ? "BEARISH" : "NEUTRAL";
   return (
-    <div className="desk-card p-3.5 fade-up" data-testid={`pillar-${k}`}>
+    <div className="desk-card p-3.5" data-testid={`pillar-${k}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold">{PILLAR_NAMES[k]}</span>
         <Chip status={st} label={p.valid ? `${st} ${sgn(sc, 0)}` : "UNAVAILABLE"} />

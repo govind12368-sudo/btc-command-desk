@@ -6,6 +6,9 @@ import { api, errText, API } from "@/lib/api";
 import { Card, Chip, KV, PageHead, Empty, Note, Stat } from "@/components/desk/ui";
 import { Field, Input, Select, Btn } from "@/components/desk/forms";
 import { n, pct, ist, sgn } from "@/lib/fmt";
+import { OutcomeBar, VIZ } from "@/components/desk/charts";
+const OUTCOME_ORDER = ["TARGET FIRST", "STOP FIRST", "PENDING", "HISTORY GAP"];
+const OUTCOME_COLORS = { "TARGET FIRST": VIZ.up, "STOP FIRST": VIZ.down, PENDING: VIZ.s1, "HISTORY GAP": "#475569" };
 
 function Backtest({ bt }) {
   if (!bt?.computed_at) return <Empty>Rule backtest runs after the 30-day history sync (about every 5 minutes).</Empty>;
@@ -81,7 +84,8 @@ export default function Validation() {
       <Card title="Observed outcomes by model" testid="outcomes-by-model">
         {Object.keys(data?.outcomes_by_model || {}).length === 0 ? <Empty>No snapshots yet. The confirmed 15-minute model logs its first confirmed LONG/SHORT and each confirmed direction change; the original six-factor model logs only when complete.</Empty> :
           Object.entries(data.outcomes_by_model).map(([m, o]) => { const w = o["TARGET FIRST"] || 0, l = o["STOP FIRST"] || 0; return (
-            <div key={m} className="flex flex-wrap items-center gap-2 py-1.5 border-b border-[#1e2a4a]/40"><span className="font-mono text-sm text-amber-300 w-48">{m}</span>{Object.entries(o).map(([k, v]) => <Chip key={k} status={k} label={`${k} ${v}`} />)}<span className="ml-auto font-mono text-xs">{w + l ? `hit rate ${pct(w / (w + l), 0)} of ${w + l} resolved` : "no resolved outcomes yet"}</span></div>); })}
+            <div key={m} className="border-b border-[#1e2a4a]/40 py-2.5"><div className="mb-1.5 flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-amber-300">{m}</span><span className="ml-auto font-mono text-xs">{w + l ? `hit rate ${pct(w / (w + l), 0)} of ${w + l} resolved` : "no resolved outcomes yet"}</span></div>
+              <OutcomeBar counts={o} order={[...OUTCOME_ORDER, ...Object.keys(o).filter((k) => !OUTCOME_ORDER.includes(k))]} colors={new Proxy(OUTCOME_COLORS, { get: (t, k) => t[k] || "#64748b" })} testid={`outcome-${m}`} /></div>); })}
       </Card>
       <Card title="Rule backtest evidence (30 days)" testid="backtest-card"><Backtest bt={data?.backtest} /></Card>
       <Card title="Snapshots" sub={data?.note} testid="snapshots-card" right={<div className="flex gap-2"><div className="w-48"><Select data-testid="snap-model-filter" value={model} onChange={(e) => { setModel(e.target.value); setPage(1); }} options={[{ value: "", label: "All models" }, { value: "FIVE_PILLAR_CONFIRMED_V2", label: "Confirmed 15m model (v2)" }, "FIVE_PILLAR_LIVE", "ORIGINAL_SIX_FACTOR", "MANUAL"]} /></div>{isAdmin && <Btn data-testid="snap-new" onClick={() => setForm("new")}>Manual snapshot</Btn>}{isAdmin && <a data-testid="export-validation" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs" href={`${API}/export/validation`}>Export CSV</a>}</div>}>

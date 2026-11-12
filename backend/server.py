@@ -100,6 +100,15 @@ async def market(u=Depends(current_user)):
             "scanner_note": "Contract specification is rechecked about every 15 s while this page is open."}
 
 
+@api.get("/oi-history")
+async def oi_history(hours: int = Query(24, ge=1, le=168), venue: str = "OKX", u=Depends(current_user)):
+    """Stored OI/funding snapshots for charts (oldest first, at most ~300 points)."""
+    since = iso(now_utc() - timedelta(hours=hours))
+    rows = [x async for x in db.oi_history.find({"venue": venue, "t": {"$gte": since}}, {"_id": 0, "t": 1, "oi_btc": 1, "oi_usd": 1, "funding_fraction": 1}).sort("t", 1)]
+    step = max(1, len(rows) // 300)
+    return {"venue": venue, "hours": hours, "points": rows[::step]}
+
+
 # ---------------- settings ----------------
 class VersionedIn(BaseModel):
     version: int
