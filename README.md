@@ -158,3 +158,17 @@ BLS/BEA/Fed calendars, Cointelegraph/Decrypt/Fed/BBC RSS. Optional: CoinGlass ke
 
 ## License
 MIT — © 2026 Govind Bhendegawe. Educational use; not financial advice. Verify every trade on the exchange yourself.
+
+## Auto-trade (Plan A – 4C reverse 1:2 + 6-hour exit)
+
+Admin page **Auto-Trade**. It reads this server's own scalp signals and trades the opposite direction on
+Delta Exchange India BTCUSD, one trade at a time, with a daily loss limit and a daily profit target.
+
+- **PAPER** (default): simulated fills from the live Delta price. No order endpoint is ever called.
+- **TESTNET**: real orders on Delta's test exchange. Needs `DELTA_TESTNET_API_KEY` / `DELTA_TESTNET_API_SECRET` in `.env`.
+- **LIVE**: real orders. Needs `DELTA_TRADE_API_KEY` / `DELTA_TRADE_API_SECRET` in `.env` (Trading permission only,
+  server IP whitelisted on Delta), at least one completed TESTNET trade, and an admin typing `LIVE`.
+
+After editing `.env` run `docker compose up -d` in `/opt/vantage`. Rules, sizing and limits are in
+`backend/autotrade.py`; the exchange adapter is `backend/delta_broker.py`; the 12 acceptance tests are in
+`backend/tests/test_autotrade.py` and run in CI on every change.

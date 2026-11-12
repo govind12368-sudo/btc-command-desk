@@ -7,7 +7,7 @@ import csv
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 import bcrypt
 import jwt
 from bson import ObjectId
@@ -28,6 +28,7 @@ import insights
 import alert_mode
 import channel_config
 import plan_a
+import autotrade
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -983,6 +984,65 @@ class ChannelsIn(BaseModel):
     values: dict
 
 
+# ---------------- Auto-trade (Plan A reverse 1:2 + 6h exit) ----------------
+class AutoSettingsIn(BaseModel):
+    values: dict
+
+
+class AutoControlIn(BaseModel):
+    action: Literal["pause", "resume", "close_all"]
+
+
+class AutoModeIn(BaseModel):
+    mode: Literal["PAPER", "TESTNET", "LIVE"]
+    confirm: Optional[str] = Field(default=None, max_length=10)
+
+
+@api.get("/autotrade")
+async def autotrade_get(u=Depends(admin_user)):
+    return await autotrade.status()
+
+
+@api.put("/autotrade/settings")
+async def autotrade_settings_put(body: AutoSettingsIn, request: Request, u=Depends(admin_user)):
+    try:
+        out = await autotrade.save_settings(body.values, u["email"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await autotrade.ENGINE.event("settings", "Settings changed by " + u["email"] + ": " + ", ".join(f"{k}={out[k]}" for k in sorted(body.values) if k in out))
+    await SEC.log_event("autotrade_settings", request, u["email"], detail=", ".join(sorted(k for k in body.values if k in out)))
+    return out
+
+
+@api.post("/autotrade/control")
+async def autotrade_control(body: AutoControlIn, request: Request, u=Depends(admin_user)):
+    eng = autotrade.ENGINE
+    try:
+        await {"pause": eng.pause, "resume": eng.resume, "close_all": eng.close_everything}[body.action](u["email"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    await SEC.log_event("autotrade_" + body.action, request, u["email"])
+    return await autotrade.status()
+
+
+@api.post("/autotrade/mode")
+async def autotrade_mode(body: AutoModeIn, request: Request, u=Depends(admin_user)):
+    try:
+        await autotrade.ENGINE.set_mode(body.mode, body.confirm, u["email"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:  # Delta pre-flight failed (key, IP whitelist, leverage …) – mode is unchanged
+        raise HTTPException(409, f"{body.mode} check failed, mode not changed: {str(e)[:200]}")
+    await SEC.log_event("autotrade_mode", request, u["email"], detail=body.mode)
+    return await autotrade.status()
+
+
+@api.get("/autotrade/journal.csv")
+async def autotrade_journal(u=Depends(admin_user)):
+    return Response(await autotrade.journal_csv(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="vantage-autotrade-journal.csv"', "Cache-Control": "no-store"})
+
+
 @api.get("/alerts/channels")
 async def alerts_channels_get(u=Depends(admin_user)):
     return await channel_config.public()
@@ -1125,7 +1185,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop()):
         asyncio.create_task(coro)
 
 

@@ -24,6 +24,8 @@ FIELDS = {
     "TELEGRAM_BOT_TOKEN": (True, "Telegram bot token"),
     "TELEGRAM_CHAT_ID": (False, "Telegram chat ID"),
     "CALLMEBOT_USER": (False, "CallMeBot Telegram username"),
+    "PUSHOVER_USER_KEY": (True, "Pushover user key (auto-trade push alerts, optional)"),
+    "PUSHOVER_APP_TOKEN": (True, "Pushover app token (auto-trade push alerts, optional)"),
 }
 _CACHE = {}
 
