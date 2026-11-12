@@ -51,7 +51,7 @@ jobs:
           curl -skI https://localhost/ | grep -i "content-security-policy"
           code=$(curl -sk -o /dev/null -w '%{http_code}' -X POST https://localhost/api/auth/login -H 'Content-Type: application/json' -H 'Origin: https://localhost' -d '{"email":"admin@example.org","password":"Ci-Strong-Passw0rd!x"}')
           echo "login: $code"; [ "$code" = 200 ]
-          test -f /etc/cron.d/vantage-btc && sudo bash deploy/backup.sh && sudo ls -la /opt/vantage-backups
+          test -f /etc/cron.d/vantage-btc && test -f /etc/cron.d/vantage-auto-update && sudo bash deploy/backup.sh && sudo ls -la /opt/vantage-backups
           echo "installer OK"
       - if: always()
         run: sudo docker compose logs --tail 60 backend web || true

@@ -84,7 +84,9 @@ Tip for every paid provider: set a monthly budget alert in the billing page.
 All channels are built in. **Alert mode starts OFF**: when a signal passes every check, the desk
 writes a *dry run* entry ("would have sent …") to the alert log instead of sending anything.
 
-To get ready (any time):
+**Easiest:** Settings → Signal alerts → **Set up where alerts go** — enter your Gmail App Password and/or Telegram bot there (saved encrypted on your server). No server editing needed.
+
+Or, on the server (any time):
 1. Edit `/opt/vantage/.env` (`sudo nano /opt/vantage/.env`) and fill the channels you want:
    - **Email (Gmail, free):** turn on 2‑Step Verification → create an *App Password* → set
      `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=you@gmail.com`, `SMTP_PASSWORD=<app password>`, `EMAIL_FROM=you@gmail.com`, `ALERT_EMAIL=where alerts go`.
@@ -106,6 +108,7 @@ The 8 PM IST daily recap runs from a timer inside the server and follows the sam
 * Edit the code (GitHub website, VS Code, or Claude Code with your normal Claude plan) and push to `main`.
 * GitHub Actions runs the tests and, if you added the server secrets once, deploys automatically:
   repository **Settings → Secrets and variables → Actions**: `SSH_HOST` (server IP), `SSH_USER` (`ubuntu`), `SSH_KEY` (your private SSH key).
+* Servers installed with the current installer **update themselves**: every 10 minutes they check GitHub and deploy new commits once the automatic tests have passed (log: `/var/log/vantage-update.log`). Older servers: run `cd /opt/vantage && git pull && bash deploy/enable-auto-update.sh` once.
 * Or deploy by hand: `cd /opt/vantage && sudo bash deploy/update.sh`
 * Change the site name: `APP_NAME=` in `.env`, then `sudo docker compose up -d --build`.
 

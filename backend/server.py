@@ -26,6 +26,7 @@ import journal as JN
 import planner as PL
 import insights
 import alert_mode
+import channel_config
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -694,10 +695,12 @@ def _build_source_zip():
 
 @api.get("/alerts")
 async def alerts_get(u=Depends(admin_user)):
-    to = os.environ.get("ALERT_EMAIL", "")
+    from channel_config import CFG
+    await channel_config.load()
+    to = CFG.get("ALERT_EMAIL", "") or ""
     masked = (to.split("@")[0][:2] + "…@" + to.split("@")[-1]) if "@" in to else None
     import messaging
-    ph = os.environ.get("ALERT_PHONE", "")
+    ph = CFG.get("ALERT_PHONE", "") or ""
     import alerts as _al
     mode = await alert_mode.get_mode()
     return {"email_to": masked, "phone_to": (ph[:5] + "…" + ph[-3:]) if ph else None,
@@ -948,6 +951,25 @@ async def health_deep(response: Response):
             "market_stream": WS.get("status"), "uptime_sec": int(up)}
 
 
+class ChannelsIn(BaseModel):
+    values: dict
+
+
+@api.get("/alerts/channels")
+async def alerts_channels_get(u=Depends(admin_user)):
+    return await channel_config.public()
+
+
+@api.put("/alerts/channels")
+async def alerts_channels_put(body: ChannelsIn, request: Request, u=Depends(admin_user)):
+    try:
+        out = await channel_config.save(body.values, u["email"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await SEC.log_event("alert_channels_updated", request, u["email"], detail=", ".join(sorted(k for k in body.values if k in channel_config.FIELDS)))
+    return out
+
+
 class AlertModeIn(BaseModel):
     armed: bool
     version: int
@@ -1069,6 +1091,10 @@ async def startup():
 
     import daily_summary
     import workbook_archive
+    try:
+        await channel_config.load()
+    except Exception:
+        logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
                  daily_summary.scheduler_loop(), maintenance_loop()):
         asyncio.create_task(coro)

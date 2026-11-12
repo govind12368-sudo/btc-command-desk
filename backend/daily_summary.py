@@ -51,7 +51,7 @@ async def send(run_id, scheduled=False):
     alert mode is ARMED with the daily-recap channel on; otherwise the recap is saved as a dry run.
     A manual "send now" from the admin is always allowed."""
     import alert_mode
-    import os
+    from channel_config import CFG
     if await db.daily_summaries.find_one({"_id": run_id}):
         return
     d = await build()
@@ -61,12 +61,12 @@ async def send(run_id, scheduled=False):
         res = {"email": "dry run — not sent (alert mode OFF or daily recap switched off)", "telegram": "dry run — not sent"}
         await db.daily_summaries.insert_one({"_id": run_id, "at": iso(now_utc()), "day": d["day"], "result": res, "text": text, "dry_run": True})
         return
-    for ch, fn in (("email", lambda: alerts.send_email(to=os.environ["ALERT_EMAIL"], subject=f"{APP_NAME} daily recap — {d['day']}", html=html)),
+    for ch, fn in (("email", lambda: alerts.send_email(to=CFG["ALERT_EMAIL"], subject=f"{APP_NAME} daily recap — {d['day']}", html=html)),
                    ("telegram", lambda: messaging.send_telegram(text))):
         if ch == "telegram" and not messaging.telegram_configured():
             res[ch] = "not configured"
             continue
-        if ch == "email" and not (os.environ.get("ALERT_EMAIL") and alerts.email_provider()):
+        if ch == "email" and not (CFG.get("ALERT_EMAIL") and alerts.email_provider()):
             res[ch] = "not configured"
             continue
         try:

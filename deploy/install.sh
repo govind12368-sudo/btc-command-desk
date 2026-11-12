@@ -80,6 +80,9 @@ cat > /etc/cron.d/vantage-btc <<CRON
 15 4 * * 0 root docker system prune -af --filter "until=168h" >> /var/log/vantage-prune.log 2>&1
 CRON
 chmod 644 /etc/cron.d/vantage-btc
+# Automatic updates: new GitHub commits are deployed after their CI passes (checked every 10 min).
+echo "*/10 * * * * root bash ${APP_DIR}/deploy/auto-update.sh >> /var/log/vantage-update.log 2>&1" > /etc/cron.d/vantage-auto-update
+chmod 644 /etc/cron.d/vantage-auto-update
 
 DOMAIN_NOW="$(grep -E '^DOMAIN=' .env | cut -d= -f2-)"
 say "Done"

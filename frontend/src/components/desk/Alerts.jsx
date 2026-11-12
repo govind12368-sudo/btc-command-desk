@@ -19,16 +19,72 @@ function TelegramHelper() {
   );
 }
 
-function CallHelper() {
+
+
+const GROUPS = [
+  { title: "Email (Gmail, free)", keys: ["SMTP_USER", "SMTP_PASSWORD", "ALERT_EMAIL"],
+    help: <>Turn on 2-Step Verification in your Google account, then create an <a className="text-amber-300 underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">App Password</a> (16 letters) and paste it here — not your normal Gmail password.</> },
+  { title: "Telegram (free)", keys: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+    help: <>In Telegram, message <b>@BotFather</b> → /newbot → copy the token. Then send any message to your new bot, save the token, and press “Find my Telegram chat ID”.</> },
+  { title: "Phone call via Telegram (free)", keys: ["CALLMEBOT_USER"],
+    help: <>In Telegram, send /start to <b>@CallMeBot_txtbot</b>, then enter your Telegram @username. At most one call every 5 minutes.</> },
+];
+const PH = { SMTP_USER: "you@gmail.com", ALERT_EMAIL: "where alerts should go", TELEGRAM_CHAT_ID: "e.g. 123456789", CALLMEBOT_USER: "@yourname" };
+
+function ChannelSetup({ onSaved }) {
+  const { data, reload } = useFetch("/alerts/channels", 0);
+  const [form, setForm] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  if (!data) return null;
+  const f = data.fields;
+  const anySet = Object.values(f).some((x) => x.set);
+  const val = (k) => (k in form ? form[k] : f[k].secret ? "" : f[k].value || "");
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.put("/alerts/channels", { values: form });
+      setForm({}); reload(); onSaved();
+      toast.success("Alert channels saved. Press “Send test alert” to check them.");
+    } catch (e) { toast.error(errText(e)); } finally { setBusy(false); }
+  };
   return (
-    <p className="mt-2 text-[11px] leading-relaxed text-slate-400" data-testid="call-helper">
-      Phone-call alert setup: in Telegram, send <span className="font-mono">/start</span> to <span className="font-mono">@CallMeBot_txtbot</span> to allow calls,
-      then set <span className="font-mono">CALLMEBOT_USER</span> (your Telegram @username or +91 number) in the backend environment and redeploy.
-      The desk rings you and reads the signal aloud; at most one call per 5 minutes.
-    </p>
+    <div className="mb-4 rounded-xl border border-[#1e2a4a] bg-[#0f172a]/50" data-testid="channel-setup">
+      <button className="flex w-full items-center justify-between px-4 py-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open} data-testid="channel-setup-toggle">
+        <span><span className="text-sm font-semibold text-slate-100">Set up where alerts go</span>
+          <span className="block text-[11.5px] text-slate-400">{anySet ? "Some channels are set up. Open to change them." : "Step 1 — add Gmail, Telegram or a phone call. Saved securely on your server."}</span></span>
+        <span className="text-amber-300 text-sm">{open ? "Close" : "Open"}</span>
+      </button>
+      {open && (
+        <div className="space-y-4 border-t border-[#1e2a4a] px-4 py-4">
+          {GROUPS.map((g) => (
+            <fieldset key={g.title}>
+              <legend className="text-[13px] font-semibold text-slate-100">{g.title}</legend>
+              <p className="mb-2 text-[11.5px] leading-relaxed text-slate-400">{g.help}</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {g.keys.map((k) => (
+                  <label key={k} className="block text-[11.5px] text-slate-400">
+                    {f[k].label}{f[k].set && <span className="ml-1 text-teal-300">✓ saved{f[k].source === "server .env" ? " (server)" : ""}</span>}
+                    <input data-testid={`ch-${k}`} type={f[k].secret ? "password" : "text"} autoComplete="off" value={val(k)}
+                      placeholder={f[k].secret ? (f[k].set ? "saved — leave empty to keep" : "paste here") : PH[k] || ""}
+                      onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                      disabled={f[k].source === "server .env"}
+                      className="mt-1 w-full rounded-md border border-[#1e2a4a] bg-[#0b132b] px-2.5 py-2 font-mono text-[12.5px] text-slate-100 outline-none focus:border-amber-400 disabled:opacity-50" />
+                  </label>
+                ))}
+              </div>
+              {g.keys.includes("TELEGRAM_CHAT_ID") && <TelegramHelper />}
+            </fieldset>
+          ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <Btn data-testid="channel-save" disabled={busy || !Object.keys(form).length} onClick={save}>{busy ? "Saving…" : "Save channels"}</Btn>
+            <span className="text-[11px] text-slate-500">Passwords and tokens are encrypted and never shown again.</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
 
 const CH_LABEL = { email: "Email", telegram: "Telegram", sms: "SMS", call: "Phone call", daily_recap: "Daily 8 PM recap" };
 
@@ -68,11 +124,11 @@ function AlertModePanel({ data, reload, isAdmin }) {
         {isAdmin && (armed ? (
           <Btn tone="ghost" data-testid="alert-disarm" disabled={busy} onClick={() => save(false)}>Turn OFF</Btn>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-1"><div className="flex items-center gap-2">
             <input data-testid="alert-arm-confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`type ${data.confirm_word}`}
               className="w-24 rounded-md border border-[#1e2a4a] bg-[#0f172a] px-2 py-1.5 font-mono text-xs text-slate-100 outline-none focus:border-amber-400" disabled={m.kill_switch} />
             <Btn data-testid="alert-arm" disabled={busy || m.kill_switch || confirm.trim().toUpperCase() !== data.confirm_word} onClick={() => save(true)}>Turn ON alerts</Btn>
-          </div>
+          </div><span className="text-[11px] text-slate-400">Type ARM in the box to unlock the button.{!Object.values(ready).some(Boolean) && " No channel is set up yet — set one up first, or nothing will reach you."}</span></div>
         ))}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -103,6 +159,7 @@ export function AlertsCard({ isAdmin }) {
   return (
     <Card title="Signal alerts" sub="When alert mode is ON, an alert is sent once per signal ID when every active Scalping or Swing check passes (11 checks; F31 excluded). Test alerts work in both modes." testid="alerts-card"
       right={isAdmin && <Btn data-testid="alert-test" onClick={test}>Send test alert</Btn>}>
+      {isAdmin && <ChannelSetup onSaved={reload} />}
       <AlertModePanel data={data} reload={reload} isAdmin={isAdmin} />
       <div className="flex flex-wrap gap-2">
         <Chip status={on(data?.email) && data?.email_to ? "PASS" : "UNAVAILABLE"} label={`EMAIL → ${data?.email_to || "not set"}`} testid="alert-email" />
@@ -111,8 +168,6 @@ export function AlertsCard({ isAdmin }) {
         <Chip status={on(data?.call) ? "PASS" : "UNAVAILABLE"} label="PHONE CALL" testid="alert-call" />
       </div>
       {data && <p className="mt-2 text-[11px] text-slate-500">Email: {data.email} · SMS: {data.sms} · Telegram: {data.telegram} · Phone call: {data.call || "not configured"}</p>}
-      {isAdmin && data && !on(data.telegram) && <TelegramHelper />}
-      {isAdmin && data && !on(data.call) && <CallHelper />}
       <div className="mt-2">
         {(data?.log || []).slice(0, 10).map((l) => (
           <div key={l.id} className="flex justify-between gap-2 border-b border-[#1e2a4a]/40 py-1 font-mono text-[11px]">

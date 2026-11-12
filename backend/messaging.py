@@ -2,26 +2,27 @@
 import os
 import httpx
 from core import APP_NAME
+from channel_config import CFG
 
 ALERT_TEXT = "All active strategy checks passed; review the signal in your account (F31 excluded)"
 
 
 def sms_configured():
-    return all(os.environ.get(k) for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "ALERT_PHONE"))
+    return all(CFG.get(k) for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "ALERT_PHONE"))
 
 
 def telegram_configured():
-    return all(os.environ.get(k) for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"))
+    return all(CFG.get(k) for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"))
 
 
 async def send_sms(body):
     if not sms_configured():
         raise RuntimeError("SMS not configured (Twilio SID, auth token and sender number needed)")
-    sid = os.environ["TWILIO_ACCOUNT_SID"]
+    sid = CFG["TWILIO_ACCOUNT_SID"]
     async with httpx.AsyncClient(timeout=20) as c:
         r = await c.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
-                         auth=(sid, os.environ["TWILIO_AUTH_TOKEN"]),
-                         data={"From": os.environ["TWILIO_FROM_NUMBER"], "To": os.environ["ALERT_PHONE"], "Body": body[:600]})
+                         auth=(sid, CFG["TWILIO_AUTH_TOKEN"]),
+                         data={"From": CFG["TWILIO_FROM_NUMBER"], "To": CFG["ALERT_PHONE"], "Body": body[:600]})
     if r.status_code >= 400:
         try:
             j = r.json()
@@ -36,8 +37,8 @@ async def send_telegram(text):
     if not telegram_configured():
         raise RuntimeError("Telegram not configured (bot token and chat ID needed)")
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.post(f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage",
-                         json={"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": text[:4000], "disable_web_page_preview": True})
+        r = await c.post(f"https://api.telegram.org/bot{CFG['TELEGRAM_BOT_TOKEN']}/sendMessage",
+                         json={"chat_id": CFG["TELEGRAM_CHAT_ID"], "text": text[:4000], "disable_web_page_preview": True})
     j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
     if r.status_code >= 400 or not j.get("ok"):
         raise RuntimeError(f"Telegram refused ({r.status_code}: {j.get('description') or r.text[:120]})")
@@ -46,7 +47,7 @@ async def send_telegram(text):
 
 async def telegram_find_chat():
     """Reads recent messages sent to the bot so the user can find their chat ID."""
-    tok = os.environ.get("TELEGRAM_BOT_TOKEN")
+    tok = CFG.get("TELEGRAM_BOT_TOKEN")
     if not tok:
         raise RuntimeError("TELEGRAM_BOT_TOKEN not configured")
     async with httpx.AsyncClient(timeout=20) as c:
@@ -73,12 +74,12 @@ _CALL_FAIL_WORDS = ("error", "not authorized", "not authorised", "authorize call
 
 
 def call_provider():
-    p = (os.environ.get("ALERT_CALL_PROVIDER") or "").strip().lower()
+    p = (CFG.get("ALERT_CALL_PROVIDER") or "").strip().lower()
     if p == "off":
         return None
     if p == "twilio":
         return "twilio" if sms_configured() else None
-    return "telegram" if os.environ.get("CALLMEBOT_USER") else None
+    return "telegram" if CFG.get("CALLMEBOT_USER") else None
 
 
 def call_configured():
@@ -91,14 +92,14 @@ def call_status():
         return "configured (Telegram voice call via CallMeBot)"
     if p == "twilio":
         return "configured (Twilio phone call)"
-    if (os.environ.get("ALERT_CALL_PROVIDER") or "").strip().lower() == "off":
+    if (CFG.get("ALERT_CALL_PROVIDER") or "").strip().lower() == "off":
         return "not configured — switched off (ALERT_CALL_PROVIDER=off)"
     return "not configured — set CALLMEBOT_USER (your Telegram @username or +91 number)"
 
 
 def call_cooldown_seconds():
     try:
-        return max(0, int(os.environ.get("ALERT_CALL_COOLDOWN_SEC", "300")))
+        return max(0, int(CFG.get("ALERT_CALL_COOLDOWN_SEC", "300")))
     except ValueError:
         return 300
 
@@ -111,12 +112,12 @@ async def place_call(spoken):
     spoken = " ".join(str(spoken).split())[:250]
     if p == "twilio":
         from xml.sax.saxutils import escape as _x
-        sid = os.environ["TWILIO_ACCOUNT_SID"]
+        sid = CFG["TWILIO_ACCOUNT_SID"]
         twiml = f"<Response><Say>{_x(spoken)}</Say><Pause length=\"1\"/><Say>{_x(spoken)}</Say></Response>"
         async with httpx.AsyncClient(timeout=20) as c:
             r = await c.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json",
-                             auth=(sid, os.environ["TWILIO_AUTH_TOKEN"]),
-                             data={"From": os.environ["TWILIO_FROM_NUMBER"], "To": os.environ["ALERT_PHONE"], "Twiml": twiml})
+                             auth=(sid, CFG["TWILIO_AUTH_TOKEN"]),
+                             data={"From": CFG["TWILIO_FROM_NUMBER"], "To": CFG["ALERT_PHONE"], "Twiml": twiml})
         if r.status_code >= 400:
             try:
                 j = r.json()
@@ -125,10 +126,10 @@ async def place_call(spoken):
                 msg = r.text[:120]
             raise RuntimeError(f"Twilio call refused ({r.status_code}: {msg})")
         return r.json().get("sid")
-    params = {"user": os.environ["CALLMEBOT_USER"].strip(), "text": spoken,
-              "lang": os.environ.get("CALLMEBOT_LANG", "en-GB-Standard-B"),
-              "rpt": os.environ.get("CALLMEBOT_REPEAT", "2"),
-              "cc": os.environ.get("CALLMEBOT_CC", "missed")}
+    params = {"user": CFG["CALLMEBOT_USER"].strip(), "text": spoken,
+              "lang": CFG.get("CALLMEBOT_LANG", "en-GB-Standard-B"),
+              "rpt": CFG.get("CALLMEBOT_REPEAT", "2"),
+              "cc": CFG.get("CALLMEBOT_CC", "missed")}
     async with httpx.AsyncClient(timeout=45) as c:
         r = await c.get(CALLMEBOT_URL, params=params)
     body = r.text or ""

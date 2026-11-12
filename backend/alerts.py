@@ -19,6 +19,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse
 from core import db, now_utc, iso, parse_iso, APP_NAME
 import alert_mode
+from channel_config import CFG
 
 logger = logging.getLogger("alerts")
 
@@ -95,18 +96,18 @@ def _assert_safe_email(subject, html):
 
 
 def _from_name():
-    return os.environ.get("EMAIL_FROM_NAME") or APP_NAME
+    return CFG.get("EMAIL_FROM_NAME") or APP_NAME
 
 
 def email_provider():
-    p = (os.environ.get("EMAIL_PROVIDER") or "").strip().lower()
+    p = (CFG.get("EMAIL_PROVIDER") or "").strip().lower()
     if p in ("smtp", "resend", "brevo", "off"):
         return None if p == "off" else p
-    if os.environ.get("RESEND_API_KEY"):
+    if CFG.get("RESEND_API_KEY"):
         return "resend"
-    if os.environ.get("BREVO_API_KEY"):
+    if CFG.get("BREVO_API_KEY"):
         return "brevo"
-    if os.environ.get("SMTP_HOST"):
+    if CFG.get("SMTP_HOST"):
         return "smtp"
     return None
 
@@ -115,7 +116,7 @@ def email_status():
     p = email_provider()
     if not p:
         return "not configured — set SMTP_* (e.g. Gmail App Password), RESEND_API_KEY or BREVO_API_KEY"
-    if not os.environ.get("EMAIL_FROM") and p != "smtp":
+    if not CFG.get("EMAIL_FROM") and p != "smtp":
         return f"incomplete — {p} needs EMAIL_FROM (a sender address verified with the provider)"
     return f"configured ({p.upper() if p == 'smtp' else p.title()})"
 
@@ -126,10 +127,10 @@ def _plain(html):
 
 async def _send_smtp(to, subject, html):
     import aiosmtplib
-    host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT") or 587)
-    user = os.environ.get("SMTP_USER") or None
-    sender = os.environ.get("EMAIL_FROM") or user
+    host = CFG["SMTP_HOST"]
+    port = int(CFG.get("SMTP_PORT") or 587)
+    user = CFG.get("SMTP_USER") or None
+    sender = CFG.get("EMAIL_FROM") or user
     if not sender:
         raise RuntimeError("EMAIL_FROM (or SMTP_USER) not configured")
     msg = EmailMessage()
@@ -140,21 +141,21 @@ async def _send_smtp(to, subject, html):
     msg.set_content(_plain(html))
     msg.add_alternative(html, subtype="html")
     implicit_tls = port == 465
-    await aiosmtplib.send(msg, hostname=host, port=port, username=user, password=os.environ.get("SMTP_PASSWORD") or None,
+    await aiosmtplib.send(msg, hostname=host, port=port, username=user, password=CFG.get("SMTP_PASSWORD") or None,
                           use_tls=implicit_tls, start_tls=not implicit_tls, timeout=30)
     return msg["Message-ID"]
 
 
 async def _send_http(provider, to, subject, html):
-    sender = os.environ.get("EMAIL_FROM")
+    sender = CFG.get("EMAIL_FROM")
     if not sender:
         raise RuntimeError("EMAIL_FROM not configured")
     async with httpx.AsyncClient(timeout=30) as c:
         if provider == "resend":
-            r = await c.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+            r = await c.post("https://api.resend.com/emails", headers={"Authorization": f"Bearer {CFG['RESEND_API_KEY']}"},
                              json={"from": formataddr((_from_name(), sender)), "to": [to], "subject": subject, "html": html})
         else:
-            r = await c.post("https://api.brevo.com/v3/smtp/email", headers={"api-key": os.environ["BREVO_API_KEY"], "accept": "application/json"},
+            r = await c.post("https://api.brevo.com/v3/smtp/email", headers={"api-key": CFG["BREVO_API_KEY"], "accept": "application/json"},
                              json={"sender": {"name": _from_name(), "email": sender}, "to": [{"email": to}], "subject": subject, "htmlContent": html})
     if r.status_code >= 400:
         raise RuntimeError(f"{provider} refused ({r.status_code} {r.text[:120]})")
@@ -173,7 +174,7 @@ async def send_email(*, to, subject, html):
 
 
 def _template(sig, test=False):
-    app = os.environ["FRONTEND_URL"].split(",")[0].rstrip("/")
+    app = CFG["FRONTEND_URL"].split(",")[0].rstrip("/")
     name = escape(_from_name())
     if test:
         subject = f"{_from_name()}: test alert"
@@ -205,7 +206,7 @@ async def notify(sig, test=False):
         channels = mode["channels"]
     else:
         channels = {c: True for c in alert_mode.CHANNELS}
-    to = os.environ.get("ALERT_EMAIL")
+    to = CFG.get("ALERT_EMAIL")
     entry = {"at": iso(now_utc()), "signal_id": None if test else sig["signal_id"], "channel": "email", "to": to, "test": test}
     if not channels.get("email"):
         entry["result"] = "skipped (email channel switched off)"
