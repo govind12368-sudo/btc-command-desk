@@ -57,6 +57,23 @@ After the first sign-in: **System Audit → Security → enable 2FA**, and chang
 
 ---
 
+## 1b. Other hosting choices (same install command on all of them)
+
+The installer works on **any Ubuntu 22.04/24.04 server** with a public IP. The app needs about
+1 GB of memory; **2 GB is comfortable**. Open ports 80 and 443 in the provider's firewall, then run
+the commands from step 1 (b).
+
+| Option | Cost | Notes |
+|---|---|---|
+| **Hetzner Cloud** (Germany/Finland/USA) | about €4–6 / month for 2 vCPU · 4 GB | Best value. Server location does not matter for this app. |
+| **Contabo / Hostinger VPS** | about $5–7 / month for 4–8 GB | Lots of memory for the price; slower disks. |
+| **AWS Lightsail** (Mumbai available) | $12 / month for 2 GB | Simple fixed price. Firewall: instance → *Networking* → add HTTP and HTTPS. The $5 plan has only 512 MB — too small. Asia regions include half the data allowance (still far more than this app uses). |
+| **AWS EC2** | new accounts: credits on the 6-month Free plan; afterwards ~$12–15 / month for t4g.small | The Free plan account closes when it ends unless you upgrade to the Paid plan. Firewall: *Security group* → allow 80 and 443. Pick an Arm (Graviton) Ubuntu image for t4g. |
+| **Google Cloud e2-micro** | free forever (US regions only) | Only 1 GB memory and 1 GB free outbound data per month; the installer adds swap. Fine for one user, slow. |
+| **Oracle Cloud Always Free** | free | Most memory for free; see the notes above about capacity and idle reclaim. |
+
+Tip for every paid provider: set a monthly budget alert in the billing page.
+
 ## 2. Alerts — prepared, but OFF until you approve
 
 All channels are built in. **Alert mode starts OFF**: when a signal passes every check, the desk

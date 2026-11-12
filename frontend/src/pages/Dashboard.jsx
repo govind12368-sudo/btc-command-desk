@@ -82,7 +82,7 @@ function DecisionHero({ s }) {
           <div data-testid="stat-price" className="mt-1 font-mono text-4xl font-bold tracking-tight text-slate-50">{n(price, 1)}</div>
           <div className="mt-0.5 font-mono text-[11.5px] text-slate-400">bid {n(s.quote?.bid, 1)} · ask {n(s.quote?.ask, 1)}</div>
           <div className="mt-2"><Sparkline bars={day.bars} height={58} testid="price-24h" /></div>
-          {day.bars && <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-500"><span>24h low {n(day.low, 0)}</span><span>24h high {n(day.high, 0)}</span></div>}
+          {day.bars && <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-500"><span>24h low {n(Math.min(day.low, price || day.low), 0)}</span><span>24h high {n(Math.max(day.high, price || day.high), 0)}</span></div>}
         </div>
         <div className="grid grid-cols-2 gap-4 border-t border-[#1e2a4a] p-5 lg:border-t-0">
           <div data-testid="readiness-score" className="col-span-2"><Ring value={s.readiness?.score ?? 0} max={1} size={68} color={VIZ.brand} label="Readiness" sub="checklist completion, not a win chance" /></div>

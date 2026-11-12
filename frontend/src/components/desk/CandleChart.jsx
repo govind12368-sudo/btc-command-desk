@@ -32,7 +32,8 @@ export function CandleChart({ tf: tf0 = "5m", levels, testid = "candle-chart" })
     const all = d.bars.map((b) => b.c);
     const e20 = ema(all, 20).slice(-96), e50 = ema(all, 50).slice(-96);
     const lv = levels ? [levels.entry, levels.stop, levels.target].filter(Boolean) : [];
-    let top = Math.max(...bars.map((b) => b.h), ...lv), bot = Math.min(...bars.map((b) => b.l), ...lv);
+    const ev = [...e20, ...e50].filter((v) => v != null);
+    let top = Math.max(...bars.map((b) => b.h), ...lv, ...ev), bot = Math.min(...bars.map((b) => b.l), ...lv, ...ev);
     const pad = (top - bot) * 0.04; top += pad; bot -= pad;
     const plotW = W - RIGHT;
     const bw = plotW / bars.length;

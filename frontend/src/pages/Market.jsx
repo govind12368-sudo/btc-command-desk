@@ -9,7 +9,7 @@ function OiCharts({ funding }) {
   const { data } = useFetch("/oi-history?hours=24", 60000);
   const pts = (data?.points || []).map((p) => ({ t: p.t, v: p.oi_btc }));
   const first = pts[0]?.v, last = pts[pts.length - 1]?.v;
-  const ch = first && last ? (last / first - 1) * 100 : null;
+  const ch = pts.length > 1 && first && last ? (last / first - 1) * 100 : null;
   const fund = [...(funding || [])].sort((a, b) => String(a.time).localeCompare(String(b.time))).map((f) => ({ t: f.time, v: (f.realized_fraction ?? f.funding_fraction ?? 0) * 10000 }));
   return (
     <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">

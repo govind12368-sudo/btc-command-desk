@@ -186,8 +186,8 @@ export function LineChart({ series, height = 180, yFmt = (v) => n(v, 0), xFmt = 
 }
 
 /* ------------------------------------------------------------------ signed bars (funding etc.) */
-export function SignedBars({ points, height = 120, fmt = (v) => sgn(v, 4), xFmt = ist, testid = "signed-bars", unit = "" }) {
-  const W = 720, H = height, L = 8, R = 64, T = 8, B = 20;
+export function SignedBars({ points, height = 170, fmt = (v) => sgn(v, 4), xFmt = ist, testid = "signed-bars", unit = "" }) {
+  const W = 460, H = height, L = 4, R = 52, T = 8, B = 8;
   const h = useHover(points?.length || 0, L, W - R, W);
   if (!points?.length) return <div style={{ height }} className="grid place-items-center text-[12px] text-slate-500">No history yet.</div>;
   const m = Math.max(...points.map((p) => Math.abs(p.v || 0)), 1e-12);
