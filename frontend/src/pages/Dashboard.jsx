@@ -92,8 +92,8 @@ function DecisionHero({ s }) {
           <Ring testid="stat-coverage" value={s.live_direction.coverage} max={5} size={54} stroke={5} color={VIZ.s3} label="Pillars" sub={s.live_direction.partial ? "partial coverage" : "complete"} />
           <div data-testid="stat-six" className="flex flex-col justify-center">
             <div className="text-[13px] font-semibold text-slate-100">Six-factor</div>
-            <div className={`font-mono text-lg font-bold ${!s.six_factor.complete ? "text-slate-500" : s.six_factor.score > 0 ? "text-teal-300" : s.six_factor.score < 0 ? "text-red-300" : "text-slate-200"}`}>{s.six_factor.complete ? sgn(s.six_factor.score) : "n/a"}</div>
-            <div className="text-[11.5px] text-slate-400">{s.six_factor.complete ? s.six_factor.direction.toLowerCase() : "inputs missing"}</div>
+            <div className={`font-mono text-lg font-bold ${!s.six_factor.complete ? "text-slate-500" : s.six_factor.score > 0 ? "text-teal-300" : s.six_factor.score < 0 ? "text-red-300" : "text-slate-200"}`}>{s.six_factor.complete ? (Math.abs(s.six_factor.score) < 0.005 ? "0.00" : sgn(s.six_factor.score)) : "n/a"}</div>
+            <div className="text-[11.5px] text-slate-400">{s.six_factor.complete ? `${s.six_factor.direction.toLowerCase()} · ${String(s.six_factor.strength || "").toLowerCase()}` : "inputs missing"}</div>
           </div>
         </div>
       </div>

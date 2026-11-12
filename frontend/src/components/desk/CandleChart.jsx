@@ -80,7 +80,9 @@ export function CandleChart({ tf: tf0 = "5m", levels, testid = "candle-chart" })
       {!g ? <div className="grid h-[260px] place-items-center text-xs text-slate-500">Loading completed candles…</div> : (
         <svg ref={svg} viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full touch-none" onMouseMove={onMove} onMouseLeave={() => setHi(null)}
           role="img" aria-label={`BTCUSD ${tf} candles, last close ${n(last.c, 1)}`}>
-          {[0, 0.25, 0.5, 0.75, 1].map((f) => { const v = g.bot + (g.top - g.bot) * f; return (<g key={f}><line x1={0} x2={g.plotW} y1={g.y(v)} y2={g.y(v)} stroke={VIZ.grid} /><text x={g.plotW + 6} y={g.y(v) + 3.5} fontSize="10.5" fill={VIZ.axis} fontFamily="JetBrains Mono">{n(v, 0)}</text></g>); })}
+          {(() => { const tags = [last.c, ...(levels ? [levels.entry, levels.stop, levels.target] : [])].filter(Boolean).map((v) => g.y(v));
+            return [0, 0.25, 0.5, 0.75, 1].map((f) => { const v = g.bot + (g.top - g.bot) * f; const clash = tags.some((t) => Math.abs(t - g.y(v)) < 14);
+              return (<g key={f}><line x1={0} x2={g.plotW} y1={g.y(v)} y2={g.y(v)} stroke={VIZ.grid} />{!clash && <text x={g.plotW + 6} y={g.y(v) + 3.5} fontSize="10.5" fill={VIZ.axis} fontFamily="JetBrains Mono">{n(v, 0)}</text>}</g>); }); })()}
           <line x1={0} x2={g.plotW} y1={TOP + PH + GAP + VH} y2={TOP + PH + GAP + VH} stroke={VIZ.grid} />
           <text x={g.plotW + 6} y={TOP + PH + GAP + 10} fontSize="10" fill={VIZ.axis} fontFamily="JetBrains Mono">volume</text>
           {g.bars.map((b, i) => {
@@ -96,7 +98,7 @@ export function CandleChart({ tf: tf0 = "5m", levels, testid = "candle-chart" })
           {[[g.e20, VIZ.s1], [g.e50, VIZ.s2]].map(([arr, col], k) => (
             <polyline key={k} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" points={arr.map((v, i) => (v ? `${g.x(i)},${g.y(v)}` : null)).filter(Boolean).join(" ")} />
           ))}
-          {levels && [["entry", "#e2e8f0"], ["stop", VIZ.down], ["target", VIZ.up]].map(([k, col]) => levels[k] ? (
+          {levels && [["entry", "#e2e8f0"], ["stop", VIZ.down], ["target", VIZ.up]].map(([k, col]) => levels[k] && !(k === "entry" && Math.abs(g.y(levels[k]) - g.y(last.c)) < 16) ? (
             <g key={k}>
               <line x1={0} x2={g.plotW} y1={g.y(levels[k])} y2={g.y(levels[k])} stroke={col} strokeDasharray="6 4" strokeWidth="1.3" />
               <rect x={g.plotW + 2} y={g.y(levels[k]) - 8} width={RIGHT - 4} height="16" rx="3" fill={VIZ.surface} stroke={col} />
