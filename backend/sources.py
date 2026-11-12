@@ -674,7 +674,7 @@ async def bls_calendar():
 
 # ---------------- News RSS ----------------
 FEEDS = {
-    "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    # CoinDesk removed: its feed returns HTTP 403 to cloud-server IPs (Hetzner), so it never worked here.
     "Cointelegraph": "https://cointelegraph.com/rss",
     "Decrypt": "https://decrypt.co/feed",
     "Federal Reserve": "https://www.federalreserve.gov/feeds/press_all.xml",

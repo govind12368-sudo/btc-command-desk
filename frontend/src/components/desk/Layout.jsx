@@ -93,7 +93,15 @@ export default function Layout() {
   useEffect(() => setOpen(false), [loc.pathname]);
   const ws = state?.ws?.status;
   // "partial" = working with incomplete coverage (e.g. the release calendar); only real outages degrade.
-  const bad = (state?.sources || []).filter((s) => s.status !== "ok" && s.status !== "partial").length;
+  // News headlines come from several redundant feeds (context only, never a trade input), so one
+  // refused feed is not an outage; news counts only when every feed is down.
+  const srcs = state?.sources || [];
+  const isBad = (s) => s.status !== "ok" && s.status !== "partial";
+  const news = srcs.filter((s) => s.family === "news");
+  const badList = srcs.filter((s) => s.family !== "news" && isBad(s)).map((s) => s.name);
+  if (news.length && news.every(isBad)) badList.push("All news feeds");
+  const bad = badList.length;
+  const connTitle = bad ? `Data source problem: ${badList.join(", ")} (details on the Sources page)` : "All data sources working";
   const connStatus = !online ? "OFFLINE" : conn.ok === false ? "DISCONNECTED" : ws === "connected" ? (bad ? "DEGRADED" : "CONNECTED") : "RECONNECTING";
   const connTone = { CONNECTED: "PASS", DEGRADED: "WAIT", RECONNECTING: "WAIT", DISCONNECTED: "BLOCKED", OFFLINE: "BLOCKED" }[connStatus];
   return (
@@ -131,7 +139,7 @@ export default function Layout() {
             </Link>
           )}
           <span className="hidden md:inline font-mono text-[11px] text-slate-500" data-testid="last-update">updated {ago(conn.lastOk)}</span>
-          <Chip status={connTone} label={connStatus} testid="connection-status" />
+          <span title={connTitle}><Chip status={connTone} label={connStatus} testid="connection-status" /></span>
           <button data-testid="refresh-button" onClick={refresh} className="rounded border border-[#1e2a4a] p-1.5 text-slate-300 hover:border-amber-500/50 hover:text-amber-300 transition-colors" title="Refresh now">
             <RefreshCw size={15} className={conn.loading ? "animate-spin" : ""} />
           </button>

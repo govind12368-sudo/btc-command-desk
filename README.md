@@ -154,7 +154,7 @@ cd ../backend && python -m pytest -q             # offline test suite
 ## Data sources
 Delta India WebSocket + REST (execution market), OKX BTC-USDT-SWAP, Fed H.10 / H.15, EIA Brent,
 Alternative.me Fear & Greed, Bitbo ETF flows, multi-exchange funding (OKX, Deribit, Bitget, Gate, Delta),
-BLS/BEA/Fed calendars, CoinDesk/Cointelegraph/Decrypt/Fed/BBC RSS. Optional: CoinGlass key, Delta read-only API key.
+BLS/BEA/Fed calendars, Cointelegraph/Decrypt/Fed/BBC RSS. Optional: CoinGlass key, Delta read-only API key.
 
 ## License
 MIT — © 2026 Govind Bhendegawe. Educational use; not financial advice. Verify every trade on the exchange yourself.
