@@ -52,7 +52,7 @@ if [ ! -f .env ]; then
   DOMAIN="${DOMAIN:-$DEF_DOMAIN}"
   GEN_PW=""
   if [ -z "$ADMIN_PASSWORD" ]; then
-    ADMIN_PASSWORD="Vb-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18)!7"; GEN_PW="$ADMIN_PASSWORD"
+    ADMIN_PASSWORD="Vb-$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 18)!7"; GEN_PW="$ADMIN_PASSWORD"
   fi
   [ -n "$ADMIN_EMAIL" ] || { echo "ADMIN_EMAIL is required (run again, or pass ADMIN_EMAIL=you@example.com)"; rm -f .env; exit 1; }
   if [ "$ADMIN_EMAIL" = "you@example.com" ] || [ "$ADMIN_PASSWORD" = "Change-Me-Strong-2026!" ]; then
@@ -63,8 +63,8 @@ if [ ! -f .env ]; then
   setv ADMIN_EMAIL "$ADMIN_EMAIL"
   setv ADMIN_PASSWORD "$ADMIN_PASSWORD"
   setv ALERT_EMAIL "$ADMIN_EMAIL"
-  setv JWT_SECRET "$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64)"
-  setv WEBHOOK_CRON_SECRET "$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)"
+  setv JWT_SECRET "$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 64)"
+  setv WEBHOOK_CRON_SECRET "$(tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 40)"
   chmod 600 .env
 else
   say ".env already exists — keeping it"
