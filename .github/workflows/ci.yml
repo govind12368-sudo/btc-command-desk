@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      MONGO_URL: mongodb://127.0.0.1:1
+      DB_NAME: ci
+      JWT_SECRET: ci-only-secret-0123456789abcdefghijklmnopqrstuvwxyz
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: x
+      FRONTEND_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: backend/requirements*.txt }
+      - run: pip install -r backend/requirements-dev.txt
+      - run: cd backend && python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: yarn, cache-dependency-path: frontend/yarn.lock }
+      - run: cd frontend && yarn install --frozen-lockfile && CI=false yarn build

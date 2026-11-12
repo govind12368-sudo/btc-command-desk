@@ -1,0 +1,155 @@
+{
+  "project_name": "BTC Command Desk",
+  "app_type": "dashboard",
+  "theme_mode": "dark",
+  "typography": {
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&family=Outfit:wght@400;500;600;700;800&display=swap",
+    "heading_font": "'Outfit', sans-serif",
+    "body_font": "'Outfit', sans-serif",
+    "mono_font": "'JetBrains Mono', monospace",
+    "font_hierarchy": {
+      "h1_hero": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight",
+      "h2_section": "text-xl sm:text-2xl font-bold tracking-tight text-slate-100",
+      "h3_card_title": "text-base sm:text-lg font-semibold text-slate-100",
+      "h4_sub": "text-sm font-medium text-slate-300",
+      "body": "text-sm font-normal text-slate-300 leading-relaxed",
+      "caption_mono": "font-mono text-xs font-medium tracking-wide text-slate-400"
+    }
+  },
+  "colors": {
+    "palette_type": "Dark Navy with Gold/Amber Accents, Teal Positives & Red Negatives",
+    "css_variables": {
+      "--background": "222 47% 7%",
+      "--foreground": "210 40% 98%",
+      "--card": "222 40% 11%",
+      "--card-foreground": "210 40% 98%",
+      "--popover": "222 40% 11%",
+      "--popover-foreground": "210 40% 98%",
+      "--primary": "38 92% 50%",
+      "--primary-foreground": "222 47% 7%",
+      "--secondary": "217 33% 17%",
+      "--secondary-foreground": "210 40% 98%",
+      "--muted": "217 33% 17%",
+      "--muted-foreground": "215 20% 65%",
+      "--accent": "38 92% 50%",
+      "--accent-foreground": "222 47% 7%",
+      "--teal-positive": "173 80% 40%",
+      "--red-negative": "0 84% 60%",
+      "--amber-warning": "38 92% 50%",
+      "--slate-neutral": "215 20% 65%",
+      "--border": "217 33% 20%",
+      "--input": "217 33% 20%",
+      "--ring": "38 92% 50%",
+      "--radius": "0.375rem"
+    },
+    "hex_reference": {
+      "bg_dark_navy": "#0B132B",
+      "bg_card_navy": "#131C35",
+      "bg_card_hover": "#1A264A",
+      "border_navy": "#1E2A4A",
+      "gold_accent": "#F59E0B",
+      "gold_hover": "#D97706",
+      "teal_positive": "#14B8A6",
+      "teal_glow": "rgba(20, 184, 166, 0.15)",
+      "red_negative": "#EF4444",
+      "red_glow": "rgba(239, 68, 68, 0.15)",
+      "text_primary": "#F8FAFC",
+      "text_secondary": "#94A3B8",
+      "text_muted": "#64748B"
+    }
+  },
+  "status_chips": {
+    "PASS": {
+      "bg": "bg-teal-950/60",
+      "text": "text-teal-400",
+      "border": "border-teal-500/40",
+      "glow": "shadow-[0_0_12px_rgba(20,184,166,0.2)]",
+      "label": "PASS"
+    },
+    "WAIT": {
+      "bg": "bg-amber-950/60",
+      "text": "text-amber-400",
+      "border": "border-amber-500/40",
+      "glow": "shadow-[0_0_12px_rgba(245,158,11,0.2)]",
+      "label": "WAIT"
+    },
+    "REVIEW": {
+      "bg": "bg-indigo-950/60",
+      "text": "text-indigo-300",
+      "border": "border-indigo-500/40",
+      "glow": "shadow-[0_0_12px_rgba(99,102,241,0.2)]",
+      "label": "REVIEW"
+    },
+    "BLOCKED": {
+      "bg": "bg-red-950/60",
+      "text": "text-red-400",
+      "border": "border-red-500/40",
+      "glow": "shadow-[0_0_12px_rgba(239,68,68,0.2)]",
+      "label": "BLOCKED"
+    },
+    "STALE": {
+      "bg": "bg-slate-800/60",
+      "text": "text-slate-400",
+      "border": "border-slate-600/40",
+      "glow": "none",
+      "label": "STALE"
+    },
+    "UNAVAILABLE": {
+      "bg": "bg-gray-900/80",
+      "text": "text-gray-500",
+      "border": "border-gray-700/40",
+      "glow": "none",
+      "label": "UNAVAILABLE"
+    }
+  },
+  "layout_and_navigation": {
+    "desktop_sidebar": "Fixed 260px left sidebar with dark navy background (#0B132B), gold border right (#1E2A4A), collapsable navigation sections for 12 pages.",
+    "mobile_drawer": "Slide-over drawer from left, controlled via top-bar hamburger icon, backdrop blur overlay (bg-black/60 backdrop-blur-md).",
+    "top_bar": "Fixed 60px header at z-40 with backdrop blur (bg-[#0B132B]/90 backdrop-blur-md border-b border-[#1E2A4A]), containing App Title, IST Clock (JetBrains Mono live ticker), Manual/Auto Sync refresh button with spinning icon state, and Live API Connection status pill (CONNECTED / DISCONNECTED / DEGRADED).",
+    "page_container": "pt-[68px] pl-0 lg:pl-[260px] p-4 lg:p-6 min-h-screen bg-[#0B132B] text-slate-100",
+    "pages_list": [
+      "BTC Dashboard",
+      "Live Market",
+      "Scalping Signal",
+      "Swing Signal",
+      "Five Pillars",
+      "Trade Planner",
+      "News & Events",
+      "Trade Journal",
+      "Trade Validation",
+      "Settings",
+      "System Audit",
+      "Upgrade Requests"
+    ]
+  },
+  "card_and_table_styles": {
+    "card": "bg-[#131C35] border border-[#1E2A4A] rounded-lg p-4 sm:p-5 shadow-lg shadow-black/30 hover:border-amber-500/30 transition-all duration-200",
+    "table_container": "overflow-x-auto rounded-lg border border-[#1E2A4A] bg-[#131C35]",
+    "table_header": "bg-[#0F172A] text-slate-400 text-xs font-mono uppercase tracking-wider border-b border-[#1E2A4A] py-3 px-4 text-left",
+    "table_row": "border-b border-[#1E2A4A]/60 hover:bg-[#1A264A]/60 transition-colors text-sm text-slate-200",
+    "table_cell": "py-3 px-4 font-mono",
+    "data_density": "Compact trading desk density: tight padding, high legibility, monospaced numerical data, distinct status chips."
+  },
+  "key_components_guidelines": {
+    "trade_decision_panel": "Primary action card featuring large direction status (BUY / SELL / NO TRADE), overall signal confidence %, stop-loss & take-profit quick calculations, and Execution trigger button.",
+    "btc_direction_panel": "Bullish vs Bearish bias breakdown with multi-timeframe gauges (1m, 5m, 15m, 1h, 4h, 1D), momentum meters, and funding rate indicator.",
+    "twelve_check_comparison_table": "Matrix layout comparing 12 quantitative checks against Scalping vs Swing strategies with instant PASS/WAIT/BLOCKED status chips and expandable calculation details modal/accordion.",
+    "five_pillar_cards": "5 distinct cards representing Macro, On-Chain, Technicals, Liquidation/Orderbook, and Sentiment pillars with status badges and score progress bars.",
+    "price_chart": "Recharts Candlestick/Area chart with volume bars, EMA crossovers, entry/stop target lines, and timeframe selector buttons (1m, 5m, 15m, 1h, 4h, 1D).",
+    "news_radar": "Real-time news ticker with sentiment tags (BULLISH, BEARISH, NEUTRAL), impact score, and countdown timers to key economic events (FED, CPI, NFP).",
+    "login_screen": "Sleek institutional command desk login screen with dark navy aesthetic, gold accent outline, password/pin input, system integrity check indicator, and mock login toggle."
+  },
+  "accessibility_and_testing": {
+    "data_testid_required": true,
+    "contrast_ratio": "APCA high contrast for dark mode: bright text on dark navy, explicit hover states.",
+    "interactive_states": "All buttons and links must have explicit hover, focus-visible ring (ring-2 ring-amber-500), and active state."
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "component_extension": ".js files (React JavaScript)",
+    "no_images_required": true,
+    "charts_library": "recharts",
+    "icons_library": "lucide-react",
+    "toast_library": "sonner",
+    "data_testid_convention": "kebab-case data-testid on all interactive elements, e.g. data-testid='nav-btc-dashboard-button'"
+  }
+}

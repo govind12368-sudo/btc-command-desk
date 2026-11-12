@@ -1,0 +1,37 @@
+# Auto-deploy: every push to main updates the live server over SSH (free GitHub Actions minutes).
+# One-time setup in GitHub → Settings → Secrets and variables → Actions → New repository secret:
+#   SSH_HOST  = your server IP          SSH_USER = ubuntu
+#   SSH_KEY   = the private SSH key that can log in to the server
+# Without these secrets this workflow does nothing.
+name: Deploy
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: { group: deploy, cancel-in-progress: false }
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - name: Skip when server secrets are not set
+        if: env.SSH_HOST == ''
+        run: echo "SSH_HOST secret not set — skipping deploy."
+      - name: Update server
+        if: env.SSH_HOST != ''
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh -i ~/.ssh/id -o StrictHostKeyChecking=accept-new "${SSH_USER:-ubuntu}@${SSH_HOST}" \
+            'cd /opt/vantage && sudo bash deploy/update.sh'

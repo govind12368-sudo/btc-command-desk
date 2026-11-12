@@ -1,0 +1,55 @@
+# Vantage BTC — whole stack on one small server. Start: docker compose up -d --build
+# Nothing here costs money; every image is open source. Only ports 80/443 are public.
+name: vantage-btc
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["--wiredTigerCacheSizeGB", "0.25", "--quiet"]
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      FRONTEND_URL: https://${DOMAIN}
+    depends_on:
+      mongo: { condition: service_healthy }
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args: { REACT_APP_NAME: "${APP_NAME:-Vantage BTC}" }
+    restart: unless-stopped
+    env_file: .env
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [backend]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+  # Restarts any container whose health check fails (e.g. the calculation loop stalls).
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment: { AUTOHEAL_CONTAINER_LABEL: all, AUTOHEAL_INTERVAL: "60" }
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,880 @@
+{
+"sheets": [
+{
+"sheet": "Trading Dashboard",
+"state": "visible",
+"dims": "A1:BE510",
+"rows": 510,
+"cols": 57,
+"formulas": 4804,
+"values": 226,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 6171,
+"INDEX": 3510,
+"ISNUMBER": 3016,
+"SEARCH": 2510,
+"NOW": 1512,
+"LOWER": 1500
+},
+"a1": "BTC  |  DIGITAL COMMAND DESK"
+},
+{
+"sheet": "BTC Direction Validation",
+"state": "visible",
+"dims": "A1:AC232",
+"rows": 232,
+"cols": 29,
+"formulas": 2849,
+"values": 132,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 13645,
+"ISNUMBER": 3609,
+"OR": 3205,
+"ISFORMULA": 3000,
+"FLOOR": 2801,
+"ABS": 1800
+},
+"a1": "BTC DIRECTION \u2014 FORWARD VALIDATION"
+},
+{
+"sheet": "Scalping",
+"state": "visible",
+"dims": "A1:N62",
+"rows": 62,
+"cols": 14,
+"formulas": 159,
+"values": 171,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 199,
+"INDEX": 86,
+"ISNUMBER": 31,
+"LEFT": 30,
+"AND": 29,
+"TEXT": 26
+},
+"a1": "None"
+},
+{
+"sheet": "Swing",
+"state": "visible",
+"dims": "A1:N129",
+"rows": 129,
+"cols": 14,
+"formulas": 188,
+"values": 263,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 261,
+"INDEX": 102,
+"ISNUMBER": 49,
+"AND": 49,
+"NOT": 30,
+"COUNT": 25
+},
+"a1": "None"
+},
+{
+"sheet": "Trade Journal",
+"state": "visible",
+"dims": "A1:BC22",
+"rows": 22,
+"cols": 55,
+"formulas": 560,
+"values": 97,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 1600,
+"OR": 324,
+"ISNUMBER": 302,
+"AND": 182,
+"LOWER": 100,
+"NOT": 100
+},
+"a1": "=\"DATA GATE:  \"&'Command Center'!$J$28&\"    |    oldest inpu"
+},
+{
+"sheet": "System Audit",
+"state": "visible",
+"dims": "A1:P56",
+"rows": 56,
+"cols": 16,
+"formulas": 461,
+"values": 271,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 757,
+"OR": 129,
+"IFERROR": 96,
+"INDEX": 96,
+"MATCH": 96,
+"AGGREGATE": 96
+},
+"a1": "AUTOMATED TRADING SYSTEM AUDIT"
+},
+{
+"sheet": "BTC News",
+"state": "visible",
+"dims": "A1:AE201",
+"rows": 201,
+"cols": 31,
+"formulas": 318,
+"values": 2870,
+"hyperlinks": 0,
+"top_funcs": {
+"ROW": 1409,
+"INDEX": 1287,
+"IF": 927,
+"LOWER": 629,
+"OR": 210,
+"ROWS": 88
+},
+"a1": "FetchedIST"
+},
+{
+"sheet": "Event",
+"state": "visible",
+"dims": "A1:Q18",
+"rows": 18,
+"cols": 17,
+"formulas": 0,
+"values": 238,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedUTC"
+},
+{
+"sheet": "Live macro",
+"state": "visible",
+"dims": "A1:G2",
+"rows": 2,
+"cols": 7,
+"formulas": 0,
+"values": 14,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "DXY1M"
+},
+{
+"sheet": "OI + Funding",
+"state": "visible",
+"dims": "A1:E865",
+"rows": 865,
+"cols": 5,
+"formulas": 0,
+"values": 3461,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "TimeIST"
+},
+{
+"sheet": "Backtest",
+"state": "visible",
+"dims": "A1:G8637",
+"rows": 8637,
+"cols": 7,
+"formulas": 0,
+"values": 60459,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "IST"
+},
+{
+"sheet": "Decision data",
+"state": "visible",
+"dims": "A1:AF2",
+"rows": 2,
+"cols": 32,
+"formulas": 0,
+"values": 58,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedUTC"
+},
+{
+"sheet": "Five Pillar",
+"state": "visible",
+"dims": "A1:CU2",
+"rows": 2,
+"cols": 99,
+"formulas": 0,
+"values": 192,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedIST"
+},
+{
+"sheet": "Dashboard",
+"state": "hidden",
+"dims": "A1:Q78",
+"rows": 78,
+"cols": 17,
+"formulas": 102,
+"values": 174,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 106,
+"COUNT": 12,
+"TEXT": 10,
+"LEFT": 6,
+"MEDIAN": 5,
+"OR": 4
+},
+"a1": "None"
+},
+{
+"sheet": "Live Feed Setup",
+"state": "visible",
+"dims": "A1:AO186",
+"rows": 186,
+"cols": 41,
+"formulas": 147,
+"values": 536,
+"hyperlinks": 0,
+"top_funcs": {
+"MATCH": 792,
+"IF": 399,
+"INDEX": 396,
+"COUNTIF": 250,
+"OR": 126,
+"ISERROR": 125
+},
+"a1": "BTC DASHBOARD \u2014 LIVE FEED ARCHITECTURE & SAFE-REFRESH RULES"
+},
+{
+"sheet": "Command Center",
+"state": "hidden",
+"dims": "A1:AB128",
+"rows": 128,
+"cols": 28,
+"formulas": 110,
+"values": 202,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 137,
+"TEXT": 9,
+"LEFT": 8,
+"OR": 8,
+"COUNTBLANK": 7,
+"SUBSTITUTE": 3
+},
+"a1": "None"
+},
+{
+"sheet": "Market Monitor",
+"state": "hidden",
+"dims": "A1:X221",
+"rows": 221,
+"cols": 24,
+"formulas": 1336,
+"values": 1700,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 2200,
+"OR": 660,
+"ABS": 220,
+"INDEX": 5,
+"MATCH": 5,
+"COUNTIF": 3
+},
+"a1": "Symbol"
+},
+{
+"sheet": "Contract Specs",
+"state": "hidden",
+"dims": "A1:V221",
+"rows": 221,
+"cols": 22,
+"formulas": 2438,
+"values": 1801,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 1760,
+"MATCH": 1102,
+"INDEX": 882,
+"IFERROR": 880,
+"OR": 660,
+"TODAY": 220
+},
+"a1": "Symbol"
+},
+{
+"sheet": "Trade Plan",
+"state": "hidden",
+"dims": "A1:C51",
+"rows": 51,
+"cols": 3,
+"formulas": 70,
+"values": 31,
+"hyperlinks": 0,
+"top_funcs": {
+"TEXT": 37,
+"IF": 5,
+"ISNUMBER": 3,
+"MAX": 2,
+"CHECK": 1,
+"INDEX": 1
+},
+"a1": "TRADE PLAN \u2014 auto-built from the Pro Trading Desk"
+},
+{
+"sheet": "Pro Trading Desk",
+"state": "hidden",
+"dims": "A1:N252",
+"rows": 252,
+"cols": 14,
+"formulas": 756,
+"values": 515,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 271,
+"MAX": 195,
+"ABS": 35,
+"TEXT": 32,
+"OR": 22,
+"NA": 18
+},
+"a1": "BTC Pro Trading Desk \u2014 Risk, Sizing & Regime Analytics"
+},
+{
+"sheet": "BTC Bias & Probability",
+"state": "hidden",
+"dims": "A1:N27",
+"rows": 27,
+"cols": 14,
+"formulas": 41,
+"values": 52,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 17,
+"SUM": 6,
+"TEXT": 3,
+"COUNTIF": 3,
+"ROUND": 2,
+"SUMPRODUCT": 1
+},
+"a1": "Bitcoin (BTC) Market Bias & Probability Dashboard"
+},
+{
+"sheet": "Query1",
+"state": "hidden",
+"dims": "A1:AM15",
+"rows": 15,
+"cols": 39,
+"formulas": 13,
+"values": 203,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 6,
+"COUNT": 3,
+"COUNTIF": 3,
+"MAX": 3,
+"ISNUMBER": 2,
+"COUNTBLANK": 1
+},
+"a1": "Timeframe"
+},
+{
+"sheet": "Fund Controls",
+"state": "visible",
+"dims": "A1:E48",
+"rows": 48,
+"cols": 5,
+"formulas": 45,
+"values": 110,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 27,
+"ISNUMBER": 12,
+"AND": 11,
+"ABS": 4,
+"COUNTIF": 3,
+"TODAY": 2
+},
+"a1": "FUND CAPITAL & ORDER CONTROLS"
+},
+{
+"sheet": "News Impact",
+"state": "visible",
+"dims": "A1:V22",
+"rows": 22,
+"cols": 22,
+"formulas": 10,
+"values": 28,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 18,
+"COUNTIFS": 7,
+"COUNTA": 5,
+"MAX": 5,
+"TODAY": 4,
+"NOW": 3
+},
+"a1": "None"
+},
+{
+"sheet": "OI History",
+"state": "visible",
+"dims": "A1:L12",
+"rows": 12,
+"cols": 12,
+"formulas": 18,
+"values": 37,
+"hyperlinks": 0,
+"top_funcs": {
+"IFERROR": 10,
+"LOOKUP": 6,
+"TIME": 4,
+"MAX": 3,
+"NOW": 3,
+"AVERAGEIFS": 3
+},
+"a1": "BTCUSD OPEN INTEREST & FUNDING HISTORY"
+},
+{
+"sheet": "__bpstmp_qju29a_1",
+"state": "visible",
+"dims": "A1:BE510",
+"rows": 510,
+"cols": 57,
+"formulas": 4804,
+"values": 225,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 6171,
+"INDEX": 3510,
+"ISNUMBER": 3016,
+"SEARCH": 2510,
+"NOW": 1512,
+"LOWER": 1500
+},
+"a1": "BTC  |  DIGITAL COMMAND DESK"
+},
+{
+"sheet": "__bpstmp_qju29a_2",
+"state": "visible",
+"dims": "A1:AC232",
+"rows": 232,
+"cols": 29,
+"formulas": 2849,
+"values": 132,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 13645,
+"ISNUMBER": 3609,
+"OR": 3205,
+"ISFORMULA": 3000,
+"FLOOR": 2801,
+"ABS": 1800
+},
+"a1": "BTC DIRECTION \u2014 FORWARD VALIDATION"
+},
+{
+"sheet": "__bpstmp_qju29a_3",
+"state": "visible",
+"dims": "A1:N62",
+"rows": 62,
+"cols": 14,
+"formulas": 159,
+"values": 171,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 199,
+"INDEX": 86,
+"ISNUMBER": 31,
+"LEFT": 30,
+"AND": 29,
+"TEXT": 26
+},
+"a1": "None"
+},
+{
+"sheet": "__bpstmp_qju29a_4",
+"state": "visible",
+"dims": "A1:N129",
+"rows": 129,
+"cols": 14,
+"formulas": 188,
+"values": 263,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 261,
+"INDEX": 102,
+"ISNUMBER": 49,
+"AND": 49,
+"NOT": 30,
+"COUNT": 25
+},
+"a1": "None"
+},
+{
+"sheet": "__bpstmp_qju29a_5",
+"state": "visible",
+"dims": "A1:BC22",
+"rows": 22,
+"cols": 55,
+"formulas": 560,
+"values": 97,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 1600,
+"OR": 324,
+"ISNUMBER": 302,
+"AND": 182,
+"LOWER": 100,
+"NOT": 100
+},
+"a1": "=\"DATA GATE:  \"&__bpstmp_qju29a_16!$J$28&\"    |    oldest in"
+},
+{
+"sheet": "__bpstmp_qju29a_6",
+"state": "visible",
+"dims": "A1:P56",
+"rows": 56,
+"cols": 16,
+"formulas": 461,
+"values": 271,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 757,
+"OR": 129,
+"IFERROR": 96,
+"INDEX": 96,
+"MATCH": 96,
+"AGGREGATE": 96
+},
+"a1": "AUTOMATED TRADING SYSTEM AUDIT"
+},
+{
+"sheet": "__bpstmp_qju29a_7",
+"state": "visible",
+"dims": "A1:AE201",
+"rows": 201,
+"cols": 31,
+"formulas": 318,
+"values": 2870,
+"hyperlinks": 0,
+"top_funcs": {
+"ROW": 1409,
+"INDEX": 1287,
+"IF": 927,
+"LOWER": 629,
+"OR": 210,
+"ROWS": 88
+},
+"a1": "FetchedIST"
+},
+{
+"sheet": "__bpstmp_qju29a_8",
+"state": "visible",
+"dims": "A1:Q18",
+"rows": 18,
+"cols": 17,
+"formulas": 0,
+"values": 238,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedUTC"
+},
+{
+"sheet": "__bpstmp_qju29a_9",
+"state": "visible",
+"dims": "A1:G2",
+"rows": 2,
+"cols": 7,
+"formulas": 0,
+"values": 14,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "DXY1M"
+},
+{
+"sheet": "__bpstmp_qju29a_10",
+"state": "visible",
+"dims": "A1:E865",
+"rows": 865,
+"cols": 5,
+"formulas": 0,
+"values": 3461,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "TimeIST"
+},
+{
+"sheet": "__bpstmp_qju29a_11",
+"state": "visible",
+"dims": "A1:G8637",
+"rows": 8637,
+"cols": 7,
+"formulas": 0,
+"values": 60459,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "IST"
+},
+{
+"sheet": "__bpstmp_qju29a_12",
+"state": "visible",
+"dims": "A1:AF2",
+"rows": 2,
+"cols": 32,
+"formulas": 0,
+"values": 58,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedUTC"
+},
+{
+"sheet": "__bpstmp_qju29a_13",
+"state": "visible",
+"dims": "A1:CU2",
+"rows": 2,
+"cols": 99,
+"formulas": 0,
+"values": 186,
+"hyperlinks": 0,
+"top_funcs": {},
+"a1": "FetchedIST"
+},
+{
+"sheet": "__bpstmp_qju29a_14",
+"state": "hidden",
+"dims": "A1:Q78",
+"rows": 78,
+"cols": 17,
+"formulas": 102,
+"values": 174,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 106,
+"COUNT": 12,
+"TEXT": 10,
+"LEFT": 6,
+"MEDIAN": 5,
+"OR": 4
+},
+"a1": "None"
+},
+{
+"sheet": "__bpstmp_qju29a_15",
+"state": "visible",
+"dims": "A1:AO186",
+"rows": 186,
+"cols": 41,
+"formulas": 147,
+"values": 536,
+"hyperlinks": 0,
+"top_funcs": {
+"MATCH": 792,
+"IF": 399,
+"INDEX": 396,
+"COUNTIF": 250,
+"OR": 126,
+"ISERROR": 125
+},
+"a1": "BTC DASHBOARD \u2014 LIVE FEED ARCHITECTURE & SAFE-REFRESH RULES"
+},
+{
+"sheet": "__bpstmp_qju29a_16",
+"state": "hidden",
+"dims": "A1:AB128",
+"rows": 128,
+"cols": 28,
+"formulas": 110,
+"values": 202,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 137,
+"TEXT": 9,
+"LEFT": 8,
+"OR": 8,
+"COUNTBLANK": 7,
+"SUBSTITUTE": 3
+},
+"a1": "None"
+},
+{
+"sheet": "__bpstmp_qju29a_17",
+"state": "hidden",
+"dims": "A1:X221",
+"rows": 221,
+"cols": 24,
+"formulas": 1336,
+"values": 1700,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 2200,
+"OR": 660,
+"ABS": 220,
+"INDEX": 5,
+"MATCH": 5,
+"COUNTIF": 3
+},
+"a1": "Symbol"
+},
+{
+"sheet": "__bpstmp_qju29a_18",
+"state": "hidden",
+"dims": "A1:V221",
+"rows": 221,
+"cols": 22,
+"formulas": 2438,
+"values": 1801,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 1760,
+"MATCH": 1102,
+"INDEX": 882,
+"IFERROR": 880,
+"OR": 660,
+"TODAY": 220
+},
+"a1": "Symbol"
+},
+{
+"sheet": "__bpstmp_qju29a_19",
+"state": "hidden",
+"dims": "A1:C51",
+"rows": 51,
+"cols": 3,
+"formulas": 70,
+"values": 31,
+"hyperlinks": 0,
+"top_funcs": {
+"TEXT": 37,
+"IF": 5,
+"ISNUMBER": 3,
+"MAX": 2,
+"CHECK": 1,
+"INDEX": 1
+},
+"a1": "TRADE PLAN \u2014 auto-built from the Pro Trading Desk"
+},
+{
+"sheet": "__bpstmp_qju29a_20",
+"state": "hidden",
+"dims": "A1:N252",
+"rows": 252,
+"cols": 14,
+"formulas": 756,
+"values": 515,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 271,
+"MAX": 195,
+"ABS": 35,
+"TEXT": 32,
+"OR": 22,
+"NA": 18
+},
+"a1": "BTC Pro Trading Desk \u2014 Risk, Sizing & Regime Analytics"
+},
+{
+"sheet": "__bpstmp_qju29a_21",
+"state": "hidden",
+"dims": "A1:N27",
+"rows": 27,
+"cols": 14,
+"formulas": 41,
+"values": 52,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 17,
+"SUM": 6,
+"TEXT": 3,
+"COUNTIF": 3,
+"ROUND": 2,
+"SUMPRODUCT": 1
+},
+"a1": "Bitcoin (BTC) Market Bias & Probability Dashboard"
+},
+{
+"sheet": "__bpstmp_qju29a_22",
+"state": "hidden",
+"dims": "A1:AM15",
+"rows": 15,
+"cols": 39,
+"formulas": 13,
+"values": 203,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 6,
+"COUNT": 3,
+"COUNTIF": 3,
+"MAX": 3,
+"ISNUMBER": 2,
+"COUNTBLANK": 1
+},
+"a1": "Timeframe"
+},
+{
+"sheet": "__bpstmp_qju29a_23",
+"state": "visible",
+"dims": "A1:E48",
+"rows": 48,
+"cols": 5,
+"formulas": 45,
+"values": 110,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 27,
+"ISNUMBER": 12,
+"AND": 11,
+"ABS": 4,
+"COUNTIF": 3,
+"TODAY": 2
+},
+"a1": "FUND CAPITAL & ORDER CONTROLS"
+},
+{
+"sheet": "__bpstmp_qju29a_24",
+"state": "visible",
+"dims": "A1:V22",
+"rows": 22,
+"cols": 22,
+"formulas": 10,
+"values": 28,
+"hyperlinks": 0,
+"top_funcs": {
+"IF": 18,
+"COUNTIFS": 7,
+"COUNTA": 5,
+"MAX": 5,
+"TODAY": 4,
+"NOW": 3
+},
+"a1": "None"
+},
+{
+"sheet": "__bpstmp_qju29a_25",
+"state": "visible",
+"dims": "A1:L12",
+"rows": 12,
+"cols": 12,
+"formulas": 18,
+"values": 37,
+"hyperlinks": 0,
+"top_funcs": {
+"IFERROR": 10,
+"LOOKUP": 6,
+"TIME": 4,
+"MAX": 3,
+"NOW": 3,
+"AVERAGEIFS": 3
+},
+"a1": "BTCUSD OPEN INTEREST & FUNDING HISTORY"
+}
+],
+"defined_names": [
+[
+"DeltaAPIHost",
+"#REF!"
+],
+[
+"DeltaSymbol",
+"#REF!"
+]
+]
+}
