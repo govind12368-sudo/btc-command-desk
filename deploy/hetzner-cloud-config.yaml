@@ -1,0 +1,20 @@
+#cloud-config
+# Vantage BTC — paste this whole file into Hetzner "Cloud config" when you create the server.
+# Change ONLY the two lines under "CHANGE THESE". The site installs itself in about 10 minutes.
+#
+# Password rules: at least 10 characters with a lowercase letter, an uppercase letter, a number
+# and a symbol. Do not use these characters in it:  $  &  '  "  `  \  ;  space
+write_files:
+  - path: /root/vantage-settings.env
+    permissions: "0600"
+    content: |
+      # ---- CHANGE THESE ----
+      ADMIN_EMAIL=you@example.com
+      ADMIN_PASSWORD=Change-Me-Strong-2026!
+      # ---- optional ----
+      # Leave DOMAIN empty to get a free address like 1-2-3-4.sslip.io
+      DOMAIN=
+      # If you make the GitHub repo private, use https://YOUR_TOKEN@github.com/... here
+      REPO=https://github.com/govind12368-sudo/btc-command-desk.git
+runcmd:
+  - [bash, -c, "set -a && . /root/vantage-settings.env && set +a && apt-get update -y && apt-get install -y git && git clone \"$REPO\" /opt/vantage && cd /opt/vantage && bash deploy/install.sh > /var/log/vantage-install.log 2>&1; shred -u /root/vantage-settings.env"]

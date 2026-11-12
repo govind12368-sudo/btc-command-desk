@@ -17,8 +17,11 @@ say() { printf '\n\033[1;33m▶ %s\033[0m\n' "$*"; }
 say "Installing Docker and basic tools"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl git cron iptables-persistent unattended-upgrades docker.io
-apt-get install -y docker-compose-v2 2>/dev/null || apt-get install -y docker-compose-plugin
+apt-get install -y ca-certificates curl git cron iptables-persistent unattended-upgrades
+if ! docker compose version >/dev/null 2>&1; then
+  apt-get install -y docker.io
+  apt-get install -y docker-compose-v2 2>/dev/null || apt-get install -y docker-compose-plugin
+fi
 systemctl enable --now docker cron
 dpkg-reconfigure -f noninteractive unattended-upgrades || true
 
@@ -52,6 +55,9 @@ if [ ! -f .env ]; then
     ADMIN_PASSWORD="Vb-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18)!7"; GEN_PW="$ADMIN_PASSWORD"
   fi
   [ -n "$ADMIN_EMAIL" ] || { echo "ADMIN_EMAIL is required (run again, or pass ADMIN_EMAIL=you@example.com)"; rm -f .env; exit 1; }
+  if [ "$ADMIN_EMAIL" = "you@example.com" ] || [ "$ADMIN_PASSWORD" = "Change-Me-Strong-2026!" ]; then
+    echo "Please replace the example admin email/password with your own, then run again."; rm -f .env; exit 1
+  fi
   setv() { local k="$1" v="$2"; v="${v//\\/\\\\}"; v="${v//&/\\&}"; v="${v//|/\\|}"; sed -i "s|^${k}=.*|${k}=${v}|" .env; }
   setv DOMAIN "$DOMAIN"
   setv ADMIN_EMAIL "$ADMIN_EMAIL"
