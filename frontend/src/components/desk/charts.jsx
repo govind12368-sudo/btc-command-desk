@@ -89,8 +89,14 @@ export function Sparkline({ bars, height = 64, testid = "sparkline" }) {
 }
 
 /* ------------------------------------------------------------------ five pillars: diverging bars */
-export function PillarBars({ pillars, names, testid = "pillar-bars" }) {
-  const rows = Object.entries(pillars || {}).map(([k, p]) => ({ k, name: names[k] || k, valid: p.valid, score: p.score, w: p.weight, c: p.valid && p.score != null ? p.score * p.weight : null }));
+export function PillarBars({ pillars, names, live, testid = "pillar-bars" }) {
+  // Same maths as the direction model: normalised score (macro −2..+2 → −1..+1) × share among available pillars.
+  const shares = live?.active_shares || {};
+  const norm = live?.normalized_scores || {};
+  const rows = Object.entries(pillars || {}).map(([k, p]) => {
+    const w = shares[k] ?? null, sc = norm[k] ?? (p.score == null ? null : k === "macro" ? p.score / 2 : p.score);
+    return { k, name: names[k] || k, valid: p.valid, score: sc, w, c: p.valid && sc != null && w != null ? sc * w : null };
+  });
   const total = rows.reduce((a, r) => a + (r.c || 0), 0);
   const maxW = Math.max(...rows.map((r) => r.w || 0), 0.01);
   return (
@@ -101,7 +107,7 @@ export function PillarBars({ pillars, names, testid = "pillar-bars" }) {
           const frac = r.c == null ? 0 : Math.min(1, Math.abs(r.c) / maxW);
           const pos = (r.c || 0) >= 0;
           return (
-            <div key={r.k} className="grid grid-cols-[96px_1fr_52px] items-center gap-2" title={r.valid ? `${r.name}: score ${sgn(r.score, 2)} × weight ${r.w}` : `${r.name}: unavailable`}>
+            <div key={r.k} className="grid grid-cols-[96px_1fr_52px] items-center gap-2" title={r.valid && r.w != null ? `${r.name}: score ${sgn(r.score, 2)} × share ${Math.round(r.w * 100)}%` : `${r.name}: unavailable`}>
               <span className={`truncate text-[12.5px] ${r.valid ? "text-slate-200" : "text-slate-500"}`}>{r.name}</span>
               <div className="relative h-4 rounded bg-[#0f172a]">
                 <div className="absolute inset-y-0 left-1/2 w-px bg-slate-600" />
@@ -116,7 +122,7 @@ export function PillarBars({ pillars, names, testid = "pillar-bars" }) {
         })}
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-[#1e2a4a] pt-2 text-[12px]">
-        <span className="text-slate-400">Net tilt of available pillars</span>
+        <span className="text-slate-400">Model tilt (−1 … +1; ±0.15 or more = direction)</span>
         <span className={`font-mono font-semibold ${total > 0 ? "text-teal-300" : total < 0 ? "text-red-300" : "text-slate-300"}`}>{total > 0 ? "▲" : total < 0 ? "▼" : "•"} {sgn(total, 2)}</span>
       </div>
     </div>

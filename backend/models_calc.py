@@ -37,9 +37,33 @@ def _obs_dt(d):
     return datetime.fromisoformat(d).replace(tzinfo=timezone.utc)
 
 
+def _nth_weekday(y, m, wd, n):
+    """n-th weekday (0=Mon) of a month; n=-1 means the last one."""
+    if n > 0:
+        d = date(y, m, 1)
+        d += timedelta(days=(wd - d.weekday()) % 7)
+        return d + timedelta(weeks=n - 1)
+    d = date(y, m + 1, 1) - timedelta(days=1) if m < 12 else date(y, 12, 31)
+    return d - timedelta(days=(d.weekday() - wd) % 7)
+
+
+def fed_holidays(y):
+    """Federal Reserve holidays (no H.10/H.15 data). A Sunday holiday moves to Monday; the Fed stays
+    open on the Friday before a Saturday holiday, so those are not shifted."""
+    fixed = [date(y, 1, 1), date(y, 6, 19), date(y, 7, 4), date(y, 11, 11), date(y, 12, 25)]
+    out = {d + timedelta(days=1) if d.weekday() == 6 else d for d in fixed if d.weekday() != 5}
+    out |= {_nth_weekday(y, 1, 0, 3), _nth_weekday(y, 2, 0, 3), _nth_weekday(y, 5, 0, -1), _nth_weekday(y, 9, 0, 1),
+            _nth_weekday(y, 10, 0, 2), _nth_weekday(y, 11, 3, 4)}
+    return out
+
+
+def is_fed_business_day(d):
+    return d.weekday() < 5 and d not in fed_holidays(d.year)
+
+
 def _next_business(d):
     d += timedelta(days=1)
-    while d.weekday() >= 5:
+    while not is_fed_business_day(d):
         d += timedelta(days=1)
     return d
 
@@ -85,6 +109,8 @@ def macro_series_status(key, num_src, meta_src, s):
             out["issues"].append(f"latest observation {lo} does not match release {rel} metadata")
         if key == "usd":
             nxt = rel + timedelta(days=7)
+            while not is_fed_business_day(nxt):  # Monday holiday → H.10 comes out the next business day
+                nxt += timedelta(days=1)
             out["next_publication_inferred"] = True
         elif key == "y2":
             nxt = _next_business(rel)
@@ -96,7 +122,7 @@ def macro_series_status(key, num_src, meta_src, s):
         out["next_publication"] = nxt.isoformat()
         out["deadline"] = iso(deadline)
         if now_utc() >= deadline:
-            out["issues"].append(f"next publication deadline {nxt} (+1 day grace{', inferred' if out['next_publication_inferred'] else ''}) passed without a new release; holidays are not assumed")
+            out["issues"].append(f"next publication deadline {nxt} (+1 day grace{', inferred' if out['next_publication_inferred'] else ''}) passed without a new release (weekends and Federal Reserve holidays are allowed for)")
     if obs_age_h > cap_h:
         out["issues"].append(f"observation age {obs_age_h:.0f}h exceeds cap {cap_h}h")
     out["cap_h"] = cap_h
@@ -186,9 +212,12 @@ def five_pillars(R, s, macro):
                                   None if v else ("; ".join(m.get("issues", [])) or f"completed candle age {tage and round(tage)}s exceeds {tech_age}s + {grace}s retrieval grace"),
                                   iso(m.get("bar_close")))
     usd, y2, br = macro["usd"], macro["y2"], macro["brent"]
-    mv = usd["valid"] and y2["valid"] and br["valid"] and usd.get("daily_change_pct") is not None and y2.get("daily_change_pp") is not None
+    # The pillar score uses USD and 2Y only. Brent is shown as context and must not switch the pillar off.
+    mv = usd["valid"] and y2["valid"] and usd.get("daily_change_pct") is not None and y2.get("daily_change_pp") is not None
     ms = None
-    reasons = [f"{k}: {'; '.join(v['issues'])}" for k, v in macro.items() if v["issues"]]
+    reasons = [f"{k}: {'; '.join(v['issues'])}" for k, v in (("usd", usd), ("y2", y2)) if v["issues"]]
+    if br["issues"] and mv:
+        reasons.append("Brent (context only, not scored here): " + "; ".join(br["issues"]))
     stale = []
     if mv:
         # A day-over-day move from several days ago says nothing about the next 15 minutes.
@@ -234,13 +263,18 @@ def live_direction(p):
 def four_factor(R, macro):
     usd, y2, br = macro["usd"], macro["y2"], macro["brent"]
     f = {}
-    if usd["valid"] and y2["valid"] and br["valid"] and usd.get("month_change_pct") is not None and y2.get("five_obs_change_bps") is not None:
+    # Brent enters only as a price LEVEL bucket (≤70 / ≥85), which moves slowly; EIA often publishes it
+    # one to two weeks late. Accept a Brent level up to 21 days old here, and say so in the detail.
+    br_ok = br["valid"] or (br.get("latest_value") is not None and (br.get("observation_age_h") or 1e9) <= 21 * 24
+                            and not any("future" in i for i in br.get("issues", [])))
+    if usd["valid"] and y2["valid"] and br_ok and usd.get("month_change_pct") is not None and y2.get("five_obs_change_bps") is not None:
         d1 = sgn3(-usd["month_change_pct"], 1, -1)
         d2 = sgn3(-y2["five_obs_change_bps"], 10, -10)
         d3 = 1 if br["latest_value"] <= 70 else -1 if br["latest_value"] >= 85 else 0
         tot = d1 + d2 + d3
         f["macro"] = {"valid": True, "score": 1 if tot >= 1 else -1 if tot <= -1 else 0,
-                      "detail": f"USD 1m {usd['month_change_pct']:+.2f}% → {d1:+d}; 2Y 5-obs {y2['five_obs_change_bps']:+.0f} bps → {d2:+d}; Brent ${br['latest_value']} → {d3:+d}; sum {tot:+d}"}
+                      "detail": f"USD 1m {usd['month_change_pct']:+.2f}% → {d1:+d}; 2Y 5-obs {y2['five_obs_change_bps']:+.0f} bps → {d2:+d}; Brent ${br['latest_value']} → {d3:+d}"
+                                + ("" if br["valid"] else f" (Brent level from {br.get('latest_date')}, published late by EIA)") + f"; sum {tot:+d}"}
     else:
         f["macro"] = {"valid": False, "score": None, "detail": "macro inputs not valid: " + "; ".join(sum((v["issues"] for v in macro.values()), [])) }
     bb = R["etf_bitbo"]

@@ -10,6 +10,7 @@ import { n, usd, pct, ist, ago, sgn } from "@/lib/fmt";
 import { Sparkles } from "lucide-react";
 import { Ring, Sparkline, PillarBars, MtfStrip, VIZ } from "@/components/desk/charts";
 import { PILLAR_NAMES } from "@/components/desk/Pillars";
+import { NextSetup } from "@/components/desk/NextSetup";
 
 const TONE = { BULLISH: "text-teal-300 border-teal-500/40 bg-teal-500/10", "LEAN BULLISH": "text-teal-300 border-teal-500/30 bg-teal-500/5",
   BEARISH: "text-red-300 border-red-500/40 bg-red-500/10", "LEAN BEARISH": "text-red-300 border-red-500/30 bg-red-500/5", NEUTRAL: "text-slate-300 border-slate-500/40 bg-slate-500/10" };
@@ -85,7 +86,7 @@ function DecisionHero({ s }) {
           {day.bars && <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-500"><span>24h low {n(Math.min(day.low, price || day.low), 0)}</span><span>24h high {n(Math.max(day.high, price || day.high), 0)}</span></div>}
         </div>
         <div className="grid grid-cols-2 gap-4 border-t border-[#1e2a4a] p-5 lg:border-t-0">
-          <div data-testid="readiness-score" className="col-span-2"><Ring value={s.readiness?.score ?? 0} max={1} size={68} color={VIZ.brand} label="Readiness" sub="checklist completion, not a win chance" /></div>
+          <div data-testid="readiness-score" className="col-span-2"><Ring value={s.readiness?.score ?? 0} max={1} size={68} color={VIZ.brand} label="Checklist progress" sub="share of safety checks complete — not a win chance" /></div>
           <Ring testid="stat-scalp" value={s.scalp.passed} max={total(s.scalp)} size={54} stroke={5} color={s.scalp.status === "BUY" ? VIZ.up : s.scalp.status === "SELL" ? VIZ.down : VIZ.s1} label="Scalping" sub={`${s.scalp.passed}/${total(s.scalp)} · ${String(s.scalp.status).toLowerCase()}`} />
           <Ring testid="stat-swing" value={s.swing.passed} max={total(s.swing)} size={54} stroke={5} color={s.swing.status === "BUY" ? VIZ.up : s.swing.status === "SELL" ? VIZ.down : VIZ.s1} label="Swing" sub={`${s.swing.passed}/${total(s.swing)} · ${String(s.swing.status).toLowerCase()}`} />
           <Ring testid="stat-coverage" value={s.live_direction.coverage} max={5} size={54} stroke={5} color={VIZ.s3} label="Pillars" sub={s.live_direction.partial ? "partial coverage" : "complete"} />
@@ -172,23 +173,38 @@ function SourceHealth({ sources, recovery }) {
   );
 }
 
+function useView() {
+  const [v, setV] = React.useState(() => { try { return localStorage.getItem("vantage-view") || "simple"; } catch { return "simple"; } });
+  const set = (x) => { setV(x); try { localStorage.setItem("vantage-view", x); } catch { /* storage unavailable */ } };
+  return [v, set];
+}
+
 export default function Dashboard() {
-  const { state: s } = useDesk();
+  const { state: s, isAdmin } = useDesk();
+  const [view, setView] = useView();
   if (!s?.scalp) return <Empty>Connecting to live sources… first calculation appears within a few seconds.</Empty>;
   const lv = s.scalp.levels || s.swing.levels;
   return (
     <div className="space-y-4">
-      <PageHead title="BTC Dashboard" sub={`Delta BTCUSD perpetual · computed ${ist(s.computed_at)} · quote ${s.quote?.source || "—"} (exchange time ${ist(s.quote?.event_time)})`} />
+      <PageHead title="BTC Dashboard" sub={`Delta BTCUSD perpetual · computed ${ist(s.computed_at)} · quote ${s.quote?.source || "—"} (exchange time ${ist(s.quote?.event_time)})`}
+        right={<div className="flex rounded-md border border-[#1e2a4a] p-0.5" role="tablist" aria-label="Dashboard view" data-testid="view-toggle">
+          {[["simple", "Simple view"], ["detailed", "Detailed view"]].map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)} data-testid={`view-${k}`}
+              className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${view === k ? "bg-amber-500 text-[#0b132b]" : "text-slate-300 hover:text-slate-50"}`}>{l}</button>
+          ))}
+        </div>} />
       <DecisionHero s={s} />
+      <NextSetup scalp={s.scalp} swing={s.swing} isAdmin={isAdmin} />
       <DeskBrief b={s.brief} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card title="BTC Direction · confirmed 15-minute model" sub="Completed-candle confirmation · OKX market data + Fed/EIA macro data · news/calendar excluded" testid="direction-card"><DirectionPanel live={s.live_direction} /></Card>
-        <Card title="Five-pillar balance" sub="Each bar = pillar score × weight. Hatched = data unavailable." testid="pillar-balance" right={<Link to="/pillars" className="text-xs text-amber-400">Pillar details</Link>}>
-          <PillarBars pillars={s.pillars} names={PILLAR_NAMES} />
+        <Card title="Five-pillar balance" sub="Each bar = pillar score × its share of the model (same shares as the direction model). Striped = data unavailable." testid="pillar-balance" right={<Link to="/pillars" className="text-xs text-amber-400">Pillar details</Link>}>
+          <PillarBars pillars={s.pillars} names={PILLAR_NAMES} live={s.live_direction} />
           <div className="mt-4"><div className="mb-1.5 text-[12px] text-slate-400">Trend by timeframe (Delta completed candles)</div><MtfStrip rows={s.mtf?.rows} /></div>
         </Card>
       </div>
       <Card title="Price chart" sub="Hover a candle for its open, high, low, close and volume" testid="chart-card"><CandleChart levels={lv} /></Card>
+      {view === "detailed" ? (<>
       <div className="grid gap-4 lg:grid-cols-2">
         <StrategyCard ev={s.scalp} title="Scalping Trade Signal" to="/scalping" />
         <StrategyCard ev={s.swing} title="Swing Trade Signal" to="/swing" />
@@ -211,6 +227,9 @@ export default function Dashboard() {
         <NewsRadar />
         <SourceHealth sources={s.sources} recovery={s.recovery} />
       </div>
+      </>) : (
+        <p className="text-center text-[12.5px] text-slate-500">Simple view shows what matters for a decision. Switch to <button className="text-amber-300 underline-offset-2 hover:underline" onClick={() => setView("detailed")}>Detailed view</button> for every check, pillar note, order flow, journal, news and source health.</p>
+      )}
       <Note>{s.monitoring_note}</Note>
     </div>
   );

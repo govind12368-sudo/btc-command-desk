@@ -235,28 +235,40 @@ def evaluate(strat, ctx, s, plan=None):
         checks["F29"] = chk("F29", False, "requires valid data and a direction", "UNAVAILABLE" if not data_ok else "FAIL")
     else:
         c, atr, vw, vr = lo["close"], lo["atr14"], lo["vwap20"], lo["volume_ratio"]
+        tf = CFG[strat]["lower"]
+        # Each part: (rule text, passed, plain-English condition with the price/level that would satisfy it)
         if strat == "scalp":
             tol = s["close_extreme_atr"] * atr
+            vmin = s["min_scalp_volume_ratio"]
             if direction == "LONG":
-                parts = [("close > VWAP20", c > vw), (f"close ≥ high − {s['close_extreme_atr']}×ATR", c >= lo["high"] - tol), (f"vol ratio ≥ {s['min_scalp_volume_ratio']}", vr >= s["min_scalp_volume_ratio"])]
+                parts = [("close > VWAP20", c > vw, f"{tf} candle closes above VWAP {vw:,.0f} (last close {c:,.0f})"),
+                         (f"close ≥ high − {s['close_extreme_atr']}×ATR", c >= lo["high"] - tol, f"{tf} candle closes near its high (at or above {lo['high'] - tol:,.0f} on the last bar)"),
+                         (f"vol ratio ≥ {vmin}", vr >= vmin, f"{tf} volume at least {vmin}× average (now {vr:.2f}×)")]
             else:
-                parts = [("close < VWAP20", c < vw), (f"close ≤ low + {s['close_extreme_atr']}×ATR", c <= lo["low"] + tol), (f"vol ratio ≥ {s['min_scalp_volume_ratio']}", vr >= s["min_scalp_volume_ratio"])]
+                parts = [("close < VWAP20", c < vw, f"{tf} candle closes below VWAP {vw:,.0f} (last close {c:,.0f})"),
+                         (f"close ≤ low + {s['close_extreme_atr']}×ATR", c <= lo["low"] + tol, f"{tf} candle closes near its low (at or below {lo['low'] + tol:,.0f} on the last bar)"),
+                         (f"vol ratio ≥ {vmin}", vr >= vmin, f"{tf} volume at least {vmin}× average (now {vr:.2f}×)")]
             need = int(s["scalp_confirm_signals"])
             if need > 0:
                 hist = ctx.get("scalp_history")
                 look = int(s["scalp_confirm_lookback_min"])
                 if hist and hist.get("lookback_min") == look:
                     n = hist.get(direction, 0)
-                    parts.append((f"{n} earlier {direction} setup(s) in last {look} min ≥ {need}", n >= need))
+                    parts.append((f"{n} earlier {direction} setup(s) in last {look} min ≥ {need}", n >= need, f"at least {need} earlier {direction} setups in the last {look} min (now {n})"))
                 else:
-                    parts.append((f"earlier-setup confirmation history unavailable (need {need} in {look} min)", False))
+                    parts.append((f"earlier-setup confirmation history unavailable (need {need} in {look} min)", False, "earlier-setup history is still loading"))
         else:
+            vmin = s["swing_volume_ratio"]
             if direction == "LONG":
-                parts = [("close > prior-20 high", c > lo["prior20_high"]), ("close > VWAP20", c > vw), (f"vol ratio ≥ {s['swing_volume_ratio']}", vr >= s["swing_volume_ratio"])]
+                parts = [("close > prior-20 high", c > lo["prior20_high"], f"{tf} candle closes above the 20-bar high {lo['prior20_high']:,.0f} (last close {c:,.0f})"),
+                         ("close > VWAP20", c > vw, f"{tf} candle closes above VWAP {vw:,.0f}"),
+                         (f"vol ratio ≥ {vmin}", vr >= vmin, f"{tf} volume at least {vmin}× average (now {vr:.2f}×)")]
             else:
-                parts = [("close < prior-20 low", c < lo["prior20_low"]), ("close < VWAP20", c < vw), (f"vol ratio ≥ {s['swing_volume_ratio']}", vr >= s["swing_volume_ratio"])]
-        conf = {k: v for k, v in parts}
-        checks["F29"] = chk("F29", all(conf.values()), ", ".join(f"{k}: {'yes' if v else 'no'}" for k, v in parts) + f" (close {c:.1f}, VWAP20 {vw:.1f}, ATR14 {atr:.1f}, vol ratio {vr:.2f})")
+                parts = [("close < prior-20 low", c < lo["prior20_low"], f"{tf} candle closes below the 20-bar low {lo['prior20_low']:,.0f} (last close {c:,.0f})"),
+                         ("close < VWAP20", c < vw, f"{tf} candle closes below VWAP {vw:,.0f}"),
+                         (f"vol ratio ≥ {vmin}", vr >= vmin, f"{tf} volume at least {vmin}× average (now {vr:.2f}×)")]
+        checks["F29"] = chk("F29", all(p[1] for p in parts), ", ".join(f"{k}: {'yes' if v else 'no'}" for k, v, _ in parts) + f" (close {c:.1f}, VWAP20 {vw:.1f}, ATR14 {atr:.1f}, vol ratio {vr:.2f})")
+        checks["F29"]["conditions"] = [{"rule": k, "ok": bool(v), "plain": t} for k, v, t in parts]
 
     # F30
     if two_sided:
