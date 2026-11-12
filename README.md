@@ -20,7 +20,12 @@ Emergent account, no paid AI API and no paid hosting**.
 
 ---
 
-## 1. Put it online (about 30 minutes, one time)
+## 1. Put it online
+
+**Recommended: Hetzner, with no commands to type.** Follow [docs/HETZNER.md](docs/HETZNER.md). When you create the server, you paste
+[`deploy/hetzner-cloud-config.yaml`](deploy/hetzner-cloud-config.yaml) and the site installs itself.
+
+### Alternative: Oracle Cloud Always Free (about 30 minutes, one time)
 
 ### a) Create the free server
 1. Sign up at **cloud.oracle.com** (Free Tier). Oracle asks for a card only to verify you; Always Free resources are not charged. Choose a home region close to you (e.g. *India West (Mumbai)* or *India South (Hyderabad)*) — it cannot be changed later.
