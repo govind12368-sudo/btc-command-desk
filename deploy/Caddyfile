@@ -1,7 +1,4 @@
 # DOMAIN comes from .env. Caddy gets and renews a free Let's Encrypt HTTPS certificate automatically.
-{
-	email {$ACME_EMAIL}
-}
 
 {$DOMAIN} {
 	encode zstd gzip

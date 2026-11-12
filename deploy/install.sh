@@ -54,7 +54,6 @@ if [ ! -f .env ]; then
   [ -n "$ADMIN_EMAIL" ] || { echo "ADMIN_EMAIL is required (run again, or pass ADMIN_EMAIL=you@example.com)"; rm -f .env; exit 1; }
   setv() { local k="$1" v="$2"; v="${v//\\/\\\\}"; v="${v//&/\\&}"; v="${v//|/\\|}"; sed -i "s|^${k}=.*|${k}=${v}|" .env; }
   setv DOMAIN "$DOMAIN"
-  setv ACME_EMAIL "$ADMIN_EMAIL"
   setv ADMIN_EMAIL "$ADMIN_EMAIL"
   setv ADMIN_PASSWORD "$ADMIN_PASSWORD"
   setv ALERT_EMAIL "$ADMIN_EMAIL"
