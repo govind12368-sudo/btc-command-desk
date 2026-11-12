@@ -46,6 +46,8 @@ MAX_BODY_IMPORT = 2_500_000  # /api/fills/import accepts a 2 MB CSV inside JSON
 
 
 def body_limit(path):
+    if path.startswith("/api/import/legacy"):
+        return 20_000_000  # one-time admin data import from the old desk
     return MAX_BODY_IMPORT if path.startswith("/api/fills/import") else MAX_BODY
 
 

@@ -31,6 +31,40 @@ function RecoveryResult({ result }) {
   </div>;
 }
 
+function LegacyImport() {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setBusy(true); setRes(null);
+    try {
+      const text = await f.text();
+      const { data } = await api.post("/import/legacy", JSON.parse(text), { headers: { "Content-Type": "application/json" } });
+      setRes(data);
+      toast.success("Import finished");
+    } catch (err) { toast.error(err instanceof SyntaxError ? "This file is not valid JSON" : errText(err)); } finally { setBusy(false); }
+  };
+  return (
+    <Card title="Import data from BTC Command Desk" sub="One-time move of your model signals, direction snapshots, swing-plan archive, daily review and settings from the old Emergent site. Safe to repeat: records already here are skipped." testid="legacy-import">
+      <label className={`inline-flex cursor-pointer items-center gap-2 rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-[#0b132b] hover:bg-amber-400 ${busy ? "pointer-events-none opacity-60" : ""}`}>
+        <input type="file" accept="application/json,.json" className="sr-only" onChange={onFile} data-testid="legacy-import-file" />
+        {busy ? "Importing…" : "Choose export file (.json)"}
+      </label>
+      {res && (
+        <div className="mt-3 space-y-1 text-[12.5px]" data-testid="legacy-import-result">
+          <div className="text-slate-400">From {res.exported_from} · exported {ist(res.exported_at)}</div>
+          {Object.entries(res.result).map(([k, v]) => (
+            <div key={k} className="flex justify-between border-b border-[#1e2a4a]/50 py-1"><span className="text-slate-300">{k.replace(/_/g, " ")}</span>
+              <span className="font-mono text-slate-100">{v.changed ? `${v.changed.length} setting(s) updated` : `${v.added} added · ${v.already_present} already here`}</span></div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function Audit() {
   const { isAdmin } = useDesk();
   const { data: a, reload } = useFetch("/audit", 15000);
@@ -52,6 +86,7 @@ export default function Audit() {
       <PageHead title="System Audit" sub="Current source faults, storage health, release schedules, calculation dependencies, workbook coverage and repair history."
         right={isAdmin && <div className="flex flex-wrap gap-2"><a href={`${API}/source-download`} data-testid="download-source" className="rounded border border-teal-500/50 px-3 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/10 transition-colors">Download source code (.zip)</a><Btn data-testid="run-recovery" disabled={busy || a.recovery?.state === "checking"} onClick={run}>{busy || a.recovery?.state === "checking" ? "Checking sources…" : "Check & repair all sources"}</Btn></div>} />
       <SecurityCard />
+      <LegacyImport />
       <Card title="Source audit & recovery" sub="The button checks all failing and stale installed sources. Automatic background recovery retries one due source family at a time. 120 s cooldown, bounded retries and provider Retry-After are respected." testid="recovery-card"
         right={<Chip status={a.recovery?.state} label={String(a.recovery?.state || "idle").toUpperCase()} testid="recovery-state" />}>
         <p className="font-mono text-xs text-slate-400">Last pass {ist(a.recovery?.last_pass)} · result {a.recovery?.last_result?.result || "—"} {a.recovery?.last_result?.family ? `(${a.recovery.last_result.family})` : ""}</p>

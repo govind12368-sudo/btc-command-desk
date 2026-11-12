@@ -791,6 +791,61 @@ async def recovery_run(u=Depends(admin_user)):
     return clean(r) if isinstance(r, dict) and "_id" in r else r
 
 
+# ---------------- one-time import from the old BTC Command Desk ----------------
+_IMPORT_COLLS = {"signals": "signals", "validation_snapshots": "validation_snapshots", "plan_archive": "plan_archive", "reviews": "reviews"}
+
+
+@api.post("/import/legacy")
+async def import_legacy(request: Request, u=Depends(admin_user)):
+    """Admin uploads the JSON exported from the old site. Records are added by their original IDs, so
+    importing twice never duplicates anything. Settings are applied only for known keys."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(400, "Not a valid JSON export file")
+    if not isinstance(data, dict) or data.get("format") != "vantage-import-v1":
+        raise HTTPException(422, "This is not a BTC Command Desk export file (format vantage-import-v1)")
+    out = {}
+    for key, coll in _IMPORT_COLLS.items():
+        rows = data.get(key) or []
+        if not isinstance(rows, list):
+            raise HTTPException(422, f"{key} must be a list")
+        added = 0
+        for r in rows[:50000]:
+            if not isinstance(r, dict) or not r.get("id"):
+                continue
+            doc = {k: v for k, v in r.items() if k not in ("id", "_id")}
+            doc["_id"] = str(r["id"])
+            doc["imported_from"] = "btc-command-desk"
+            res = await db[coll].update_one({"_id": doc["_id"]}, {"$setOnInsert": doc}, upsert=True)
+            added += 1 if res.upserted_id else 0
+        out[key] = {"in_file": len(rows), "added": added, "already_present": len(rows) - added}
+    vals = data.get("settings")
+    if isinstance(vals, dict):
+        cur, ver = await get_settings()
+        new = dict(cur)
+        for k, v in vals.items():
+            d = DEFAULT_SETTINGS.get(k)
+            if d is None or v is None:
+                continue
+            if isinstance(d, bool) and isinstance(v, bool):
+                new[k] = v
+            elif isinstance(d, (int, float)) and not isinstance(d, bool) and isinstance(v, (int, float)) and not isinstance(v, bool) and finite(float(v)):
+                new[k] = float(v)
+            elif isinstance(d, list) and isinstance(v, list) and len(v) == len(d) and all(isinstance(x, (int, float)) for x in v):
+                new[k] = [float(x) for x in v]
+            elif k == "registration_mode" and v in ("open", "approval", "closed"):
+                new[k] = v
+            elif k == "macro_mode" and v in ("publication", "strict"):
+                new[k] = v
+        changed = sorted(k for k in new if new.get(k) != cur.get(k))
+        if changed:
+            await db.settings.update_one({"_id": "global", "version": ver}, {"$set": {"values": new, "updated_at": iso(now_utc()), "updated_by": u["email"]}, "$inc": {"version": 1}})
+        out["settings"] = {"changed": changed}
+    await SEC.log_event("legacy_import", request, u["email"], detail=str({k: v.get("added") for k, v in out.items() if isinstance(v, dict) and "added" in v})[:300])
+    return {"ok": True, "exported_from": data.get("exported_from"), "exported_at": data.get("exported_at"), "result": out}
+
+
 # ---------------- upgrade requests ----------------
 class UpgradeIn(BaseModel):
     version: Optional[int] = None
