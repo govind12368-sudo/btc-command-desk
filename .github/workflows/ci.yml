@@ -47,8 +47,9 @@ jobs:
           done
           docker compose ps
           docker compose exec -T backend python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8001/api/health/deep').read().decode())"
-          curl -skf https://localhost/api/health
+          curl -skf --retry 10 --retry-delay 3 --retry-all-errors https://localhost/api/health
           curl -skf https://localhost/ | grep -q "<title>Vantage BTC</title>"
+          curl -skI https://localhost/ | grep -i "content-security-policy"
           echo "stack OK"
       - if: always()
         run: docker compose logs --tail 80 backend web || true

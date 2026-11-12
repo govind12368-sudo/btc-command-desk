@@ -15,8 +15,7 @@
 
 	handle /api/* {
 		reverse_proxy backend:8001 {
-			health_uri /api/health
-			health_interval 30s
+			lb_try_duration 15s
 		}
 	}
 
