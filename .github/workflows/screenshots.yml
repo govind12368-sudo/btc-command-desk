@@ -3,7 +3,7 @@
 name: Screenshots
 on: workflow_dispatch
 permissions:
-  contents: read
+  contents: write
 jobs:
   shots:
     runs-on: ubuntu-latest
@@ -21,3 +21,9 @@ jobs:
       - run: pip install playwright && python -m playwright install --with-deps chromium && python .github/scripts/screens.py
       - uses: actions/upload-artifact@v4
         with: { name: screenshots, path: shots/ }
+      - name: Publish screenshots to the "screenshots" branch
+        run: |
+          cd shots && git init -q && git checkout -q -b screenshots
+          git -c user.name=github-actions -c user.email=actions@github.com add . 
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Screenshots ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" screenshots

@@ -30,6 +30,12 @@ Emergent account, no paid AI API and no paid hosting**.
    - Add your SSH key (download the generated one), then **Create**.
 3. Open the website ports: instance → **Subnet → Security list → Add ingress rules**: source `0.0.0.0/0`, TCP, destination ports **80** and **443**.
 
+> **Good to know about Oracle's free tier (2026):** the free Arm allowance is now 2 OCPU / 12 GB in total,
+> free A1 capacity is sometimes sold out in busy regions, and Oracle may reclaim an Always Free VM that
+> looks *idle* for 7 days (CPU, network **and** memory all under 20%). The 1 OCPU / 4 GB size above keeps
+> memory use above that line because this app runs 24/7. Backups (section 4) let you rebuild on a new VM
+> in minutes if anything happens. Any other Ubuntu VPS works with the same steps.
+
 ### b) Install the site
 SSH in (`ssh -i your-key ubuntu@SERVER_IP`) and run:
 
