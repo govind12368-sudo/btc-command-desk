@@ -27,6 +27,7 @@ import planner as PL
 import insights
 import alert_mode
 import channel_config
+import plan_a
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -951,6 +952,33 @@ async def health_deep(response: Response):
             "market_stream": WS.get("status"), "uptime_sec": int(up)}
 
 
+def _plan_a_token():
+    import hashlib
+    import hmac
+    return hmac.new(os.environ["JWT_SECRET"].encode(), b"plan-a-sheet-feed-v1", hashlib.sha256).hexdigest()[:40]
+
+
+@api.get("/plan-a")
+async def plan_a_get(request: Request, u=Depends(current_user)):
+    st = plan_a.STATE
+    out = {"computed_at": st["computed_at"], "summary": st["summary"], "rows": st["rows"][-300:], "error": st["error"],
+           "live_price": st["live_price"], "fees": plan_a.FEES,
+           "rule": "4C reverse 1:2 + 6-hour exit, scalps only, one trade at a time"}
+    if u["role"] == "admin":
+        base = os.environ["FRONTEND_URL"].split(",")[0].rstrip("/")
+        out["feed_url"] = f"{base}/api/plan-a/feed.csv?token={_plan_a_token()}"
+    return out
+
+
+@api.get("/plan-a/feed.csv")
+async def plan_a_feed(token: str = Query(..., max_length=80)):
+    """Read-only CSV for Google Sheets IMPORTDATA. Protected by a secret link token (no login)."""
+    import hmac
+    if not hmac.compare_digest(token, _plan_a_token()):
+        raise HTTPException(403, "invalid feed token")
+    return Response(plan_a.feed_csv(), media_type="text/csv", headers={"Cache-Control": "no-store"})
+
+
 class ChannelsIn(BaseModel):
     values: dict
 
@@ -1084,6 +1112,7 @@ async def startup():
                 await db.oi_history.delete_many({"t": {"$lt": iso(now - timedelta(days=37))}})
                 await db.alerts_log.delete_many({"at": {"$lt": iso(now - timedelta(days=180))}, "test": {"$ne": False}})
                 await db.alerts_log.delete_many({"dry_run": True, "at": {"$lt": iso(now - timedelta(days=60))}})
+                await db.candles_1m.delete_many({"_id": {"$lt": int(now.timestamp()) - 45 * 86400}})
                 await db.news_items.delete_many({"published_at": {"$lt": iso(now - timedelta(days=120))}, "review_status": {"$nin": ["REVIEWED"]}})
             except Exception:
                 logging.getLogger("maintenance").exception("prune failed")
@@ -1096,7 +1125,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop()):
         asyncio.create_task(coro)
 
 

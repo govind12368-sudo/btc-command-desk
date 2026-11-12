@@ -1,0 +1,15 @@
+# Manual check: does the automatic Plan A engine reproduce the workbook's trades on real Delta candles?
+name: Verify Plan A
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env: { JWT_SECRET: verify-only, ADMIN_EMAIL: a@example.org, ADMIN_PASSWORD: x, FRONTEND_URL: https://localhost }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements-dev.txt
+      - run: cd backend && python verify_plan_a.py
