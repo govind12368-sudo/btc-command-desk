@@ -97,8 +97,30 @@ def _ist(ts):
     return datetime.fromtimestamp(ts, timezone.utc).astimezone(IST).strftime("%Y-%m-%d %H:%M") if ts else ""
 
 
+def _seed():
+    """Scalp signals from the original workbook (03–12 Nov 2026), so Plan A history is continuous.
+    Signals captured by this server are added on top (same ID → the server's copy wins)."""
+    import json
+    import os
+    from datetime import timedelta
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "plan_a_seed.json")) as f:
+            fx = json.load(f)
+    except Exception:
+        return []
+    out = []
+    for s in fx.get("signals", []):
+        if not s["signal_id"].startswith("SCALP"):
+            continue
+        cap = datetime.fromisoformat(s["captured_ist"]).replace(tzinfo=IST).astimezone(timezone.utc)
+        out.append({"_id": s["signal_id"], "strategy": "scalp", "direction": s["direction"], "entry": s["entry"], "stop": s["stop"],
+                    "target": s["target"], "qty_btc": s["qty"], "captured_at": iso(cap), "source": "workbook"})
+    return out
+
+
 async def compute():
-    sigs = [s async for s in db.signals.find({"strategy": "scalp"}).sort("captured_at", 1)]
+    live_sigs = {s["_id"]: s async for s in db.signals.find({"strategy": "scalp"})}
+    sigs = sorted([s for s in _seed() if s["_id"] not in live_sigs] + list(live_sigs.values()), key=lambda s: s["captured_at"])
     now = int(now_utc().timestamp())
     rows = []
     if sigs:

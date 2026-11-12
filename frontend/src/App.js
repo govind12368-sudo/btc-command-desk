@@ -20,6 +20,7 @@ import Validation from "@/pages/Validation";
 import SettingsPage from "@/pages/SettingsPage";
 import Audit from "@/pages/Audit";
 import Upgrades from "@/pages/Upgrades";
+import PlanA from "@/pages/PlanA";
 
 function Public() {
   const loc = useLocation();
@@ -53,6 +54,7 @@ function Gate() {
         <Route path="/planner" element={<Planner />} />
         <Route path="/news" element={<News />} />
         <Route path="/journal" element={<Journal />} />
+        <Route path="/plan-a" element={<PlanA />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/audit" element={isAdmin ? <Audit /> : <Navigate to="/" replace />} />

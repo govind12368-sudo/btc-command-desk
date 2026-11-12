@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Calculator, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Calculator, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical } from "lucide-react";
 import { DevCredit, SiteFooter } from "@/components/brand/Branding";
 import Logo from "@/components/brand/Logo";
 import { APP_NAME, APP_SHORT, APP_TAGLINE } from "@/config/brand";
@@ -13,7 +13,7 @@ export const ADMIN_ONLY = new Set(["/settings", "/audit", "/upgrades", "/account
 export const NAV = [
   ["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scalping", "Scalping Signal", Zap],
   ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/planner", "Trade Planner", Calculator],
-  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/validation", "Trade Validation", ShieldCheck],
+  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/plan-a", "Plan A – Live", FlaskConical], ["/validation", "Trade Validation", ShieldCheck],
   ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope], ["/upgrades", "Upgrade Requests", Lightbulb],
 ];
 

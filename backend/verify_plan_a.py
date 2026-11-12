@@ -24,7 +24,7 @@ def ist_to_utc(s):
 
 
 async def main():
-    fx = json.load(open(os.path.join(os.path.dirname(__file__), "tests", "fixtures_plan_a.json")))
+    fx = json.load(open(os.path.join(os.path.dirname(__file__), "plan_a_seed.json")))
     for s in fx["signals"]:
         if not s["signal_id"].startswith("SCALP"):
             continue
