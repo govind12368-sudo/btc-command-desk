@@ -31,3 +31,24 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "22", cache: yarn, cache-dependency-path: frontend/yarn.lock }
       - run: cd frontend && yarn install --frozen-lockfile && CI=false yarn build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images and smoke-test the full stack
+        run: |
+          cp .env.example .env
+          sed -i "s/^DOMAIN=.*/DOMAIN=localhost/; s/^ADMIN_EMAIL=.*/ADMIN_EMAIL=admin@example.com/; s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=Ci-Strong-Passw0rd!x/; s/^JWT_SECRET=.*/JWT_SECRET=ci0123456789abcdefghijklmnopqrstuvwxyzABCDEFGH/" .env
+          docker compose up -d --build mongo backend web
+          for i in $(seq 1 40); do
+            s=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q backend)" 2>/dev/null || true)
+            [ "$s" = healthy ] && break; sleep 5
+          done
+          docker compose ps
+          docker compose exec -T backend python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8001/api/health/deep').read().decode())"
+          curl -skf https://localhost/api/health
+          curl -skf https://localhost/ | grep -q "<title>Vantage BTC</title>"
+          echo "stack OK"
+      - if: always()
+        run: docker compose logs --tail 80 backend web || true
