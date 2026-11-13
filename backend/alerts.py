@@ -186,13 +186,24 @@ def _template(sig, test=False):
             ("Entry (USD)", sig["entry"]), ("Entry order", sig.get("entry_type") or "MARKET") , ("Valid until (UTC)", sig.get("valid_until") or "—"),
             ("Stop (USD)", sig["stop"]), ("Target (USD)", sig["target"]),
             ("Quantity (BTC)", sig["qty_btc"]), ("Net R after costs", round(sig["net_r"], 3)),
-            ("Captured (UTC)", sig["captured_at"]), ("Venue", "Delta Exchange India BTCUSD perpetual")])
+            ("Captured (UTC)", sig["captured_at"]), ("Venue", "Delta Exchange India BTCUSD perpetual"), ("Day type (last 12 hours)", _day_tag(sig))])
         rows = f"<table role='presentation'>{rows}</table>"
     html = (f"<table role='presentation' width='100%'><tr><td style='padding:24px;font-family:Arial,sans-serif;color:#111'>"
             f"<h2 style='margin:0 0 12px'>{name}</h2>{rows}"
             f"<p>Open the desk to review: <a href='{escape(app)}'>{escape(app)}</a></p>"
             f"<p style='font-size:12px;color:#888'>Sent by {name}. Model signal only — no order was placed. Verify on the exchange before trading.</p></td></tr></table>")
     return subject, html
+
+
+def _day_tag(sig):
+    """Range / trend / unclear at the moment of the signal, and what the day-type playbook does with it."""
+    try:
+        import daytype
+        d = daytype.public()
+        pb = {"FOLLOW": "follow the signal", "PLAN_A": "Plan A (reverse it)", "STAND_ASIDE": "stand aside"}[daytype.playbook(d, sig["direction"])]
+        return f"{d['label']} → {pb}"
+    except Exception:
+        return "not available"
 
 
 async def notify(sig, test=False):

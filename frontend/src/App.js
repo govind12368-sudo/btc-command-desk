@@ -13,7 +13,7 @@ import Dashboard from "@/pages/Dashboard";
 import Market from "@/pages/Market";
 import StrategyPage from "@/pages/StrategyPage";
 import Pillars from "@/pages/Pillars";
-import Planner from "@/pages/Planner";
+import Scanner from "@/pages/Scanner";
 import News from "@/pages/News";
 import Journal from "@/pages/Journal";
 import Validation from "@/pages/Validation";
@@ -52,7 +52,8 @@ function Gate() {
         <Route path="/scalping" element={<StrategyPage strat="scalp" key="scalp" />} />
         <Route path="/swing" element={<StrategyPage strat="swing" key="swing" />} />
         <Route path="/pillars" element={<Pillars />} />
-        <Route path="/planner" element={<Planner />} />
+        <Route path="/scanner" element={<Scanner />} />
+        <Route path="/planner" element={<Navigate to="/scanner" replace />} />
         <Route path="/news" element={<News />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/plan-a" element={<PlanA />} />

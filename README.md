@@ -172,3 +172,15 @@ Delta Exchange India BTCUSD, one trade at a time, with a daily loss limit and a 
 After editing `.env` run `docker compose up -d` in `/opt/vantage`. Rules, sizing and limits are in
 `backend/autotrade.py`; the exchange adapter is `backend/delta_broker.py`; the 12 acceptance tests are in
 `backend/tests/test_autotrade.py` and run in CI on every change.
+
+## Day type, strategy audit and BTC Scanner
+
+- `backend/daytype.py` – range / trend / unclear from the last 12 hours of Delta 5-minute candles (five plain
+  measures). It is a description, not a forecast; its 11-month test result ships in `backend/daytype_evidence.json`
+  and is shown on the site. The study scripts that produced it are on the `study/follow-vs-reverse` branch.
+- `backend/plan_a.py` – besides Plan A it now computes "follow the signal" and the day-type "switch" on the
+  same signals with the same rules (`book()`), plus the Strategy audit (`audit()`, shown on System Audit).
+- `backend/scanner.py` – BTC Scanner page (replaces Trade Planner): today and swing BUY / SELL / WAIT from
+  transparent factor votes, with free data (Delta, the site's OKX/Fed pillars, Deribit options, CFTC) and a
+  score card that checks every call later.
+- Auto-Trade setting `direction_mode`: 0 = Plan A always, 1 = follow always, 2 = by day type (default).

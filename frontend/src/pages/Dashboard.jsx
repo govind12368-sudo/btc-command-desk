@@ -1,4 +1,5 @@
 import React from "react";
+import { DayTypeCard } from "@/components/desk/Books";
 import { Link } from "react-router-dom";
 import { useDesk } from "@/context/DeskContext";
 import { useFetch } from "@/hooks/useFetch";
@@ -194,6 +195,7 @@ export default function Dashboard() {
           ))}
         </div>} />
       <DecisionHero s={s} />
+      <DayTypeCard day={s.day_type} compact />
       <NextSetup scalp={s.scalp} swing={s.swing} isAdmin={isAdmin} />
       <DeskBrief b={s.brief} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">

@@ -73,10 +73,11 @@ class FakeExchange:
 @pytest.fixture()
 def env(monkeypatch):
     monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
-    for m in ("core", "autotrade", "delta_broker"):
+    for m in ("core", "autotrade", "delta_broker", "daytype"):
         sys.modules.pop(m, None)
     core = importlib.import_module("core")
     at = importlib.import_module("autotrade")
+    at.DEFAULTS["direction_mode"] = 0   # these tests cover Plan A; the day-type modes are tested in test_daytype.py
     clock, alerts = Clock(), []
 
     async def alert(mode, title, text):

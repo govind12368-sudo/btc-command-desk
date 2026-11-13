@@ -8,6 +8,7 @@ import { Btn } from "@/components/desk/forms";
 import { WorkbookCoverage } from "@/components/desk/Workbook";
 import { SecurityCard } from "@/components/desk/Security";
 import { ist, ago } from "@/lib/fmt";
+import StrategyAudit from "@/components/desk/StrategyAudit";
 
 function RecoveryResult({ result }) {
   if (!result) return <Empty>No recovery pass recorded yet.</Empty>;
@@ -85,6 +86,7 @@ export default function Audit() {
     <div className="space-y-4">
       <PageHead title="System Audit" sub="Current source faults, storage health, release schedules, calculation dependencies, workbook coverage and repair history."
         right={isAdmin && <div className="flex flex-wrap gap-2"><a href={`${API}/source-download`} data-testid="download-source" className="rounded border border-teal-500/50 px-3 py-1.5 text-xs font-semibold text-teal-300 hover:bg-teal-500/10 transition-colors">Download source code (.zip)</a><Btn data-testid="run-recovery" disabled={busy || a.recovery?.state === "checking"} onClick={run}>{busy || a.recovery?.state === "checking" ? "Checking sources…" : "Check & repair all sources"}</Btn></div>} />
+      <StrategyAudit />
       <SecurityCard />
       <LegacyImport />
       <Card title="Source audit & recovery" sub="The button checks all failing and stale installed sources. Automatic background recovery retries one due source family at a time. 120 s cooldown, bounded retries and provider Retry-After are respected." testid="recovery-card"

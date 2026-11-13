@@ -6,6 +6,7 @@ import { Card, PageHead, Note } from "@/components/desk/ui";
 import { Btn } from "@/components/desk/forms";
 import { n, usd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
+import { DayChip, DayTypeCard, PLAYBOOK_NAME } from "@/components/desk/Books";
 
 const RES_TONE = { TARGET: "text-teal-300", STOP: "text-red-300", TIME: "text-amber-300", OPEN: "text-sky-300" };
 
@@ -46,14 +47,16 @@ export default function PlanA() {
           <LineChart series={[{ name: "Net P&L $", color: VIZ.s1, points: curve }]} xFmt={(v) => v} yFmt={(v) => n(v, 0)} unit=" $" height={160} />
         </Card>
       )}
+      <DayTypeCard day={data?.day_type} compact />
       <Card title="Trades" sub="Newest first. Reverse of each filled scalp signal; skipped when the previous Plan A trade is still open." testid="plan-a-table">
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Signal</th><th>Plan A</th><th>Fill (IST)</th><th>Entry</th><th>Stop</th><th>Target</th><th>Result</th><th>Exit (IST)</th><th>Net $</th><th>Taken?</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Day type at signal</th><th>Plan A</th><th>Fill (IST)</th><th>Entry</th><th>Stop</th><th>Target</th><th>Result</th><th>Exit (IST)</th><th>Net $</th><th>Taken?</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.signal_id}>
                   <td className="font-mono text-[11.5px]">{r.signal_id}</td>
+                  <td><DayChip type={r.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[r.playbook] || ""}</span></td>
                   <td className={r.plan_dir === "LONG" ? "text-teal-300" : r.plan_dir === "SHORT" ? "text-red-300" : "text-slate-500"}>{r.plan_dir || "—"}</td>
                   <td className="font-mono text-[11.5px]">{r.fill_ist || (r.fill_status === "NOT FILLED" ? "not filled" : "waiting")}</td>
                   <td className="font-mono">{n(r.entry, 1)}</td>
@@ -65,7 +68,7 @@ export default function PlanA() {
                   <td className={r.taken === "Skip" ? "text-slate-500" : "text-slate-200"}>{r.taken || "—"}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={10} className="py-6 text-center text-slate-500">No scalp signals captured yet. New ones appear here automatically.</td></tr>}
+              {!rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">No scalp signals captured yet. New ones appear here automatically.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -34,12 +34,13 @@ MODES = ("PAPER", "TESTNET", "LIVE")
 
 DEFAULTS = {"margin_inr": 40000.0, "leverage": 10, "daily_loss_usd": 84.0, "daily_target_usd": 225.0, "max_contracts": 100,
             "entry_window_min": 10.0, "slippage_pts": 40.0, "time_exit_min": 360.0, "rr": 2.0, "stop_mult": 1.0,
-            "usd_inr": 85.0, "buffer_inr": 5000.0, "paper_balance_inr": 45000.0, "tp_limit": 0}
+            "usd_inr": 85.0, "buffer_inr": 5000.0, "paper_balance_inr": 45000.0, "tp_limit": 0, "direction_mode": 2}
 RANGES = {"margin_inr": (1000, 5_000_000), "leverage": (1, 100), "daily_loss_usd": (1, 100_000), "daily_target_usd": (1, 1_000_000),
           "max_contracts": (1, 5000), "entry_window_min": (1, 60), "slippage_pts": (0, 2000), "time_exit_min": (5, 2880),
           "rr": (0.25, 10), "stop_mult": (0.25, 5), "usd_inr": (50, 200), "buffer_inr": (0, 1_000_000),
-          "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1)}
-_INTS = ("leverage", "max_contracts", "tp_limit")
+          "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1), "direction_mode": (0, 2)}
+_INTS = ("leverage", "max_contracts", "tp_limit", "direction_mode")
+PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal"}
 
 
 class NotPlaced(Exception):
@@ -61,6 +62,22 @@ def levels(model_dir, entry, stop, rr=2.0, stop_mult=1.0):
 
 def _usd(v):
     return f"{'+' if v >= 0 else '−'}${abs(v):,.2f}"
+
+
+def follow_levels(model_dir, entry, stop, target):
+    """Follow the signal: its own direction, stop and target (prices rounded to the 0.5 tick)."""
+    return {"bot_dir": model_dir, "entry": tick_round(entry), "stop": tick_round(stop), "target": tick_round(target), "d": abs(entry - stop)}
+
+
+def choose_plan(mode, signal_dir):
+    """direction_mode 0 = Plan A always, 1 = follow always, 2 = by day type (range → Plan A, trend with the signal → follow, else none)."""
+    if int(mode) == 0:
+        return "PLAN_A", None
+    if int(mode) == 1:
+        return "FOLLOW", None
+    import daytype
+    day = daytype.public()
+    return daytype.playbook(day, signal_dir), day.get("label")
 
 
 def fee(price, contracts, kind):
@@ -300,7 +317,14 @@ class Engine:
             elif st.get("paused"):
                 doc.update(status="SKIPPED", reason="skipped – paused")
             else:
-                lv = levels(s["direction"], float(s["entry"]), float(s["stop"]), cfg["rr"], cfg["stop_mult"])
+                plan, day_label = choose_plan(cfg.get("direction_mode", 0), s["direction"])
+                doc.update(plan=plan, day_type=day_label)
+            if doc.get("status"):
+                pass
+            elif plan == "STAND_ASIDE":
+                doc.update(status="SKIPPED", reason=f"skipped – day type is {day_label}: stand aside")
+            else:
+                lv = follow_levels(s["direction"], float(s["entry"]), float(s["stop"]), float(s["target"])) if plan == "FOLLOW" else levels(s["direction"], float(s["entry"]), float(s["stop"]), cfg["rr"], cfg["stop_mult"])
                 cap = parse_iso(s["captured_at"])
                 end = cap + timedelta(minutes=cfg["entry_window_min"])
                 if s.get("valid_until"):
@@ -314,19 +338,19 @@ class Engine:
                 await db.autotrade_signals.insert_one(doc)
             except DuplicateKeyError:
                 continue  # each signal ID is handled once
-            extra = f" – bot {doc['bot_dir']} at {doc['entry']:.1f}, stop {doc['stop']:.1f}, target {doc['target']:.1f}" if doc["status"] == "ARMED" else ""
+            extra = f" – {PLAN_NAME.get(doc.get('plan'), '')}{' on a ' + doc['day_type'] + ' day' if doc.get('day_type') else ''}: bot {doc['bot_dir']} at {doc['entry']:.1f}, stop {doc['stop']:.1f}, target {doc['target']:.1f}" if doc["status"] == "ARMED" else ""
             await self.event(doc["status"].lower().replace(" ", "_"), f"{sid}: {doc['status']} ({doc['reason']}){extra}", sid)
 
     async def _try_enter(self, st, cfg, broker, price, hi, lo, now):
         armed = [a async for a in db.autotrade_signals.find({"status": "ARMED"}).sort("captured_at", 1)]
         for a in armed:
-            sid, long = a["_id"], a["bot_dir"] == "LONG"
+            sid, up = a["_id"], a["model_dir"] == "SHORT"  # the signal's own limit fills when price comes UP to a SHORT entry / DOWN to a LONG entry
             if now >= parse_iso(a["window_end"]):
                 await self._mark(sid, "NOT FILLED", f"price did not reach {a['entry']:.1f} inside the entry window – nothing traded")
                 continue
-            if not ((hi >= a["entry"]) if long else (lo <= a["entry"])):
+            if not ((hi >= a["entry"]) if up else (lo <= a["entry"])):
                 continue
-            beyond = (price - a["entry"]) if long else (a["entry"] - price)
+            beyond = (price - a["entry"]) if up else (a["entry"] - price)
             if beyond > cfg["slippage_pts"]:
                 await self._mark(sid, "SKIPPED", f"SLIPPAGE – price {price:.1f} is {beyond:.1f} points beyond entry {a['entry']:.1f} (guard {cfg['slippage_pts']:.0f})")
                 continue
@@ -351,7 +375,7 @@ class Engine:
         coid = ("E-" + sid)[:32]
         trade = {"_id": sid, "signal_id": sid, "mode": st["mode"], "status": "PENDING", "model_dir": a["model_dir"], "bot_dir": a["bot_dir"],
                  "captured_at": a["captured_at"], "trigger_entry": a["entry"], "stop": a["stop"], "target": a["target"], "contracts": n,
-                 "coid": coid, "created_at": iso(now), "size_note": info["limited_by"]}
+                 "coid": coid, "created_at": iso(now), "size_note": info["limited_by"], "plan": a.get("plan") or "PLAN_A", "day_type": a.get("day_type")}
         try:
             await db.autotrade_trades.insert_one(trade)  # written BEFORE the order: a crash can never cause a second entry
         except DuplicateKeyError:
@@ -564,7 +588,7 @@ async def status():
     open_trade = None
     if t:
         left = (parse_iso(t["fill_time"]) + timedelta(minutes=cfg["time_exit_min"]) - now).total_seconds()
-        open_trade = {**{k: t.get(k) for k in ("signal_id", "model_dir", "bot_dir", "entry", "trigger_entry", "stop", "target", "contracts", "margin_usd", "fill_time", "bracket_confirmed")},
+        open_trade = {**{k: t.get(k) for k in ("signal_id", "model_dir", "bot_dir", "entry", "trigger_entry", "stop", "target", "contracts", "margin_usd", "fill_time", "bracket_confirmed", "plan", "day_type")},
                       "unrealized": unreal, "time_left_sec": max(0, left)}
     try:
         balance_inr = await PaperBroker().available_inr(cfg) if st["mode"] == "PAPER" else None
@@ -576,7 +600,7 @@ async def status():
         "today": {"day": ist_date(now), "realized": real, "unrealized": unreal, "total": real + unreal,
                   "loss_limit": cfg["daily_loss_usd"], "target": cfg["daily_target_usd"], "usd_inr": cfg["usd_inr"]},
         "paper_balance_inr": balance_inr, "open_trade": open_trade,
-        "armed": [{k: a.get(k) for k in ("_id", "model_dir", "bot_dir", "entry", "stop", "target", "captured_at", "window_end")} for a in armed],
+        "armed": [{k: a.get(k) for k in ("_id", "model_dir", "bot_dir", "entry", "stop", "target", "captured_at", "window_end", "plan", "day_type")} for a in armed],
         "journal": [{k: v for k, v in x.items() if k != "_id"} async for x in db.autotrade_trades.find({"status": "CLOSED"}).sort("exit_time", -1).limit(200)],
         "events": [{k: v for k, v in x.items() if k != "_id"} async for x in db.autotrade_events.find().sort("at", -1).limit(150)],
         "signals": [x async for x in db.autotrade_signals.find({"status": {"$nin": ["ARMED"]}}).sort("captured_at", -1).limit(30)],
@@ -584,7 +608,7 @@ async def status():
     }
 
 
-JOURNAL_COLS = ["signal_id", "mode", "model_dir", "bot_dir", "captured_at", "fill_time", "entry", "stop", "target", "contracts",
+JOURNAL_COLS = ["signal_id", "mode", "plan", "day_type", "model_dir", "bot_dir", "captured_at", "fill_time", "entry", "stop", "target", "contracts",
                 "exit_time", "exit_reason", "exit_price", "gross", "fees", "net_usd", "net_inr"]
 
 

@@ -36,6 +36,7 @@ const FIELDS = [
   ["buffer_inr", "Balance kept free (₹)", "Never used as margin"],
   ["paper_balance_inr", "Paper starting balance (₹)", "Paper mode only"],
   ["tp_limit", "Take-profit order (0 or 1)", "0 = market order at target, 1 = limit order at target"],
+  ["direction_mode", "Direction (0, 1 or 2)", "0 = Plan A always, 1 = follow the signal always, 2 = by day type (range → Plan A, trend → follow, unclear → no trade)"],
 ];
 
 function useNow() {
@@ -175,7 +176,7 @@ export default function AutoTrade() {
 
   return (
     <div className="space-y-4" data-testid="autotrade-page">
-      <PageHead title="Auto-trade" sub="Plan A – 4C reverse 1:2 + 6-hour exit. Scalp signals only, opposite direction, one trade at a time."
+      <PageHead title="Auto-trade" sub={`Scalp signals only, one trade at a time, 6-hour exit. Direction: ${["Plan A (reverse 1:2) always", "follow the signal always", "by day type – range → Plan A, trend → follow, unclear → no trade"][d.settings.direction_mode] || ""}.`}
         right={<span className="flex items-center gap-2"><Chip status={MODE_CHIP[d.mode]} label={`${MODE_NAME[d.mode].toUpperCase()} MODE`} testid="autotrade-mode" /><Chip status={STATUS_CHIP[d.status]} label={d.status.toUpperCase()} testid="autotrade-status" /></span>} />
 
       {d.mode === "PAPER" && <Note>Paper mode: trades are simulated from the live Delta price with the same rules, sizing and fees. No order is sent to the exchange.</Note>}
@@ -234,7 +235,7 @@ export default function AutoTrade() {
         <Card title="Open trade" sub={t ? `${t.signal_id} · filled ${ist(t.fill_time)}` : "No trade is open"} testid="autotrade-open">
           {t ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Fig label="Direction" value={t.bot_dir} sub={`signal was ${t.model_dir}`} tone={DIR[t.bot_dir]} />
+              <Fig label="Direction" value={t.bot_dir} sub={`${t.plan === "FOLLOW" ? "following" : "Plan A, reverse of"} ${t.model_dir} signal${t.day_type ? ` · ${t.day_type}` : ""}`} tone={DIR[t.bot_dir]} />
               <Fig label="Entry" value={n(t.entry, 1)} sub={`planned ${n(t.trigger_entry, 1)}`} />
               <Fig label="Stop" value={n(t.stop, 1)} tone="text-red-300" />
               <Fig label="Target" value={n(t.target, 1)} tone="text-teal-300" />
@@ -250,11 +251,12 @@ export default function AutoTrade() {
           {d.armed.length ? (
             <div className="overflow-x-auto scroll-thin">
               <table className="desk-table">
-                <thead><tr><th>Signal</th><th>Bot</th><th>Entry</th><th>Stop</th><th>Target</th><th>Expires in</th></tr></thead>
+                <thead><tr><th>Signal</th><th>Method</th><th>Bot</th><th>Entry</th><th>Stop</th><th>Target</th><th>Expires in</th></tr></thead>
                 <tbody>
                   {d.armed.map((a) => (
                     <tr key={a._id}>
                       <td className="font-mono text-[11.5px]">{a._id}</td>
+                      <td className="text-[11.5px]">{a.plan === "FOLLOW" ? "Follow" : "Plan A"}</td>
                       <td className={DIR[a.bot_dir]}>{a.bot_dir}</td>
                       <td className="font-mono">{n(a.entry, 1)}</td>
                       <td className="font-mono">{n(a.stop, 1)}</td>
@@ -273,12 +275,13 @@ export default function AutoTrade() {
         right={<Btn tone="ghost" onClick={exportCsv} data-testid="autotrade-csv">Download CSV</Btn>}>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Signal</th><th>Mode</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Mode</th><th>Method</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
             <tbody>
               {d.journal.map((r) => (
                 <tr key={r.signal_id}>
                   <td className="font-mono text-[11.5px]">{r.signal_id}</td>
                   <td>{MODE_NAME[r.mode]}</td>
+                  <td className="text-[11.5px]">{r.plan === "FOLLOW" ? "Follow" : "Plan A"}{r.day_type ? <span className="block text-slate-500">{r.day_type}</span> : null}</td>
                   <td className={DIR[r.model_dir]}>{r.model_dir}</td>
                   <td className={DIR[r.bot_dir]}>{r.bot_dir}</td>
                   <td className="font-mono text-[11.5px]">{ist(r.captured_at)}</td>
@@ -295,7 +298,7 @@ export default function AutoTrade() {
                   <td className={`font-mono ${pnlTone(r.net_inr)}`}>{inr(r.net_inr)}</td>
                 </tr>
               ))}
-              {!d.journal.length && <tr><td colSpan={16} className="py-6 text-center text-slate-500">No closed trades yet. They appear here as soon as a trade exits.</td></tr>}
+              {!d.journal.length && <tr><td colSpan={17} className="py-6 text-center text-slate-500">No closed trades yet. They appear here as soon as a trade exits.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -29,6 +29,8 @@ import alert_mode
 import channel_config
 import plan_a
 import autotrade
+import daytype
+import scanner
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -72,8 +74,8 @@ async def state(u=Depends(current_user)):
     srcs = sources_public()
     if u["role"] != "admin":
         pub = SEC.public_state(engine.STATE, srcs, rec_public())
-        return {**pub, "brief": insights.brief(pub, pub.get("sources")), "server_time": iso(now_utc()), "user": u}
-    return {**engine.STATE, "sources": srcs, "recovery": rec_public(), "server_time": iso(now_utc()), "user": u,
+        return {**pub, "brief": insights.brief(pub, pub.get("sources")), "server_time": iso(now_utc()), "user": u, "day_type": daytype.public()}
+    return {**engine.STATE, "day_type": daytype.public(), "sources": srcs, "recovery": rec_public(), "server_time": iso(now_utc()), "user": u,
             "brief": insights.brief(engine.STATE, srcs), "config_warnings": CONFIG_WARNINGS,
             "alert_mode_armed": (await alert_mode.get_mode())["effective_armed"],
             "monitoring_note": "Data adapters, calculations, swing-plan monitoring, auto-capture and the daily recap timer run inside the server 24/7 — your own PC or browser can be off."}
@@ -313,6 +315,12 @@ async def plan_cancel(pid: str, u=Depends(admin_user)):
 async def signals(page: int = 1, size: int = 25, u=Depends(current_user)):
     total = await db.signals.count_documents({})
     rows = [clean(x) async for x in db.signals.find().sort("captured_at", -1).skip((page - 1) * size).limit(size)]
+    tags = {t["_id"]: t async for t in db.signal_tags.find({"_id": {"$in": [r.get("signal_id") for r in rows]}})}
+    pa = {r["signal_id"]: r for r in plan_a.STATE["rows"]}
+    for r in rows:  # day type frozen at capture + the same-rules result of following this signal
+        t, p = tags.get(r.get("signal_id")) or {}, pa.get(r.get("signal_id")) or {}
+        r.update(day_type=t.get("type"), day_label=t.get("label"), playbook=t.get("playbook"),
+                 follow_result=p.get("follow_result"), follow_net=p.get("follow_net"), plan_result=p.get("plan_result"), plan_net=p.get("net"))
     return {"items": rows, "total": total, "page": page, "size": size,
             "note": "Model signals are automatic captures. Candle touches are observations — never actual exchange fills."}
 
@@ -964,11 +972,23 @@ async def plan_a_get(request: Request, u=Depends(current_user)):
     st = plan_a.STATE
     out = {"computed_at": st["computed_at"], "summary": st["summary"], "rows": st["rows"][-300:], "error": st["error"],
            "live_price": st["live_price"], "fees": plan_a.FEES,
-           "rule": "4C reverse 1:2 + 6-hour exit, scalps only, one trade at a time"}
+           "rule": "4C reverse 1:2 + 6-hour exit, scalps only, one trade at a time",
+           "books": {k: ({m: {x: y for x, y in b.items() if x != "picks"} for m, b in v.items()} if isinstance(v, dict) else v) for k, v in st["books"].items()},
+           "day_type": daytype.public()}
     if u["role"] == "admin":
         base = os.environ["FRONTEND_URL"].split(",")[0].rstrip("/")
         out["feed_url"] = f"{base}/api/plan-a/feed.csv?token={_plan_a_token()}"
     return out
+
+
+@api.get("/strategy-audit")
+async def strategy_audit(u=Depends(admin_user)):
+    return plan_a.audit()
+
+
+@api.get("/scanner")
+async def scanner_get(u=Depends(current_user)):
+    return await scanner.public(engine.STATE)
 
 
 @api.get("/plan-a/feed.csv")
@@ -1185,7 +1205,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE)):
         asyncio.create_task(coro)
 
 

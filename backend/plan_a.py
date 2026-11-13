@@ -19,17 +19,20 @@ else taker, ×(1+GST).
 """
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 
 from core import db, now_utc, iso, parse_iso, IST
 from sources import http_get, DELTA
+import daytype
 
 log = logging.getLogger("plan_a")
 MIN = 60
 VALID_SEC = 600
 HOLD_SEC = 6 * 3600
 FEES = {"maker": 0.0002, "taker": 0.0005, "gst": 0.18}
-STATE = {"computed_at": None, "rows": [], "summary": {}, "error": None, "live_price": None}
+STATE = {"computed_at": None, "rows": [], "summary": {}, "error": None, "live_price": None, "books": {}}
+SINCE_IST = os.environ.get("JOURNAL_START", "2026-11-13")  # "from today" start of the journal comparison
 
 
 async def _fetch_1m(start, end):
@@ -129,13 +132,16 @@ async def compute():
     else:
         bars = []
     live = bars[-1]["c"] if bars else None
+    idx = {c["t"]: i for i, c in enumerate(bars)}
     busy_until = None  # exit time of the last Plan A trade taken; None = free; -1 = still open
     for s in sigs:
         cap = int(parse_iso(s["captured_at"]).timestamp())
         cap_min = cap - cap % MIN
         valid_end = int(parse_iso(s["valid_until"]).timestamp()) if s.get("valid_until") else cap + VALID_SEC
         d0, e, st, tg, q = s["direction"], float(s["entry"]), float(s["stop"]), float(s["target"]), float(s.get("qty_btc") or 0)
-        row = {"signal_id": s["_id"], "captured_ist": _ist(cap), "model_dir": d0, "entry": e, "model_stop": st, "model_target": tg, "qty": q}
+        row = {"signal_id": s["_id"], "captured_ist": _ist(cap), "cap_t": cap, "model_dir": d0, "entry": e, "model_stop": st, "model_target": tg, "qty": q}
+        tag = await daytype.tag_signal(s["_id"], cap, d0)
+        row.update(day_type=tag.get("type"), day_label=tag.get("label"), playbook=tag.get("playbook"))
         fill = next((c for c in bars if cap_min <= c["t"] < valid_end and _touch_entry(d0, c, e, cap_min)), None)
         if not fill:
             row["fill_status"] = "WAITING" if now < valid_end else "NOT FILLED"
@@ -172,6 +178,18 @@ async def compute():
                          "Stop hit in the fill minute" if bar and bar["t"] == ft else ""))
         if taken:
             busy_until = -1 if res is None else exit_t
+        # Follow the signal (Trade Journal way): the signal's own direction, stop and target, same 6-hour exit
+        f_res, f_bar = _first_exit(d0, st, tg, bars, ft, HOLD_SEC)
+        f_px = tg if f_res == "TARGET" else st if f_res == "STOP" else f_bar["c"] if f_res == "TIME" else None
+        f_gross = ((f_px or live or e) - e) * q * (1 if d0 == "LONG" else -1)
+        f_fees = _fee(e, q, "taker") + _fee(f_px or live or e, q, "maker" if f_res == "TARGET" else "taker")
+        i0 = idx.get(ft)
+        seg = bars[i0:i0 + HOLD_SEC // MIN + 1] if i0 is not None else []
+        if seg and risk > 0:
+            hh, ll = max(c["h"] for c in seg), min(c["l"] for c in seg)
+            row.update(mfe=((hh - e) if d0 == "LONG" else (e - ll)) / risk, mae=((e - ll) if d0 == "LONG" else (hh - e)) / risk)
+        row.update(fill_t=ft, plan_exit_t=exit_t, follow_result=f_res or "OPEN", follow_exit_t=f_bar["t"] if f_bar else None,
+                   follow_exit_ist=_ist(f_bar["t"]) if f_bar else "", follow_exit_price=f_px, follow_net=f_gross - f_fees)
         rows.append(row)
     taken = [r for r in rows if r.get("taken") == "Yes"]
     closed = [r for r in taken if r["plan_result"] != "OPEN"]
@@ -186,7 +204,96 @@ async def compute():
         "target": sum(1 for r in closed if r["plan_result"] == "TARGET"), "stop": sum(1 for r in closed if r["plan_result"] == "STOP"),
         "time": sum(1 for r in closed if r["plan_result"] == "TIME"),
         "win_rate": len(wins) / len(closed) if closed else None, "net": sum(r["net"] for r in taken), "max_drawdown": dd})
+    since = int(datetime.fromisoformat(SINCE_IST).replace(tzinfo=IST).timestamp())
+    STATE["books"] = {"since_date": SINCE_IST, "all": {m: book(rows, m) for m in BOOKS}, "since": {m: book(rows, m, since) for m in BOOKS}}
     return STATE
+
+
+BOOKS = ("follow", "plan_a", "switch")
+
+
+def book(rows, mode, since=None):
+    """One trade at a time, same fill rule, same 6-hour exit, same fees.
+    follow = the signal's own direction / stop / target; plan_a = reverse 1:2;
+    switch = day type at capture decides: RANGE → plan_a, TREND with the signal → follow, otherwise no trade."""
+    busy, eq, peak, dd = None, 0.0, 0.0, 0.0
+    c = {"signals": 0, "filled": 0, "taken": 0, "skipped": 0, "stood_aside": 0, "open": 0, "target": 0, "stop": 0, "time": 0, "wins": 0, "net": 0.0}
+    curve, picks = [], {}
+    for r in rows:
+        if since and r["cap_t"] < since:
+            continue
+        c["signals"] += 1
+        if r.get("fill_status") != "FILLED":
+            continue
+        c["filled"] += 1
+        pick = mode if mode != "switch" else {"FOLLOW": "follow", "PLAN_A": "plan_a"}.get(r.get("playbook"))
+        if not pick:
+            c["stood_aside"] += 1
+            picks[r["signal_id"]] = "aside"
+            continue
+        res, xt, xi, net = (r["follow_result"], r["follow_exit_t"], r["follow_exit_ist"], r["follow_net"]) if pick == "follow" else (r["plan_result"], r["plan_exit_t"], r["exit_ist"], r["net"])
+        if busy is not None and (busy == -1 or busy > r["fill_t"]):
+            c["skipped"] += 1
+            picks[r["signal_id"]] = "busy"
+            continue
+        busy = -1 if res == "OPEN" else xt
+        picks[r["signal_id"]] = pick
+        c["taken"] += 1
+        c["net"] += net
+        eq += net
+        peak = max(peak, eq)
+        dd = min(dd, eq - peak)
+        if res == "OPEN":
+            c["open"] += 1
+            continue
+        c[{"TARGET": "target", "STOP": "stop", "TIME": "time"}[res]] += 1
+        c["wins"] += net > 0
+        curve.append({"t": xi, "v": round(eq, 2)})
+    closed = c["target"] + c["stop"] + c["time"]
+    return {**c, "win_rate": c["wins"] / closed if closed else None, "max_drawdown": dd, "curve": curve, "picks": picks}
+
+
+def audit():
+    """Strategy audit: follow vs Plan A vs day-type switch on the same signals, day by day, with the reasons."""
+    rows = [r for r in STATE["rows"] if r.get("fill_status") == "FILLED"]
+    days = {}
+    for r in rows:
+        d = days.setdefault(r["captured_ist"][:10], {"date": r["captured_ist"][:10], "n": 0, "follow": 0.0, "plan_a": 0.0, "switch": 0.0, "switch_n": 0, "tags": {}})
+        d["n"] += 1
+        d["follow"] += r["follow_net"]
+        d["plan_a"] += r["net"]
+        pb = r.get("playbook")
+        if pb in ("FOLLOW", "PLAN_A"):
+            d["switch"] += r["follow_net"] if pb == "FOLLOW" else r["net"]
+            d["switch_n"] += 1
+        d["tags"][r.get("day_type") or "NA"] = d["tags"].get(r.get("day_type") or "NA", 0) + 1
+    bars = daytype.STATE["bars"]
+    dr = daytype.daily_ranges(bars) if bars else {}
+    for d in days.values():
+        t0 = int(datetime.fromisoformat(d["date"]).replace(tzinfo=IST).timestamp())
+        seg = [b for b in bars if t0 <= b["t"] < t0 + 86400]
+        d["eod"] = daytype.eod_label(seg, daytype.adr(dr, daytype.ist_day(t0))) if seg and seg[-1]["t"] >= t0 + 86400 - 600 else "TODAY" if seg else "NA"
+        if seg:
+            d["range_pct"] = (max(b["h"] for b in seg) - min(b["l"] for b in seg)) / seg[0]["o"] * 100
+            d["change_pct"] = (seg[-1]["c"] / seg[0]["o"] - 1) * 100
+    def bucket(lo, hi):
+        g = [r for r in rows if r.get("mfe") is not None and lo <= r["mfe"] < hi]
+        return {"n": len(g), "follow_wins": sum(r["follow_net"] > 0 for r in g), "plan_a_wins": sum(r["net"] > 0 for r in g)}
+    fw = [r["follow_net"] for r in rows if r["follow_result"] == "TARGET"]
+    fl = [-r["follow_net"] for r in rows if r["follow_result"] == "STOP"]
+    pw = [r["net"] for r in rows if r["plan_result"] == "TARGET"]
+    pl = [-r["net"] for r in rows if r["plan_result"] == "STOP"]
+    be = lambda w, l: (sum(l) / len(l)) / (sum(l) / len(l) + sum(w) / len(w)) if w and l else None
+    avg_fee = sum(r["fees"] for r in rows) / len(rows) if rows else None
+    avg_risk = sum(abs(r["entry"] - r["model_stop"]) * r["qty"] for r in rows) / len(rows) if rows else None
+    return {"computed_at": STATE["computed_at"], "books": {k: {m: {x: y for x, y in b.items() if x != "picks"} for m, b in v.items()} if isinstance(v, dict) else v for k, v in STATE["books"].items()},
+            "days": sorted(days.values(), key=lambda d: d["date"]),
+            "why": {"ran_1_5": bucket(1.5, 1e9), "ran_under_1": bucket(-1e9, 1.0), "between": bucket(1.0, 1.5),
+                    "both_lost": sum(1 for r in rows if r["follow_net"] < 0 and r["net"] < 0 and r["follow_result"] != "OPEN" and r["plan_result"] != "OPEN"), "n": len(rows),
+                    "avg_fee": avg_fee, "avg_risk": avg_risk, "breakeven_follow": be(fw, fl), "breakeven_plan_a": be(pw, pl),
+                    "long": {"n": sum(r["model_dir"] == "LONG" for r in rows), "follow_wins": sum(r["model_dir"] == "LONG" and r["follow_net"] > 0 for r in rows)},
+                    "short": {"n": sum(r["model_dir"] == "SHORT" for r in rows), "follow_wins": sum(r["model_dir"] == "SHORT" and r["follow_net"] > 0 for r in rows)}},
+            "evidence": daytype.evidence(), "day_type_now": daytype.public()}
 
 
 async def loop():
