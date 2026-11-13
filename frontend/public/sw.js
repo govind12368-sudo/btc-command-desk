@@ -1,5 +1,5 @@
 // App-shell cache only. API responses (market data) are never cached, so offline mode cannot show cached data as live.
-const CACHE = "vantage-shell-v3";
+const CACHE = "vantage-shell-v4";
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -34,9 +34,13 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(d.title || "Vantage BTC", {
-    body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || undefined, data: { url: d.url || "/" },
-  }));
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(d.title || "Vantage BTC", {
+      body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || undefined, data: { url: d.url || "/" },
+    }),
+    // If the app is open, tell it so it can play the chosen loud alert sound.
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: "vantage-push", title: d.title, tag: d.tag }))),
+  ]));
 });
 
 self.addEventListener("notificationclick", (e) => {

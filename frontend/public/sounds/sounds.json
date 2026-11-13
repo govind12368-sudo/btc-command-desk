@@ -1,0 +1,107 @@
+[
+ {
+  "id": "rush-1-siren",
+  "group": "Rush",
+  "name": "Siren sweep",
+  "file": "/sounds/rush-1-siren.mp3",
+  "kb": 73
+ },
+ {
+  "id": "rush-2-fast-beeps",
+  "group": "Rush",
+  "name": "Fast beeps",
+  "file": "/sounds/rush-2-fast-beeps.mp3",
+  "kb": 73
+ },
+ {
+  "id": "rush-3-klaxon",
+  "group": "Rush",
+  "name": "Klaxon",
+  "file": "/sounds/rush-3-klaxon.mp3",
+  "kb": 73
+ },
+ {
+  "id": "rush-4-red-alert",
+  "group": "Rush",
+  "name": "Red alert",
+  "file": "/sounds/rush-4-red-alert.mp3",
+  "kb": 73
+ },
+ {
+  "id": "rush-5-buzzer",
+  "group": "Rush",
+  "name": "Buzzer pulses",
+  "file": "/sounds/rush-5-buzzer.mp3",
+  "kb": 73
+ },
+ {
+  "id": "ring-1-classic",
+  "group": "Ringtone",
+  "name": "Classic phone ring",
+  "file": "/sounds/ring-1-classic.mp3",
+  "kb": 73
+ },
+ {
+  "id": "ring-2-double",
+  "group": "Ringtone",
+  "name": "Double ring",
+  "file": "/sounds/ring-2-double.mp3",
+  "kb": 73
+ },
+ {
+  "id": "ring-3-old-bell",
+  "group": "Ringtone",
+  "name": "Old bell ringer",
+  "file": "/sounds/ring-3-old-bell.mp3",
+  "kb": 73
+ },
+ {
+  "id": "ring-4-digital",
+  "group": "Ringtone",
+  "name": "Digital ring",
+  "file": "/sounds/ring-4-digital.mp3",
+  "kb": 73
+ },
+ {
+  "id": "ring-5-marimba",
+  "group": "Ringtone",
+  "name": "Wooden ring",
+  "file": "/sounds/ring-5-marimba.mp3",
+  "kb": 73
+ },
+ {
+  "id": "inst-1-piano",
+  "group": "Instrumental",
+  "name": "Piano rise",
+  "file": "/sounds/inst-1-piano.mp3",
+  "kb": 73
+ },
+ {
+  "id": "inst-2-fanfare",
+  "group": "Instrumental",
+  "name": "Brass fanfare",
+  "file": "/sounds/inst-2-fanfare.mp3",
+  "kb": 73
+ },
+ {
+  "id": "inst-3-chimes",
+  "group": "Instrumental",
+  "name": "Bright chimes",
+  "file": "/sounds/inst-3-chimes.mp3",
+  "kb": 73
+ },
+ {
+  "id": "inst-4-guitar",
+  "group": "Instrumental",
+  "name": "Guitar strum",
+  "file": "/sounds/inst-4-guitar.mp3",
+  "kb": 73
+ },
+ {
+  "id": "inst-5-synth",
+  "group": "Instrumental",
+  "name": "Synth arpeggio",
+  "file": "/sounds/inst-5-synth.mp3",
+  "kb": 73
+ }
+]

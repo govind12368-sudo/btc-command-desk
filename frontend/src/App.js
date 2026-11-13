@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { installAlertSound } from "@/lib/sound";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { DeskProvider, useDesk } from "@/context/DeskContext";
@@ -74,6 +75,7 @@ function Gate() {
 export default function App() {
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    installAlertSound();
   }, []);
   return (
     <DeskProvider>
