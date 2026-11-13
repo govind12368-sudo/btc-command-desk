@@ -5,6 +5,7 @@ import { api, errText } from "@/lib/api";
 import { Card, PageHead, Note, Chip } from "@/components/desk/ui";
 import { Btn, Field, Input } from "@/components/desk/forms";
 import { n, ist } from "@/lib/fmt";
+import { PushCard } from "@/components/desk/Push";
 
 const inr = (v) => (v == null ? "—" : `${v < 0 ? "−" : ""}₹${Math.round(Math.abs(v)).toLocaleString("en-IN")}`);
 const money = (v) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}$${n(Math.abs(v), 2)}`);
@@ -316,6 +317,7 @@ export default function AutoTrade() {
         </div>
       </Card>
 
+      <PushCard />
       <SettingsForm d={d} reload={reload} />
       <Pushover />
     </div>

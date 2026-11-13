@@ -160,9 +160,19 @@ async def _deliver(subject, text):
                 if r.status_code >= 400:
                     raise RuntimeError(f"Pushover refused ({r.status_code})")
         jobs.append(push())
+    import webpush
+    jobs.append(webpush.send(_push_title(subject), text, "/auto-trade", None))
     for r in await asyncio.gather(*jobs, return_exceptions=True):
         if isinstance(r, Exception):
             log.warning("auto-trade alert failed: %s", r)
+
+
+def _push_title(subject):
+    """'[PAPER] Vantage BTC auto-trade: Exit – TARGET' → 'Paper · Exit – TARGET' (short, for a phone banner)."""
+    mode, _, rest = subject.partition("] ")
+    what = rest.split(": ", 1)[-1]
+    mode = mode.strip("[").title()
+    return what if mode == "Live" else f"{mode} · {what}"
 
 
 async def send_alert(mode, title, text):

@@ -5,6 +5,7 @@ import { api, errText } from "@/lib/api";
 import { Card, PageHead, Empty, Note } from "@/components/desk/ui";
 import { Field, Input, Select, Btn } from "@/components/desk/forms";
 import { AlertsCard, DailySummaryCard } from "@/components/desk/Alerts";
+import { PushCard } from "@/components/desk/Push";
 
 const GROUPS = [
   ["Capital & risk", [["capital", "Capital (USD)"], ["risk_fraction", "Risk per trade (fraction of capital)"], ["max_order_notional", "Max order notional (USD)"], ["leverage_cap", "Leverage cap (×)"], ["daily_loss_limit", "Daily realized net-loss limit (USD)"], ["max_entries_per_day", "Max entries per IST day"], ["max_positions", "Max simultaneous positions"], ["journal_capacity", "Journal working capacity (open records)"]]],
@@ -52,6 +53,7 @@ export default function SettingsPage() {
       {!isAdmin && <Note>View-only account: settings are visible but cannot be changed.</Note>}
       {err && <Note tone="red">Not saved: {err} <button className="underline ml-2" data-testid="settings-reload" onClick={reloadServer}>Reload server version and keep my edits</button></Note>}
       {dirty && !err && <Note tone="amber">Unsaved draft (kept locally until saved).</Note>}
+      {isAdmin && <PushCard />}
       <AlertsCard isAdmin={isAdmin} />
       <DailySummaryCard isAdmin={isAdmin} />
       <Card title="New account registration" testid="settings-registration-mode">

@@ -250,6 +250,13 @@ async def notify(sig, test=False):
         entry[ch] = e2["result"]
         await db.alerts_log.insert_one(e2)
     entry["call"] = await _call(sig, test, entry["signal_id"]) if channels.get("call") else "skipped (call channel switched off)"
+    import webpush
+    if test:
+        pr = await webpush.send("Vantage BTC test", "Test signal alert.", "/journal", "test")
+    else:
+        pr = await webpush.send(f"Signal: {sig['strategy'].upper()} {sig['direction']}", f"Entry {sig['entry']}, stop {sig['stop']}, target {sig['target']}. Day type: {_day_tag(sig)}.",
+                                "/journal", sig["signal_id"])
+    entry["push"] = f"sent to {pr['sent']} device(s)" if pr.get("sent") else "no device" if not pr.get("devices") else f"failed ({pr.get('failed')})"
     return entry
 
 

@@ -31,6 +31,7 @@ import plan_a
 import autotrade
 import daytype
 import scanner
+import webpush
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -979,6 +980,50 @@ async def plan_a_get(request: Request, u=Depends(current_user)):
         base = os.environ["FRONTEND_URL"].split(",")[0].rstrip("/")
         out["feed_url"] = f"{base}/api/plan-a/feed.csv?token={_plan_a_token()}"
     return out
+
+
+# ---------------- Phone pop-up notifications (Web Push) ----------------
+class PushSubIn(BaseModel):
+    endpoint: str = Field(max_length=1000)
+    keys: dict
+
+
+class PushEndpointIn(BaseModel):
+    endpoint: str = Field(default="", max_length=1000)
+
+
+@api.get("/push/key")
+async def push_key(u=Depends(admin_user)):
+    return {"public_key": (await webpush.keys())[1]}
+
+
+@api.get("/push/status")
+async def push_status(u=Depends(admin_user)):
+    return await webpush.status(u["id"])
+
+
+@api.post("/push/subscribe")
+async def push_subscribe(body: PushSubIn, request: Request, u=Depends(admin_user)):
+    try:
+        n = await webpush.subscribe(body.model_dump(), u, request.headers.get("user-agent", ""))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await SEC.log_event("push_subscribe", request, u["email"])
+    return {"ok": True, "devices": n}
+
+
+@api.post("/push/unsubscribe")
+async def push_unsubscribe(body: PushEndpointIn, u=Depends(current_user)):
+    await webpush.unsubscribe(body.endpoint)
+    return {"ok": True}
+
+
+@api.post("/push/test")
+async def push_test(u=Depends(admin_user)):
+    r = await webpush.send("Vantage BTC test", "Notifications are working on this device. You'll get trade entries, exits and daily limits here.", "/auto-trade", "test", user_id=u["id"])
+    if not r["devices"]:
+        raise HTTPException(409, "No device is registered yet. Turn notifications on first.")
+    return r
 
 
 @api.get("/strategy-audit")
