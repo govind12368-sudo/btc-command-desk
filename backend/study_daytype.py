@@ -10,6 +10,7 @@ mm.AsyncIOMotorClient = lambda *a, **k: AsyncMongoMockClient()
 from indicators import frame_metrics, trend_dir
 from strategy import scalp_direction, ext_atr
 from sources import http_get, DELTA
+import daytype as DT, json
 
 DAYS = int(os.environ.get("STUDY_DAYS", "330"))
 S = {"close_extreme_atr": 0.3, "min_scalp_volume_ratio": 0.9}
@@ -161,59 +162,61 @@ async def main():
               "nsetup": sum(1 for k in range(i - 24, i) if k in setups and setups[k][0] == d), "extatr": x,
               "sigtoday": by_day[day], "prevF": (1 if last["F"] > 0 else -1) if last and last["xk"] < i else 0, "long": int(sg > 0)}
         by_day[day] += 1
-        sigs.append({"i": i, "t": T[i], "F": res["F"][0], "R": res["R"][0], "fr": res["F"][1], "rr": res["R"][1], "xk": res["F"][2], "f": f_})
+        dt = DT.classify(b5[i - 143:i + 1], adr)
+        sigs.append({"i": i, "t": T[i], "F": res["F"][0], "R": res["R"][0], "fr": res["F"][1], "rr": res["R"][1], "xk": res["F"][2], "f": f_,
+                     "dt": dt["type"], "pb": DT.playbook(dt, d), "rk": res["R"][2]})
 
-    N = len(sigs); cut = int(N * 0.6); tr, te = sigs[:cut], sigs[cut:]
     mean = lambda xs: sum(xs) / len(xs) if xs else 0
-    def line(name, g):
-        c = defaultdict(int)
-        for s in g: c[s["fr"]] += 1
-        return f"{name:<9} n={len(g):4d} | follow: mean {mean([s['F'] for s in g]):+.3f}R total {sum(s['F'] for s in g):+7.1f}R win {100 * mean([s['F'] > 0 for s in g]):3.0f}% T/S/6h {c['TARGET']}/{c['STOP']}/{c['TIME']} | reverse: mean {mean([s['R'] for s in g]):+.3f}R total {sum(s['R'] for s in g):+7.1f}R win {100 * mean([s['R'] > 0 for s in g]):3.0f}%"
-    print(f"\nsignals {N} ({N / max(1, (T[-1] - T[700]) / 86400):.1f}/day); real site rate was ~4/day")
-    print(line("ALL", sigs)); print(line("TRAIN", tr)); print(line("TEST", te))
-    print("\nBY MONTH")
+    def st(g, k):
+        return {"n": len(g), "mean_r": round(mean([x[k] for x in g]), 3), "total_r": round(sum(x[k] for x in g), 1), "win": round(100 * mean([x[k] > 0 for x in g]))}
+    def switch(g):
+        v = [x["F"] if x["pb"] == "FOLLOW" else x["R"] if x["pb"] == "PLAN_A" else None for x in g]
+        v = [x for x in v if x is not None]
+        return {"n": len(v), "mean_r": round(mean(v), 3), "total_r": round(sum(v), 1), "win": round(100 * mean([x > 0 for x in v]))}
+    def dd(vals):
+        eq = pk = worst = 0.0
+        for x in vals:
+            eq += x; pk = max(pk, eq); worst = min(worst, eq - pk)
+        return round(worst, 1)
+    ev = {"period": [time.strftime("%Y-%m-%d", time.gmtime(T[700])), time.strftime("%Y-%m-%d", time.gmtime(T[-1]))], "signals": len(sigs),
+          "per_day": round(len(sigs) / ((T[-1] - T[700]) / 86400), 1), "fee_r": round(mean([(FE * 2) / 0.005 for _ in sigs]), 3),
+          "follow": st(sigs, "F"), "plan_a": st(sigs, "R"), "switch": switch(sigs),
+          "dd": {"follow": dd([x["F"] for x in sigs]), "plan_a": dd([x["R"] for x in sigs])},
+          "by_tag": {k: {"follow": st([x for x in sigs if x["dt"] == k], "F"), "plan_a": st([x for x in sigs if x["dt"] == k], "R")} for k in ("TREND_UP", "TREND_DOWN", "RANGE", "MIXED")},
+          "by_playbook": {k: {"follow": st([x for x in sigs if x["pb"] == k], "F"), "plan_a": st([x for x in sigs if x["pb"] == k], "R")} for k in ("FOLLOW", "PLAN_A", "STAND_ASIDE")}}
     bm = defaultdict(list)
-    for s in sigs: bm[time.strftime("%Y-%m", time.gmtime(s["t"]))].append(s)
-    for k in sorted(bm): print(line(k, bm[k]))
-
-    print("\nFEATURE SPLITS (terciles from TRAIN): mean R per bucket low/mid/high — follow | reverse | advantage follow−reverse")
-    spreads = {}
-    def buckets(g, key, cuts):
-        return [[s for s in g if sum(s["f"][key] >= c for c in cuts) == b] for b in range(len(cuts) + 1)]
-    for key in sigs[0]["f"]:
-        vals = sorted(s["f"][key] for s in tr)
-        cuts = sorted(set([vals[len(vals) // 3], vals[2 * len(vals) // 3]]))
-        if key in ("out_pd", "out_3d", "long"): cuts = [1]
-        if key == "prevF": cuts = [0, 1]
-        if key == "hr": cuts = [6, 12, 18]
-        outs = []
-        for g in (tr, te):
-            bs = buckets(g, key, cuts)
-            outs.append(" ".join(f"{mean([s['F'] for s in b]):+.2f}" for b in bs) + " | " + " ".join(f"{mean([s['R'] for s in b]):+.2f}" for b in bs) + " | " + " ".join(f"{mean([s['F'] - s['R'] for s in b]):+.2f}" for b in bs) + " n " + "/".join(str(len(b)) for b in bs))
-        bs = buckets(tr, key, cuts); adv = [mean([s["F"] - s["R"] for s in b]) for b in bs]
-        spreads[key] = (adv[-1] - adv[0], cuts)
-        print(f"{key:<9}{[round(c, 2) for c in cuts]}\n   TRAIN {outs[0]}\n   TEST  {outs[1]}")
-
-    # ---- automatic composite from train, judged on test
-    sel = [(k, v[0]) for k, v in spreads.items() if abs(v[0]) >= 0.35 and k not in ("hr",)]
-    def rank_fn(key):
-        vals = sorted(s["f"][key] for s in tr)
-        return lambda v: bisect.bisect_left(vals, v) / len(vals) - 0.5
-    rf = {k: rank_fn(k) for k, _ in sel}
-    score = lambda s: sum((1 if sp > 0 else -1) * rf[k](s["f"][k]) for k, sp in sel) / max(1, len(sel))
-    print("\nAUTO COMPOSITE uses:", [(k, round(sp, 2)) for k, sp in sel])
-    sc = sorted(score(s) for s in tr); lo, hi = sc[len(sc) // 3], sc[2 * len(sc) // 3]
-    for name, g in (("TRAIN", tr), ("TEST", te)):
-        bl = [[s for s in g if score(s) < lo], [s for s in g if lo <= score(s) < hi], [s for s in g if score(s) >= hi]]
-        print(f" {name} composite low/mid/high: follow " + " ".join(f"{mean([s['F'] for s in b]):+.2f}" for b in bl) + " | reverse " + " ".join(f"{mean([s['R'] for s in b]):+.2f}" for b in bl) + " n " + "/".join(str(len(b)) for b in bl))
-        sw = [s["F"] if score(s) >= hi else s["R"] if score(s) < lo else 0 for s in g]
-        sw2 = [s["F"] if score(s) >= hi else s["R"] for s in g]
-        print(f"   switch(high→follow, low→reverse, mid→skip): total {sum(sw):+.1f}R over {sum(1 for x in sw if x)} trades | switch(mid→reverse): {sum(sw2):+.1f}R | always follow {sum(s['F'] for s in g):+.1f}R | always reverse {sum(s['R'] for s in g):+.1f}R")
-    # daily-level truth: how many days does each side win
-    dd = defaultdict(lambda: [0.0, 0.0])
-    for s in sigs:
-        d = (s["t"] + IST) // 86400; dd[d][0] += s["F"]; dd[d][1] += s["R"]
-    print(f"\ndays with signals {len(dd)}: follow-better days {sum(1 for v in dd.values() if v[0] > v[1])}, reverse-better {sum(1 for v in dd.values() if v[1] > v[0])}; both-negative days {sum(1 for v in dd.values() if v[0] < 0 and v[1] < 0)}")
+    for x in sigs: bm[time.strftime("%Y-%m", time.gmtime(x["t"]))].append(x)
+    ev["by_month"] = [{"month": k, "n": len(g), "follow": round(sum(x["F"] for x in g), 1), "plan_a": round(sum(x["R"] for x in g), 1), "switch": switch(g)["total_r"], "switch_n": switch(g)["n"]} for k, g in sorted(bm.items())]
+    half = len(sigs) // 2
+    ev["halves"] = [{"follow": st(g, "F")["mean_r"], "plan_a": st(g, "R")["mean_r"], "switch": switch(g)["mean_r"]} for g in (sigs[:half], sigs[half:])]
+    # hourly: how often each type, and what the NEXT 6 hours did
+    dr = DT.daily_ranges(b5); share = defaultdict(int); cont = defaultdict(list); inside = []
+    for i in range(288 * 12, n - 73, 12):
+        a = DT.adr(dr, DT.ist_day(T[i]))
+        d = DT.classify(b5[i - 143:i + 1], a)
+        share[d["type"]] += 1
+        nxt = (C[i + 72] - C[i]) / a
+        if d["type"].startswith("TREND"):
+            cont[d["type"]].append(nxt * (1 if d["type"] == "TREND_UP" else -1))
+        if d["type"] == "RANGE":
+            inside.append(max(Hh[i + 1:i + 73]) <= d["high"] and min(Ll[i + 1:i + 73]) >= d["low"])
+    tot = sum(share.values())
+    ev["share"] = {k: round(100 * v / tot) for k, v in share.items()}
+    allc = cont["TREND_UP"] + cont["TREND_DOWN"]
+    ev["after_trend"] = {"n": len(allc), "continued_pct": round(100 * mean([x > 0 for x in allc])), "mean_move_adr": round(mean(allc), 3)}
+    ev["after_range"] = {"n": len(inside), "stayed_inside_pct": round(100 * mean(inside))}
+    # end-of-day truth vs the call made at noon IST
+    hit = tot2 = 0
+    for day, v in dr.items():
+        if v[2] < 288 or day - 1 not in dr: continue
+        i0 = bisect.bisect_left(T, day * 86400 - IST)
+        if i0 < 288 * 12 or i0 + 288 > n: continue
+        a = DT.adr(dr, day)
+        e = DT.eod_label(b5[i0:i0 + 288], a); c = DT.classify(b5[i0 + 144 - 143:i0 + 145], a)["type"]
+        if e in ("NA",) or c == "NA": continue
+        tot2 += 1; hit += (e == c)
+    ev["noon_vs_eod"] = {"days": tot2, "same_pct": round(100 * hit / max(1, tot2))}
+    print("EVIDENCE_JSON " + json.dumps(ev, separators=(",", ":")))
 
 
 asyncio.run(main())
