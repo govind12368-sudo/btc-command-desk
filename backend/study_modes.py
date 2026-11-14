@@ -67,7 +67,8 @@ async def main():
         r = {"id": sid.replace("SCALP-", ""), "cap": cap, "dir": d0, "D": D, "q": q, "f": f, "fill": None}
         if fill:
             ft = fill["t"]; r["fill"] = ft
-            for mode, dd, s_, t_ in (("F", d0, stp, tgt), ("R", "SHORT" if d0 == "LONG" else "LONG", e + sgn * D, e - sgn * 2 * D)):
+            for mode, dd, s_, t_ in (("F", d0, stp, tgt), ("R", "SHORT" if d0 == "LONG" else "LONG", e + sgn * D, e - sgn * 2 * D),
+                                     ("F20", d0, stp, e + sgn * 2.0 * D), ("F24", d0, stp, e + sgn * 2.42 * D)):
                 res, bar = P._first_exit(dd, s_, t_, sub, ft, P.HOLD_SEC)
                 xp = t_ if res == "TARGET" else s_ if res == "STOP" else (bar["c"] if bar else bars[-1]["c"])
                 g = (xp - e) * q * (1 if dd == "LONG" else -1)
@@ -97,6 +98,10 @@ async def main():
         return {"taken": len(out), "skipped": len(fl) - len(out), "T/S/6h": f"{c['TARGET']}/{c['STOP']}/{c['TIME']}", "win%": round(100 * sum(m["net"] > 0 for m in out) / len(out)),
                 "net": round(eq, 1), "maxDD": round(dd, 1)}, days
 
+    for m in ("F", "F20", "F24", "R"):
+        pm, _ = port(m)
+        tw = [r[m]["net"] for r in fl if r[m]["res"] == "TARGET"]; ts = [r[m]["net"] for r in fl if r[m]["res"] == "STOP"]
+        print(f"LIVE44 {m:<4}", pm, f"avg target ${sum(tw)/max(1,len(tw)):+.1f} avg stop ${sum(ts)/max(1,len(ts)):+.1f}")
     print("\nONE TRADE AT A TIME (model qty, fees incl.)")
     pf, df = port("F"); pr, dr = port("R")
     print(" FOLLOW  ", pf); print(" REVERSE ", pr)

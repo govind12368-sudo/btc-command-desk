@@ -127,7 +127,8 @@ async def main():
         f = next((k for k in (i + 1, i + 2) if (Ll[k] <= E if sg > 0 else Hh[k] >= E)), None)
         if f is None: continue
         res = {}
-        for mode, dd, st, tg in (("F", d, E - sg * D, E + sg * 1.5 * D), ("R", "SHORT" if sg > 0 else "LONG", E + sg * D, E - sg * 2 * D)):
+        for mode, dd, st, tg in (("F", d, E - sg * D, E + sg * 1.5 * D), ("R", "SHORT" if sg > 0 else "LONG", E + sg * D, E - sg * 2 * D),
+                                 ("F20", d, E - sg * D, E + sg * 2.0 * D), ("F24", d, E - sg * D, E + sg * 2.42 * D)):
             o = run(dd, st, tg, f)
             if not o: break
             r, xp, k = o
@@ -163,60 +164,24 @@ async def main():
               "sigtoday": by_day[day], "prevF": (1 if last["F"] > 0 else -1) if last and last["xk"] < i else 0, "long": int(sg > 0)}
         by_day[day] += 1
         dt = DT.classify(b5[i - 143:i + 1], adr)
-        sigs.append({"i": i, "t": T[i], "F": res["F"][0], "R": res["R"][0], "fr": res["F"][1], "rr": res["R"][1], "xk": res["F"][2], "f": f_,
+        sigs.append({"i": i, "t": T[i], "F": res["F"][0], "R": res["R"][0], "F20": res["F20"][0], "F24": res["F24"][0],
+                     "res": {m: res[m][1] for m in res}, "fr": res["F"][1], "rr": res["R"][1], "xk": res["F"][2], "f": f_,
                      "dt": dt["type"], "pb": DT.playbook(dt, d), "rk": res["R"][2]})
 
     mean = lambda xs: sum(xs) / len(xs) if xs else 0
-    def st(g, k):
-        return {"n": len(g), "mean_r": round(mean([x[k] for x in g]), 3), "total_r": round(sum(x[k] for x in g), 1), "win": round(100 * mean([x[k] > 0 for x in g]))}
-    def switch(g):
-        v = [x["F"] if x["pb"] == "FOLLOW" else x["R"] if x["pb"] == "PLAN_A" else None for x in g]
-        v = [x for x in v if x is not None]
-        return {"n": len(v), "mean_r": round(mean(v), 3), "total_r": round(sum(v), 1), "win": round(100 * mean([x > 0 for x in v]))}
-    def dd(vals):
-        eq = pk = worst = 0.0
-        for x in vals:
-            eq += x; pk = max(pk, eq); worst = min(worst, eq - pk)
-        return round(worst, 1)
-    ev = {"period": [time.strftime("%Y-%m-%d", time.gmtime(T[700])), time.strftime("%Y-%m-%d", time.gmtime(T[-1]))], "signals": len(sigs),
-          "per_day": round(len(sigs) / ((T[-1] - T[700]) / 86400), 1), "fee_r": round(mean([(FE * 2) / 0.005 for _ in sigs]), 3),
-          "follow": st(sigs, "F"), "plan_a": st(sigs, "R"), "switch": switch(sigs),
-          "dd": {"follow": dd([x["F"] for x in sigs]), "plan_a": dd([x["R"] for x in sigs])},
-          "by_tag": {k: {"follow": st([x for x in sigs if x["dt"] == k], "F"), "plan_a": st([x for x in sigs if x["dt"] == k], "R")} for k in ("TREND_UP", "TREND_DOWN", "RANGE", "MIXED")},
-          "by_playbook": {k: {"follow": st([x for x in sigs if x["pb"] == k], "F"), "plan_a": st([x for x in sigs if x["pb"] == k], "R")} for k in ("FOLLOW", "PLAN_A", "STAND_ASIDE")}}
+    print(f"RR_STUDY signals {len(sigs)}, {time.strftime('%Y-%m-%d', time.gmtime(sigs[0]['t']))} to {time.strftime('%Y-%m-%d', time.gmtime(sigs[-1]['t']))}")
+    for m, name in (("F", "follow 1.5R"), ("F20", "follow 2.0R"), ("F24", "follow 2.42R"), ("R", "planA rev 2R")):
+        v = [x[m] for x in sigs]; c = defaultdict(int)
+        for x in sigs: c[x["res"][m]] += 1
+        eq = pk = dd = 0.0
+        for y in v: eq += y; pk = max(pk, eq); dd = min(dd, eq - pk)
+        wins = [y for y in v if y > 0]; losses = [y for y in v if y <= 0]
+        print(f"RR_STUDY {name:<13} n {len(v)} win {100*mean([y>0 for y in v]):.1f}% T/S/6h {c['TARGET']}/{c['STOP']}/{c['TIME']} meanR {mean(v):+.3f} totalR {sum(v):+.1f} maxDD {dd:.1f}R avgWin {mean(wins):+.2f}R avgLoss {mean(losses):+.2f}R")
     bm = defaultdict(list)
     for x in sigs: bm[time.strftime("%Y-%m", time.gmtime(x["t"]))].append(x)
-    ev["by_month"] = [{"month": k, "n": len(g), "follow": round(sum(x["F"] for x in g), 1), "plan_a": round(sum(x["R"] for x in g), 1), "switch": switch(g)["total_r"], "switch_n": switch(g)["n"]} for k, g in sorted(bm.items())]
-    half = len(sigs) // 2
-    ev["halves"] = [{"follow": st(g, "F")["mean_r"], "plan_a": st(g, "R")["mean_r"], "switch": switch(g)["mean_r"]} for g in (sigs[:half], sigs[half:])]
-    # hourly: how often each type, and what the NEXT 6 hours did
-    dr = DT.daily_ranges(b5); share = defaultdict(int); cont = defaultdict(list); inside = []
-    for i in range(288 * 12, n - 73, 12):
-        a = DT.adr(dr, DT.ist_day(T[i]))
-        d = DT.classify(b5[i - 143:i + 1], a)
-        share[d["type"]] += 1
-        nxt = (C[i + 72] - C[i]) / a
-        if d["type"].startswith("TREND"):
-            cont[d["type"]].append(nxt * (1 if d["type"] == "TREND_UP" else -1))
-        if d["type"] == "RANGE":
-            inside.append(max(Hh[i + 1:i + 73]) <= d["high"] and min(Ll[i + 1:i + 73]) >= d["low"])
-    tot = sum(share.values())
-    ev["share"] = {k: round(100 * v / tot) for k, v in share.items()}
-    allc = cont["TREND_UP"] + cont["TREND_DOWN"]
-    ev["after_trend"] = {"n": len(allc), "continued_pct": round(100 * mean([x > 0 for x in allc])), "mean_move_adr": round(mean(allc), 3)}
-    ev["after_range"] = {"n": len(inside), "stayed_inside_pct": round(100 * mean(inside))}
-    # end-of-day truth vs the call made at noon IST
-    hit = tot2 = 0
-    for day, v in dr.items():
-        if v[2] < 288 or day - 1 not in dr: continue
-        i0 = bisect.bisect_left(T, day * 86400 - IST)
-        if i0 < 288 * 12 or i0 + 288 > n: continue
-        a = DT.adr(dr, day)
-        e = DT.eod_label(b5[i0:i0 + 288], a); c = DT.classify(b5[i0 + 144 - 143:i0 + 145], a)["type"]
-        if e in ("NA",) or c == "NA": continue
-        tot2 += 1; hit += (e == c)
-    ev["noon_vs_eod"] = {"days": tot2, "same_pct": round(100 * hit / max(1, tot2))}
-    print("EVIDENCE_JSON " + json.dumps(ev, separators=(",", ":")))
+    for k in sorted(bm):
+        g = bm[k]
+        print(f"RR_MONTH {k} n {len(g)} | " + " ".join(f"{m} {sum(x[m] for x in g):+6.1f}" for m in ("F", "F20", "F24", "R")))
 
 
 asyncio.run(main())
