@@ -1,15 +1,20 @@
-# Manual check: does the automatic Plan A engine reproduce the workbook's trades on real Delta candles?
+# Research branch only: dumps long candle history to the "study-data" branch for offline study. Not deployed.
 name: Verify Plan A
 on: workflow_dispatch
 permissions:
-  contents: read
+  contents: write
 jobs:
-  verify:
+  dump:
     runs-on: ubuntu-latest
-    env: { JWT_SECRET: verify-only, ADMIN_EMAIL: a@example.org, ADMIN_PASSWORD: x, FRONTEND_URL: https://localhost }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -r backend/requirements-dev.txt
-      - run: cd backend && python study_modes.py && python study_daytype.py
+      - run: pip install -q httpx numpy
+      - run: cd backend && python study_dump.py
+      - name: Publish to the "study-data" branch
+        run: |
+          cd backend/dump && ls -la && git init -q && git checkout -q -b study-data
+          git -c user.name=github-actions -c user.email=actions@github.com add .
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Research data ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" study-data
