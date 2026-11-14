@@ -200,10 +200,11 @@ async def scorecard():
             n += 1
             ok += (later["price"] > d["price"]) == (d[view] == "BUY")
         out[view] = {"checked": n, "right": ok, "pct": round(100 * ok / n) if n else None}
+    price = {d["_id"]: d["price"] async for d in db.daytype_log.find({}, {"price": 1}).sort("_id", -1).limit(24 * 120)}
     tr = [d async for d in db.daytype_log.find({"type": {"$in": ["TREND_UP", "TREND_DOWN"]}}).sort("_id", -1).limit(2000)]
     n = ok = 0
     for d in tr:
-        later = await db.daytype_log.find_one({"_id": d["_id"] + 6 * 3600})
+        later = {"price": price[d["_id"] + 6 * 3600]} if d["_id"] + 6 * 3600 in price else None
         if later:
             n += 1
             ok += (later["price"] > d["price"]) == (d["type"] == "TREND_UP")

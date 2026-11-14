@@ -18,6 +18,7 @@ Fees (display only; the Google Sheet uses its own Inputs sheet): entry taker, ex
 else taker, ×(1+GST).
 """
 import asyncio
+import bisect
 import logging
 import os
 from datetime import datetime, timezone
@@ -33,7 +34,7 @@ HOLD_SEC = 6 * 3600
 FEES = {"maker": 0.0002, "taker": 0.0005, "gst": 0.18}
 STATE = {"computed_at": None, "rows": [], "summary": {}, "error": None, "live_price": None, "books": {}}
 SINCE_IST = os.environ.get("JOURNAL_START", "2026-11-13")
-JOURNAL_RR = 2.0  # Trade Journal results: target = 2 × stop distance for every signal (admin request, 14 Nov 2026)  # "from today" start of the journal comparison
+JOURNAL_RR = 2.0  # Trade Journal results: target = 2 × stop distance for every signal (admin request, 14 Nov 2026)
 
 
 async def _fetch_1m(start, end):
@@ -73,9 +74,9 @@ def _touch_entry(direction, c, entry, capture_minute):
     return hit and (c["t"] != capture_minute or c["o"] < entry or c["h"] > c["o"])
 
 
-def _first_exit(direction, stop, target, bars, fill_t, time_exit=None):
+def _first_exit(direction, stop, target, bars, fill_t, time_exit=None, start=None):
     """Returns (result, exit_bar). result in TARGET/STOP/TIME or None (still open)."""
-    for c in bars:
+    for c in bars[(_bar_index(bars, fill_t) if start is None else start):]:
         if c["t"] < fill_t:
             continue
         if time_exit is not None and c["t"] >= fill_t + time_exit:
@@ -122,79 +123,155 @@ def _seed():
     return out
 
 
+RULES_V = f"rows-v3|{VALID_SEC}|{HOLD_SEC}|{JOURNAL_RR}|{FEES['maker']}|{FEES['taker']}|{FEES['gst']}"  # change → cache rebuilt
+
+
+def _bar_index(bars, t):
+    return bisect.bisect_left(bars, t, key=lambda c: c["t"])
+
+
+def _excursions(direction, e, risk, bars, i0, exit_t, end_t):
+    """Best (fav) and worst (adv) price move, in stop-distances, before the exit and between the exit and end_t."""
+    sg = 1 if direction == "LONG" else -1
+    fb = ab = fa = 0.0
+    back_to_entry = False
+    for c in bars[i0:]:
+        if c["t"] >= end_t:
+            break
+        f = ((c["h"] - e) if sg > 0 else (e - c["l"])) / risk
+        a = ((e - c["l"]) if sg > 0 else (c["h"] - e)) / risk
+        if exit_t is None or c["t"] <= exit_t:
+            fb, ab = max(fb, f), max(ab, a)
+        else:
+            fa = max(fa, f)
+            back_to_entry = back_to_entry or f >= 0
+    return fb, ab, fa, back_to_entry
+
+
+def why(direction, e, risk, result, fill_t, exit_t, exit_px, bars, i0, rr):
+    """Plain reason a trade won or lost, from the 1-minute path (stop-distances = multiples of the stop gap)."""
+    if result in (None, "OPEN") or risk <= 0 or i0 is None:
+        return "Still open."
+    fb, ab, fa, back = _excursions(direction, e, risk, bars, i0, exit_t, fill_t + HOLD_SEC)
+    mins = max(1, round(((exit_t or fill_t) - fill_t) / 60))
+    if result == "TARGET":
+        return f"Target hit in {mins} min. Price moved {rr:g}x the stop gap our way; at worst it was {ab:.1f}x against first."
+    if result == "STOP":
+        first = (f"Went against at once and hit the stop in {mins} min (best only {fb:.1f}x our way)." if fb < 0.5 else
+                 f"Went {fb:.1f}x our way first, then turned and hit the stop after {mins} min.")
+        after = (" Later in the 6 hours price reached the target level anyway: the stop was too close for the swings." if fa >= rr else
+                 " Later price came back to the entry: normal noise took the stop." if back else
+                 " Price kept going against us: the direction was wrong.")
+        return first + after
+    sg = 1 if direction == "LONG" else -1
+    return f"No stop or target in 6 hours; closed at {sg * ((exit_px or e) - e) / risk:+.1f}x the stop gap (best {fb:.1f}x, worst {ab:.1f}x against)."
+
+
+async def _row(s, bars, now, live):
+    cap = int(parse_iso(s["captured_at"]).timestamp())
+    cap_min = cap - cap % MIN
+    valid_end = int(parse_iso(s["valid_until"]).timestamp()) if s.get("valid_until") else cap + VALID_SEC
+    d0, e, st, tg, q = s["direction"], float(s["entry"]), float(s["stop"]), float(s["target"]), float(s.get("qty_btc") or 0)
+    row = {"signal_id": s["_id"], "captured_ist": _ist(cap), "cap_t": cap, "model_dir": d0, "entry": e, "model_stop": st, "model_target": tg, "qty": q}
+    tag = await daytype.tag_signal(s["_id"], cap, d0)
+    row.update(day_type=tag.get("type"), day_label=tag.get("label"), playbook=tag.get("playbook"))
+    i = _bar_index(bars, cap_min)
+    fill = None
+    while i < len(bars) and bars[i]["t"] < valid_end:
+        if _touch_entry(d0, bars[i], e, cap_min):
+            fill = bars[i]
+            break
+        i += 1
+    if not fill:
+        row["fill_status"] = "WAITING" if now < valid_end else "NOT FILLED"
+        return row
+    ft, i0 = fill["t"], i
+    row.update(fill_status="FILLED", fill_ist=_ist(ft), fill_t=ft)
+    o_res, o_bar = _first_exit(d0, st, tg, bars, ft, 24 * 3600, i0)
+    row["model_result"] = o_res or "OPEN"
+    row["model_exit_ist"] = _ist(o_bar["t"]) if o_bar else ""
+    risk = abs(e - st)
+    # Plan A: reverse, stop = signal's stop gap, target = 2 x that, 6-hour exit
+    d = "SHORT" if d0 == "LONG" else "LONG"
+    pa_stop = e - risk if d == "LONG" else e + risk
+    pa_tgt = e + 2 * risk if d == "LONG" else e - 2 * risk
+    res, bar = _first_exit(d, pa_stop, pa_tgt, bars, ft, HOLD_SEC, i0)
+    exit_px = pa_tgt if res == "TARGET" else pa_stop if res == "STOP" else bar["c"] if res == "TIME" else None
+    exit_t = bar["t"] if bar else None
+    gross = ((exit_px or live or e) - e) * q * (1 if d == "LONG" else -1)
+    fees = _fee(e, q, "taker") + _fee(exit_px or live or e, q, "maker" if res == "TARGET" else "taker")
+    row.update(plan_dir=d, plan_stop=pa_stop, plan_target=pa_tgt, plan_result=res or "OPEN", exit_ist=_ist(exit_t), plan_exit_t=exit_t,
+               exit_price=exit_px, time_exit_close=bar["c"] if res == "TIME" else None,
+               trigger_high=bar["h"] if bar else None, trigger_low=bar["l"] if bar else None, gross=gross, fees=fees, net=gross - fees,
+               note=("Closed 6 h after fill at the 1-minute close (taker fee)" if res == "TIME" else
+                     "Stop hit in the fill minute" if bar and bar["t"] == ft else ""),
+               plan_why=why(d, e, risk, res, ft, exit_t, exit_px, bars, i0, 2))
+    # Trade Journal: the signal's own direction, entry and stop; target = JOURNAL_RR x stop gap for every signal
+    f_tg = round((e + (1 if d0 == "LONG" else -1) * JOURNAL_RR * risk) * 2) / 2
+    f_res, f_bar = _first_exit(d0, st, f_tg, bars, ft, HOLD_SEC, i0)
+    f_px = f_tg if f_res == "TARGET" else st if f_res == "STOP" else f_bar["c"] if f_res == "TIME" else None
+    f_gross = ((f_px or live or e) - e) * q * (1 if d0 == "LONG" else -1)
+    f_fees = _fee(e, q, "taker") + _fee(f_px or live or e, q, "maker" if f_res == "TARGET" else "taker")
+    seg = bars[i0:i0 + HOLD_SEC // MIN + 1]
+    if seg and risk > 0:
+        hh, ll = max(c["h"] for c in seg), min(c["l"] for c in seg)
+        row.update(mfe=((hh - e) if d0 == "LONG" else (e - ll)) / risk, mae=((e - ll) if d0 == "LONG" else (hh - e)) / risk)
+    row.update(follow_result=f_res or "OPEN", follow_exit_t=f_bar["t"] if f_bar else None, follow_exit_ist=_ist(f_bar["t"]) if f_bar else "",
+               follow_exit_price=f_px, follow_net=f_gross - f_fees, follow_target=f_tg,
+               follow_why=why(d0, e, risk, f_res, ft, f_bar["t"] if f_bar else None, f_px, bars, i0, JOURNAL_RR))
+    return row
+
+
+def _final(row, now):
+    """A row never changes again once both trades are closed, the 6-hour path is complete and the model trade is settled."""
+    if row.get("fill_status") == "NOT FILLED":
+        return True
+    return (row.get("fill_status") == "FILLED" and row.get("plan_result") != "OPEN" and row.get("follow_result") != "OPEN"
+            and row.get("model_result") != "OPEN" and now >= row["fill_t"] + HOLD_SEC + 2 * MIN)
+
+
 async def compute():
+    """Finished trades are stored once (plan_a_rows) and never recalculated; only signals of the last day or so are
+    worked out again, so the 2-minute refresh stays fast however long the history gets."""
     live_sigs = {s["_id"]: s async for s in db.signals.find({"strategy": "scalp"})}
     sigs = sorted([s for s in _seed() if s["_id"] not in live_sigs] + list(live_sigs.values()), key=lambda s: s["captured_at"])
     now = int(now_utc().timestamp())
-    rows = []
-    if sigs:
-        first = int(parse_iso(sigs[0]["captured_at"]).timestamp())
+    cached = {d["_id"]: d["row"] async for d in db.plan_a_rows.find({"v": RULES_V})}
+    pending = [s for s in sigs if s["_id"] not in cached]
+    if pending:
+        first = int(parse_iso(pending[0]["captured_at"]).timestamp())
         bars = await candles(first - MIN, now)
     else:
-        bars = []
+        bars = await candles(now - 15 * MIN, now)
     live = bars[-1]["c"] if bars else None
-    idx = {c["t"]: i for i, c in enumerate(bars)}
-    busy_until = None  # exit time of the last Plan A trade taken; None = free; -1 = still open
-    for s in sigs:
-        cap = int(parse_iso(s["captured_at"]).timestamp())
-        cap_min = cap - cap % MIN
-        valid_end = int(parse_iso(s["valid_until"]).timestamp()) if s.get("valid_until") else cap + VALID_SEC
-        d0, e, st, tg, q = s["direction"], float(s["entry"]), float(s["stop"]), float(s["target"]), float(s.get("qty_btc") or 0)
-        row = {"signal_id": s["_id"], "captured_ist": _ist(cap), "cap_t": cap, "model_dir": d0, "entry": e, "model_stop": st, "model_target": tg, "qty": q}
-        tag = await daytype.tag_signal(s["_id"], cap, d0)
-        row.update(day_type=tag.get("type"), day_label=tag.get("label"), playbook=tag.get("playbook"))
-        fill = next((c for c in bars if cap_min <= c["t"] < valid_end and _touch_entry(d0, c, e, cap_min)), None)
-        if not fill:
-            row["fill_status"] = "WAITING" if now < valid_end else "NOT FILLED"
-            rows.append(row)
+    fresh = {}
+    for s in pending:
+        row = await _row(s, bars, now, live)
+        fresh[s["_id"]] = row
+        if _final(row, now):
+            await db.plan_a_rows.update_one({"_id": s["_id"]}, {"$set": {"v": RULES_V, "row": row}}, upsert=True)
+        await asyncio.sleep(0)  # let the rest of the server run between signals
+    rows = [dict(cached.get(s["_id"]) or fresh[s["_id"]]) for s in sigs]
+    # Plan A one-trade-at-a-time + context notes (depend on earlier signals, so never cached)
+    busy_until = None
+    per_day = {}
+    for r in rows:
+        day = r["captured_ist"][:10]
+        per_day[day] = per_day.get(day, 0) + 1
+        hour = int(r["captured_ist"][11:13])
+        ctx = []
+        if hour < 6:
+            ctx.append("Night signal (00:00–06:00 IST): in the 26-month test these lost about twice as much as day signals.")
+        if per_day[day] >= 4:
+            ctx.append(f"Signal no. {per_day[day]} of the day: from the 4th signal on, results were weaker in the 26-month test.")
+        r["context"] = " ".join(ctx)
+        if r.get("fill_status") != "FILLED":
+            r.pop("taken", None)
             continue
-        ft = fill["t"]
-        row["fill_status"] = "FILLED"
-        row["fill_ist"] = _ist(ft)
-        o_res, o_bar = _first_exit(d0, st, tg, bars, ft)
-        row["model_result"] = o_res or "OPEN"
-        row["model_exit_ist"] = _ist(o_bar["t"]) if o_bar else ""
-        # Plan A
-        d = "SHORT" if d0 == "LONG" else "LONG"
-        risk = abs(e - st)
-        pa_stop = e - risk if d == "LONG" else e + risk
-        pa_tgt = e + 2 * risk if d == "LONG" else e - 2 * risk
-        res, bar = _first_exit(d, pa_stop, pa_tgt, bars, ft, HOLD_SEC)
-        exit_px = None
-        if res == "TARGET":
-            exit_px = pa_tgt
-        elif res == "STOP":
-            exit_px = pa_stop
-        elif res == "TIME":
-            exit_px = bar["c"]
-        exit_t = bar["t"] if bar else None
-        taken = busy_until is None or (busy_until != -1 and busy_until <= ft)
-        gross = ((exit_px or live or e) - e) * q * (1 if d == "LONG" else -1)
-        fees = _fee(e, q, "taker") + _fee(exit_px or live or e, q, "maker" if res == "TARGET" else "taker")
-        row.update(plan_dir=d, plan_stop=pa_stop, plan_target=pa_tgt, plan_result=res or "OPEN", exit_ist=_ist(exit_t),
-                   exit_price=exit_px, time_exit_close=bar["c"] if res == "TIME" else None,
-                   trigger_high=bar["h"] if bar else None, trigger_low=bar["l"] if bar else None,
-                   taken="Yes" if taken else "Skip", gross=gross, fees=fees, net=gross - fees,
-                   note=("Closed 6 h after fill at the 1-minute close (taker fee)" if res == "TIME" else
-                         "Stop hit in the fill minute" if bar and bar["t"] == ft else ""))
+        taken = busy_until is None or (busy_until != -1 and busy_until <= r["fill_t"])
+        r["taken"] = "Yes" if taken else "Skip"
         if taken:
-            busy_until = -1 if res is None else exit_t
-        # Follow the signal (Trade Journal way): the signal's own direction, stop and target, same 6-hour exit
-        # Trade Journal book: the signal's own direction, entry and stop, target at JOURNAL_RR × stop distance
-        # for every signal (older signals were captured with a 1.5R target; scored here at 1:2 like the rest)
-        f_tg = round((e + (1 if d0 == "LONG" else -1) * JOURNAL_RR * risk) * 2) / 2
-        f_res, f_bar = _first_exit(d0, st, f_tg, bars, ft, HOLD_SEC)
-        f_px = f_tg if f_res == "TARGET" else st if f_res == "STOP" else f_bar["c"] if f_res == "TIME" else None
-        f_gross = ((f_px or live or e) - e) * q * (1 if d0 == "LONG" else -1)
-        f_fees = _fee(e, q, "taker") + _fee(f_px or live or e, q, "maker" if f_res == "TARGET" else "taker")
-        i0 = idx.get(ft)
-        seg = bars[i0:i0 + HOLD_SEC // MIN + 1] if i0 is not None else []
-        if seg and risk > 0:
-            hh, ll = max(c["h"] for c in seg), min(c["l"] for c in seg)
-            row.update(mfe=((hh - e) if d0 == "LONG" else (e - ll)) / risk, mae=((e - ll) if d0 == "LONG" else (hh - e)) / risk)
-        row.update(fill_t=ft, plan_exit_t=exit_t, follow_result=f_res or "OPEN", follow_exit_t=f_bar["t"] if f_bar else None,
-                   follow_exit_ist=_ist(f_bar["t"]) if f_bar else "", follow_exit_price=f_px, follow_net=f_gross - f_fees, follow_target=f_tg)
-        rows.append(row)
+            busy_until = -1 if r["plan_result"] == "OPEN" else r["plan_exit_t"]
     taken = [r for r in rows if r.get("taken") == "Yes"]
     closed = [r for r in taken if r["plan_result"] != "OPEN"]
     eq, peak, dd = 0.0, 0.0, 0.0

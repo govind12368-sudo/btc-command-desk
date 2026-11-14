@@ -89,3 +89,5 @@
 @keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .menu-pop { animation: cardIn .18s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .auth-orb, .auth-card, .page-enter, .menu-pop { animation: none; } }
+.desk-table th.num, .desk-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.desk-table td.why { min-width: 16rem; max-width: 24rem; white-space: normal; font-size: 0.75rem; line-height: 1.35; color: #cbd5e1; }

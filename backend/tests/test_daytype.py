@@ -161,3 +161,20 @@ def test_autotrade_direction_modes(mods):
         t5 = await core.db.autotrade_trades.find_one({"_id": "SCALP-LONG-5"})
         assert t5["plan"] == "FOLLOW" and t5["bot_dir"] == "LONG" and t5["stop"] == 71043.0
     run(go())
+
+
+def test_why_notes_and_final(mods):
+    pa = mods["plan_a"]
+    t0 = 1_794_000_000
+    def bar(i, h, l, c):
+        return {"t": t0 + i * 60, "o": c, "h": h, "l": l, "c": c}
+    # SHORT at 100, stop gap 10: quick stop at 110, then price falls to 75 (target level 80) -> whipsaw note
+    bars = [bar(0, 101, 99, 100), bar(1, 104, 99, 103), bar(2, 111, 103, 110), bar(3, 108, 90, 92), bar(4, 92, 74, 75)]
+    w = pa.why("SHORT", 100.0, 10.0, "STOP", t0, t0 + 120, 110.0, bars, 0, 2)
+    assert "Went against at once" in w and "2 min" in w and "target level anyway" in w
+    w = pa.why("LONG", 100.0, 10.0, "TARGET", t0, t0 + 180, 120.0, [bar(0, 101, 97, 100), bar(1, 105, 96, 104), bar(2, 121, 104, 120)], 0, 2)
+    assert w.startswith("Target hit in 3 min") and "0.4x against" in w
+    assert pa.why("LONG", 100.0, 10.0, "OPEN", t0, None, None, bars, 0, 2) == "Still open."
+    assert pa._final({"fill_status": "NOT FILLED"}, 0)
+    row = {"fill_status": "FILLED", "plan_result": "STOP", "follow_result": "TARGET", "model_result": "TARGET", "fill_t": t0}
+    assert not pa._final(row, t0 + 3600) and pa._final(row, t0 + 6 * 3600 + 120)

@@ -3,6 +3,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { Card } from "@/components/desk/ui";
 import { n, usd, ist } from "@/lib/fmt";
 import { BOOK_NAME, DayChip, EvidenceCard, PeriodSwitch } from "@/components/desk/Books";
+import LongTest from "@/components/desk/LongTest";
 
 const pnl = (v) => ((v || 0) >= 0 ? "text-teal-300" : "text-red-300");
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "—");
@@ -45,7 +46,7 @@ export default function StrategyAudit() {
           {ev && <li>The long test is the stronger evidence: over {ev.signals.toLocaleString("en-US")} signals, Follow averaged {n(ev.follow.mean_r, 2)}R a trade, Plan A {n(ev.plan_a.mean_r, 2)}R and the day-type switch {n(ev.switch.mean_r, 2)}R. All three lose, in almost every month.</li>}
           {ev && <li><b>Root cause:</b> after a scalp signal, price is about as likely to go either way. Fees then take about {n(ev.fee_r, 2)}R from every trade, whichever side is traded.</li>}
           {ev && <li><b>Day type:</b> a trend call was followed by more trend only {ev.after_trend.continued_pct}% of the time, so it cannot pick the winning side in advance.</li>}
-          <li><b>Recommendation:</b> keep Auto-Trade in Paper. Do not go Live with Follow, Plan A or the switch on this evidence.</li>
+          <li><b>Recommendation:</b> keep Auto-Trade in Paper. Do not go Live with Follow, Plan A or the switch on this evidence. The 26-month test below gives the full reasons.</li>
           <li><b>What could change the result:</b> a signal with a measured edge, or a much lower cost per trade (limit-order entries, fewer trades, wider targets). Any new idea should pass the same 11-month test first.</li>
         </ul>
       </Card>
@@ -78,6 +79,7 @@ export default function StrategyAudit() {
           </table>
         </div>
       </Card>
+      <LongTest lt={ev?.long_test_26m} />
       <EvidenceCard ev={ev} />
     </div>
   );

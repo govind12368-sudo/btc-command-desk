@@ -4,11 +4,10 @@ import { useFetch } from "@/hooks/useFetch";
 import { useDesk } from "@/context/DeskContext";
 import { Card, PageHead, Note } from "@/components/desk/ui";
 import { Btn } from "@/components/desk/forms";
-import { n, usd, ist } from "@/lib/fmt";
+import { n, usd, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 import { DayChip, DayTypeCard, PLAYBOOK_NAME } from "@/components/desk/Books";
-
-const RES_TONE = { TARGET: "text-teal-300", STOP: "text-red-300", TIME: "text-amber-300", OPEN: "text-sky-300" };
+import { SignalCell, ResultCell, FillCell, NetCell, PriceCell, WhyCell, DIR_TONE } from "@/components/desk/TradeCells";
 
 function Stat({ label, value, tone = "text-slate-50" }) {
   return (
@@ -30,7 +29,7 @@ export default function PlanA() {
   const rows = [...(data?.rows || [])].reverse();
   return (
     <div className="space-y-4" data-testid="plan-a-page">
-      <PageHead title="Plan A – live" sub={`${data?.rule || "4C reverse 1:2 + 6-hour exit"} · updated ${ist(data?.computed_at)} · last Delta 1m close ${n(data?.live_price, 1)}`} />
+      <PageHead title="Plan A – live" sub={`Reverse of every scalp signal, 1:2, 6-hour exit, one trade at a time · updated ${ist(data?.computed_at)} · BTC ${n(data?.live_price, 1)}`} />
       {data?.error && <Note>Last update failed: {data.error}. It retries every 2 minutes.</Note>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat label="Signals" value={s.signals ?? "—"} />
@@ -39,7 +38,7 @@ export default function PlanA() {
         <Stat label="Still open" value={s.open ?? "—"} tone="text-sky-300" />
         <Stat label="Target / Stop / 6h" value={`${s.target ?? 0} / ${s.stop ?? 0} / ${s.time ?? 0}`} />
         <Stat label="Win rate" value={s.win_rate == null ? "—" : `${Math.round(s.win_rate * 100)}%`} />
-        <Stat label="Net P&L (est.)" value={usd(s.net)} tone={(s.net || 0) >= 0 ? "text-teal-300" : "text-red-300"} />
+        <Stat label="Net P&L (est.)" value={signedUsd(s.net)} tone={(s.net || 0) >= 0 ? "text-teal-300" : "text-red-300"} />
         <Stat label="Worst drawdown" value={usd(s.max_drawdown)} tone="text-red-300" />
       </div>
       {curve.length > 1 && (
@@ -47,33 +46,33 @@ export default function PlanA() {
           <LineChart series={[{ name: "Net P&L $", color: VIZ.s1, points: curve }]} xFmt={(v) => v} yFmt={(v) => n(v, 0)} unit=" $" height={160} />
         </Card>
       )}
-      <DayTypeCard day={data?.day_type} compact />
-      <Card title="Trades" sub="Newest first. Reverse of each filled scalp signal; skipped when the previous Plan A trade is still open." testid="plan-a-table">
+      <Card title="Trades" sub="Newest first. Each filled scalp signal is traded in the opposite direction: stop = the signal's stop gap, target = 2 x that gap, closed after 6 hours. While a Plan A trade is open, new signals are skipped." testid="plan-a-table">
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Signal</th><th>Day type at signal</th><th>Plan A</th><th>Fill (IST)</th><th>Entry</th><th>Stop</th><th>Target</th><th>Result</th><th>Exit (IST)</th><th>Net $</th><th>Taken?</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Signal → Plan A</th><th>Day type</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Filled</th><th>Result</th><th className="num">Net</th><th>Taken</th><th>Why it won or lost</th></tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.signal_id}>
-                  <td className="font-mono text-[11.5px]">{r.signal_id}</td>
+                <tr key={r.signal_id} className={r.taken === "Skip" ? "opacity-60" : ""}>
+                  <SignalCell id={r.signal_id} captured={(r.captured_ist || "").slice(5).replace("-", "/")} />
+                  <td className="whitespace-nowrap text-[12px]"><span className={DIR_TONE[r.model_dir]}>{r.model_dir}</span> <span className="text-slate-500">→</span> <span className={`font-semibold ${DIR_TONE[r.plan_dir] || "text-slate-500"}`}>{r.plan_dir || "—"}</span></td>
                   <td><DayChip type={r.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[r.playbook] || ""}</span></td>
-                  <td className={r.plan_dir === "LONG" ? "text-teal-300" : r.plan_dir === "SHORT" ? "text-red-300" : "text-slate-500"}>{r.plan_dir || "—"}</td>
-                  <td className="font-mono text-[11.5px]">{r.fill_ist || (r.fill_status === "NOT FILLED" ? "not filled" : "waiting")}</td>
-                  <td className="font-mono">{n(r.entry, 1)}</td>
-                  <td className="font-mono">{r.plan_stop ? n(r.plan_stop, 1) : "—"}</td>
-                  <td className="font-mono">{r.plan_target ? n(r.plan_target, 1) : "—"}</td>
-                  <td className={`font-semibold ${RES_TONE[r.plan_result] || "text-slate-500"}`}>{r.plan_result || "—"}</td>
-                  <td className="font-mono text-[11.5px]">{r.exit_ist || "—"}</td>
-                  <td className={`font-mono ${(r.net || 0) >= 0 ? "text-teal-300" : "text-red-300"}`}>{r.net == null ? "—" : usd(r.net)}</td>
-                  <td className={r.taken === "Skip" ? "text-slate-500" : "text-slate-200"}>{r.taken || "—"}</td>
+                  <PriceCell v={r.entry} />
+                  <PriceCell v={r.plan_stop} />
+                  <PriceCell v={r.plan_target} />
+                  <FillCell status={r.fill_status} time={r.fill_ist} />
+                  <ResultCell result={r.fill_status === "FILLED" ? r.plan_result : null} exit={r.exit_ist} />
+                  <NetCell v={r.fill_status === "FILLED" ? r.net : null} />
+                  <td className={`whitespace-nowrap text-[12px] ${r.taken === "Yes" ? "text-slate-200" : "text-slate-500"}`}>{r.taken === "Yes" ? "Yes" : r.taken === "Skip" ? "Skipped (busy)" : "—"}</td>
+                  <WhyCell why={r.fill_status === "FILLED" ? r.plan_why : r.fill_status === "NOT FILLED" ? "Price never reached the entry within 10 minutes, so no trade." : "Waiting for the entry price."} context={r.context} />
                 </tr>
               ))}
               {!rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">No scalp signals captured yet. New ones appear here automatically.</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">Fees: entry taker, exit maker on TARGET otherwise taker, +18% GST. Funding and slippage not included. Model rules chosen after looking at past data — expect somewhat worse results on new signals.</p>
+        <p className="mt-2 text-[11px] text-slate-500">"Stop gap" = distance from entry to stop. Net is after fees: entry taker, exit maker on Target otherwise taker, +18% GST. Funding and slippage not included.</p>
       </Card>
+      <DayTypeCard day={data?.day_type} compact />
       {isAdmin && data?.feed_url && (
         <Card title="Google Sheet link" sub="Paste this into cell B1 of the 'Vantage Feed' tab in your Vantage Google Sheet. Keep it private — anyone with it can read this table." testid="plan-a-feed">
           <div className="flex flex-wrap items-center gap-2">

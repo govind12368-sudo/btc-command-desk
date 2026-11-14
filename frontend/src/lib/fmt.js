@@ -1,7 +1,8 @@
 const IST = "Asia/Kolkata";
 
 export const n = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? "—" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
-export const usd = (v, d = 2) => (v === null || v === undefined ? "—" : `$${n(v, d)}`);
+export const usd = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? "—" : v < 0 ? `−$${n(-v, d)}` : `$${n(v, d)}`);
+export const signedUsd = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}$${n(Math.abs(v), d)}`);
 export const pct = (v, d = 2) => (v === null || v === undefined ? "—" : `${(v * 100).toFixed(d)}%`);
 export const sgn = (v, d = 2) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}`);
 

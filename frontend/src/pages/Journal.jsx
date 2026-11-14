@@ -4,10 +4,11 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { useDesk } from "@/context/DeskContext";
 import { useFetch } from "@/hooks/useFetch";
 import { BookPanel, DayChip, DayTypeCard, PeriodSwitch, PLAYBOOK_NAME } from "@/components/desk/Books";
+import { SignalCell, ResultCell, NetCell, PriceCell, WhyCell } from "@/components/desk/TradeCells";
 import { api, errText, API } from "@/lib/api";
 import { Card, Chip, KV, PageHead, Empty, Note, Stat } from "@/components/desk/ui";
 import { Field, Input, Select, Btn, Area } from "@/components/desk/forms";
-import { n, usd, pct, ist, sgn, tone } from "@/lib/fmt";
+import { n, usd, pct, ist, sgn, tone, signedUsd } from "@/lib/fmt";
 import { DeltaSyncCard } from "@/components/desk/Alerts";
 
 const BLANK = { strategy: "scalp", direction: "LONG", entry_time: "", entry_price: "", qty_btc: "", exit_time: "", exit_price: "", fees_usd: "", funding_usd: "", stop_price: "", exchange_id: "", plan_id: "", notes: "" };
@@ -93,18 +94,36 @@ function Signals({ isAdmin }) {
   const { data } = useFetch(`/signals?page=${page}&size=25`, 15000);
   const [open, setOpen] = useState(null);
   return (
-    <Card title="Automatic model-signal journal" sub={data?.note} testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
+    <Card title="Signals, newest first" sub="Result, net and the reason are for the signal traded in its own direction at 1:2 with the 6-hour exit. Tap Checks for the 11 checks, quantity and observation." testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
       {!data?.items?.length ? <Empty>No signal has passed all 12 checks yet. Captures are deduplicated by strategy, direction and confirmation bar.</Empty> : (
-        <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>Signal ID</th><th>Captured</th><th>Dir</th><th>Day type at signal</th><th>Result at 1:2 (6h rule)</th><th>Entry / Stop / Target</th><th>Qty</th><th>Net R</th><th>Fill</th><th>Closed-candle observation</th><th /></tr></thead>
-          <tbody>{data.items.map((x) => (<React.Fragment key={x.id}>
-            <tr><td className="font-mono text-[11px]">{x.signal_id}</td><td className="font-mono text-[11px]">{ist(x.captured_at)}</td><td><Chip status={x.direction} /></td>
+        <div className="overflow-x-auto scroll-thin"><table className="desk-table">
+          <thead><tr><th>Signal</th><th>Direction</th><th>Day type</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target 1:2</th><th>Fill</th><th>Result</th><th className="num">Net</th><th>Why it won or lost</th><th /></tr></thead>
+          <tbody>{data.items.map((x) => {
+            const scalp = x.strategy === "scalp";
+            const oldTarget = x.follow_target != null && Math.abs(x.follow_target - x.target) > 0.6;
+            return (<React.Fragment key={x.id}>
+            <tr>
+              <SignalCell id={x.signal_id} captured={ist(x.captured_at).replace(" IST", "")} extra={`${x.qty_btc} BTC`} />
+              <td><Chip status={x.direction} /><span className="mt-0.5 block text-[10.5px] text-slate-500">{x.strategy}</span></td>
               <td><DayChip type={x.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[x.playbook] || ""}</span></td>
-              <td className="font-mono text-[11.5px]">{x.follow_result ? <span className={x.follow_net >= 0 ? "text-teal-300" : "text-red-300"}>{x.follow_result} {x.follow_net >= 0 ? "+" : "−"}${n(Math.abs(x.follow_net), 2)}</span> : "—"}</td>
-              <td className="font-mono">{n(x.entry, 1)} / {n(x.stop, 1)} / {n(x.follow_target ?? x.target, 1)}{x.follow_target != null && Math.abs(x.follow_target - x.target) > 0.6 && <span className="block text-[10px] text-slate-500" title="Target the signal was captured with (1.5R, before 14 Nov)">signal target {n(x.target, 1)}</span>}</td><td className="font-mono">{x.qty_btc}</td><td className="font-mono">{n(x.net_r, 2)}</td>
-              <td title={x.entry_type || "MARKET"}><Chip status={x.fill_status === "MISSED" ? "FAIL" : x.fill_status === "WAITING FILL" ? "PENDING" : "PASS"} label={x.fill_status || "FILLED"} /><span className="block font-mono text-[10px] text-slate-500">{x.entry_type === "POST-ONLY LIMIT" ? "limit" : "market"}{x.filled_at ? ` · ${ist(x.filled_at)}` : ""}</span></td>
-              <td><Chip status={x.observation} /> <span className="font-mono text-[10px] text-slate-500">{x.observed_at ? ist(x.observed_at) : ""}</span></td><td><Btn tone="ghost" onClick={() => setOpen(open === x.id ? null : x.id)}>Checks</Btn></td></tr>
-            {open === x.id && <tr><td colSpan={11}><div className="grid sm:grid-cols-2 gap-1 font-mono text-[11px]">{x.checks.map((c) => <span key={c.id}>{c.id} {c.status} — {c.detail}</span>)}</div><div className="mt-1 font-mono text-[10.5px] text-slate-500">quote {x.quote_source} {ist(x.quote_time)} · candles retrieved {ist(x.candle_retrieved)}</div></td></tr>}
-          </React.Fragment>))}</tbody></table></div>
+              <PriceCell v={x.entry} />
+              <PriceCell v={x.stop} />
+              <PriceCell v={scalp ? x.follow_target ?? x.target : x.target} sub={oldTarget ? `signal: ${n(x.target, 1)}` : null} />
+              <td className="whitespace-nowrap"><Chip status={x.fill_status === "MISSED" ? "FAIL" : x.fill_status === "WAITING FILL" ? "PENDING" : "PASS"} label={x.fill_status || "FILLED"} /><span className="mt-0.5 block font-mono text-[10.5px] text-slate-500">{x.entry_type === "POST-ONLY LIMIT" ? "limit" : "market"}{x.filled_at ? ` · ${ist(x.filled_at).replace(" IST", "")}` : ""}</span></td>
+              <ResultCell result={x.follow_result} exit={x.follow_exit_ist} />
+              <NetCell v={x.follow_result ? x.follow_net : null} />
+              <WhyCell why={!scalp ? "Swing signal: not part of the 1:2 scalp results." : x.follow_why || (x.follow_result ? null : "No trade: the entry price was not reached in time.")} context={x.context} />
+              <td><Btn tone="ghost" onClick={() => setOpen(open === x.id ? null : x.id)}>Checks</Btn></td>
+            </tr>
+            {open === x.id && <tr><td colSpan={11}>
+              <div className="mb-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-slate-300">
+                <span>Quantity <b className="font-mono">{x.qty_btc} BTC</b></span><span>Planned net R <b className="font-mono">{n(x.net_r, 2)}</b></span>
+                <span>Closed-candle observation <Chip status={x.observation} /> <span className="font-mono text-[10.5px] text-slate-500">{x.observed_at ? ist(x.observed_at) : ""}</span></span>
+              </div>
+              <div className="grid gap-1 font-mono text-[11px] sm:grid-cols-2">{x.checks.map((c) => <span key={c.id}>{c.id} {c.status} — {c.detail}</span>)}</div>
+              <div className="mt-1 font-mono text-[10.5px] text-slate-500">quote {x.quote_source} {ist(x.quote_time)} · candles retrieved {ist(x.candle_retrieved)}</div>
+            </td></tr>}
+          </React.Fragment>); })}</tbody></table></div>
       )}
       <div className="mt-3 flex items-center gap-2"><Btn tone="ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Btn><span className="font-mono text-xs">page {page} · {data?.total ?? 0} total</span><Btn tone="ghost" disabled={!data || page * 25 >= data.total} onClick={() => setPage(page + 1)}>Next</Btn></div>
     </Card>
@@ -115,7 +134,7 @@ function TopPanel() {
   const { data } = useFetch("/plan-a", 60000);
   const [period, setPeriod] = useState("since");
   const b = data?.books?.[period] || {};
-  const money = (v) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}$${n(Math.abs(v), 2)}`);
+  const money = signedUsd;
   return (
     <div className="space-y-3" data-testid="journal-top">
       <Card title="Scalp signals traded in their own direction, 1:2" sub="Each signal's own direction, entry and stop; target = 2 × stop distance for every signal (signals before 14 Nov were captured with 1.5×). Same rules as Plan A: 10-minute entry, one trade at a time, 6-hour exit, same fees."
@@ -123,9 +142,13 @@ function TopPanel() {
         <BookPanel book={b.follow} sub="Closed trades, after estimated fees" testid="journal-book" />
         <p className="mt-3 text-[12.5px] text-slate-300">Same signals, same period: Plan A (reverse) <b className={b.plan_a?.net >= 0 ? "text-teal-300" : "text-red-300"}>{money(b.plan_a?.net)}</b> on {b.plan_a?.taken ?? 0} trades · Day-type switch <b className={b.switch?.net >= 0 ? "text-teal-300" : "text-red-300"}>{money(b.switch?.net)}</b> on {b.switch?.taken ?? 0} trades.</p>
       </Card>
-      <DayTypeCard day={data?.day_type} compact />
     </div>
   );
+}
+
+function DayTypeNow() {
+  const { data } = useFetch("/plan-a", 60000);
+  return <DayTypeCard day={data?.day_type} compact />;
 }
 
 export default function Journal() {
@@ -139,6 +162,7 @@ export default function Journal() {
       </div>
       {(tab === "auto" || !isAdmin) && <TopPanel />}
       {tab === "auto" || !isAdmin ? <Signals isAdmin={isAdmin} /> : <Actual isAdmin={isAdmin} />}
+      {(tab === "auto" || !isAdmin) && <DayTypeNow />}
     </div>
   );
 }
