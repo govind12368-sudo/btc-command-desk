@@ -206,7 +206,7 @@ class StrategyPolicyTests(unittest.TestCase):
     # ---------- Scalp V2 ----------
     def test_scalp_v2_defaults(self):
         s = self.settings
-        self.assertEqual((s["scalp_stop"], s["scalp_target_r"], s["scalp_min_net_r"]), (0.005, 1.5, 0.8))
+        self.assertEqual((s["scalp_stop"], s["scalp_target_r"], s["scalp_min_net_r"]), (0.005, 2.0, 0.8))
         self.assertEqual((s["scalp_confirm_signals"], s["scalp_confirm_lookback_min"], s["scalp_max_ext_atr"]), (2, 120, 3.0))
         self.assertEqual(self.st.validate_settings(s), [])
 
@@ -243,13 +243,13 @@ class StrategyPolicyTests(unittest.TestCase):
         ctx = self.context("scalp", "LONG")
         res = self.st.evaluate("scalp", ctx, self.settings)
         net_r = res["levels"]["net_r"]
-        self.assertTrue(1.0 < net_r < 1.1, net_r)  # limit entry + limit target, stop-market (Execution V2)
+        self.assertTrue(1.4 < net_r < 1.5, net_r)  # 2R target; limit entry + limit target, stop-market (Execution V2)
         self.assertEqual(self.checks(res)["F35"]["status"], "PASS")
-        self.settings["scalp_min_net_r"] = 1.1
+        self.settings["scalp_min_net_r"] = 1.5
         self.assertEqual(self.checks(self.st.evaluate("scalp", ctx, self.settings))["F35"]["status"], "FAIL")
         self.settings.update(scalp_min_net_r=0.8, scalp_entry_mode=0)  # market mode: all legs taker
         market = self.st.evaluate("scalp", ctx, self.settings)
-        self.assertTrue(0.8 < market["levels"]["net_r"] < 1.0, market["levels"]["net_r"])
+        self.assertTrue(1.1 < market["levels"]["net_r"] < 1.3, market["levels"]["net_r"])  # all legs taker
         self.assertEqual(self.checks(market)["F35"]["status"], "PASS")
 
     def test_scalp_direction_matches_live_f28_f29(self):

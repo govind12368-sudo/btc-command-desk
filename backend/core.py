@@ -15,7 +15,7 @@ DEFAULT_SETTINGS = {
     "capital": 100000.0, "risk_fraction": 0.002, "max_order_notional": 10000.0, "leverage_cap": 5.0,
     "fee_per_side": 0.00059, "slippage_bps": 2.0, "funding_bps": 3.0, "max_spread_bps": 1.0,
     "max_quote_age_sec": 120, "daily_loss_limit": 800.0, "max_entries_per_day": 4, "max_positions": 2,
-    "journal_capacity": 20, "scalp_stop": 0.005, "scalp_target_r": 1.5, "swing_stop": 0.02,
+    "journal_capacity": 20, "scalp_stop": 0.005, "scalp_target_r": 2.0, "swing_stop": 0.02,
     "swing_target_r": 2.0, "min_scalp_volume_ratio": 0.9, "swing_volume_ratio": 1.0,
     "close_extreme_atr": 0.3, "min_candidate_checks": 9,
     # Scalp V2 (30-day Delta 5m review, Nov 2026): wider stop, nearer target, confirmation, no chasing.
@@ -107,6 +107,7 @@ async def get_settings():
         await db.settings.insert_one(doc)
     doc = await _migrate_scalp_v2(doc)
     doc = await _migrate_exec_v2(doc)
+    doc = await _migrate_scalp_rr2(doc)
     vals = {**DEFAULT_SETTINGS, **doc["values"]}
     return vals, doc["version"]
 
@@ -130,6 +131,24 @@ async def _migrate_scalp_v2(doc):
     if r.modified_count:
         doc = {**doc, "values": new_vals, "version": doc["version"] + (1 if untouched else 0),
                "migrations": {**(doc.get("migrations") or {}), "scalp_v2": True}}
+    return doc
+
+
+# Scalp risk/reward 2 (14 Nov 2026, admin request): the scalp target moves from 1.5R to 2R (target distance =
+# 2 × stop distance). Applied once, only if the value is still the old 1.5 default; a custom value is kept.
+async def _migrate_scalp_rr2(doc):
+    if (doc.get("migrations") or {}).get("scalp_rr2"):
+        return doc
+    vals = doc.get("values") or {}
+    untouched = vals.get("scalp_target_r", 1.5) == 1.5
+    new_vals = {**vals, "scalp_target_r": 2.0} if untouched else vals
+    upd = {"$set": {"values": new_vals, "migrations.scalp_rr2": {"at": iso(now_utc()), "applied": untouched, "previous": {"scalp_target_r": vals.get("scalp_target_r")}}}}
+    if untouched:
+        upd["$inc"] = {"version": 1}
+    r = await db.settings.update_one({"_id": "global", "version": doc["version"]}, upd)
+    if r.modified_count:
+        doc = {**doc, "values": new_vals, "version": doc["version"] + (1 if untouched else 0),
+               "migrations": {**(doc.get("migrations") or {}), "scalp_rr2": True}}
     return doc
 
 

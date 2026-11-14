@@ -140,3 +140,36 @@ class SettingsMigrationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScalpRR2MigrationTests(unittest.IsolatedAsyncioTestCase):
+    async def migrate(self, doc):
+        settings = types.SimpleNamespace(update_one=AsyncMock(return_value=types.SimpleNamespace(modified_count=1)))
+        with patch.object(core, "db", types.SimpleNamespace(settings=settings)):
+            out = await core._migrate_scalp_rr2(doc)
+        return out, settings.update_one
+
+    async def test_default_1_5_moves_to_2(self):
+        out, upd = await self.migrate({"_id": "global", "version": 9, "values": {"scalp_stop": 0.005, "scalp_target_r": 1.5}})
+        self.assertEqual(out["values"]["scalp_target_r"], 2.0)
+        self.assertEqual(out["version"], 10)
+        self.assertEqual(upd.await_args.args[1]["$inc"], {"version": 1})
+        self.assertEqual(upd.await_args.args[1]["$set"]["migrations.scalp_rr2"]["previous"], {"scalp_target_r": 1.5})
+
+    async def test_custom_value_is_kept(self):
+        out, upd = await self.migrate({"_id": "global", "version": 9, "values": {"scalp_target_r": 1.8}})
+        self.assertEqual((out["values"]["scalp_target_r"], out["version"]), (1.8, 9))
+        self.assertNotIn("$inc", upd.await_args.args[1])
+
+    async def test_runs_only_once(self):
+        out, upd = await self.migrate({"_id": "global", "version": 9, "values": {"scalp_target_r": 1.5}, "migrations": {"scalp_rr2": True}})
+        upd.assert_not_awaited()
+        self.assertEqual(out["values"]["scalp_target_r"], 1.5)
+
+    async def test_net_payoff_at_2r(self):
+        import strategy
+        s = {**core.DEFAULT_SETTINGS}
+        stop, target = strategy.build_levels("SHORT", 70000.0, s, "scalp", 0.5)
+        self.assertEqual((stop, target), (70350.0, 69300.0))
+        cm = strategy.cost_model("SHORT", 70000.0, stop, target, s, legs=strategy.exec_legs(s, "scalp"))
+        self.assertTrue(1.4 < cm["net_r"] < 1.5, cm["net_r"])   # after fees and slippage the reward is about 1.46 × the loss (was about 1.06 at 1.5R)

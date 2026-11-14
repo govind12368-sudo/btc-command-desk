@@ -104,7 +104,7 @@ export function DayTypeCard({ day, compact }) {
 /** The 11-month test that sits behind every figure about follow / Plan A / switch. */
 export function EvidenceCard({ ev }) {
   if (!ev) return null;
-  const rows = [["Follow the signal", ev.follow], ["Plan A (reverse 1:2)", ev.plan_a], ["Day-type switch", ev.switch]];
+  const rows = [["Follow the signal (1.5R target)", ev.follow], ...(ev.follow_2r ? [["Follow the signal (2R target, from 14 Nov)", ev.follow_2r]] : []), ["Plan A (reverse 1:2)", ev.plan_a], ["Day-type switch", ev.switch]];
   return (
     <Card title="Long test: 11 months of Delta candles" testid="evidence-card"
       sub={`${ev.signals.toLocaleString("en-US")} scalp signals rebuilt with the site's own rules, ${ev.period[0]} to ${ev.period[1]} (${ev.per_day} a day). Same entry rule, 6-hour exit, fees included. 1R = the stop distance (0.5% of price).`}>
