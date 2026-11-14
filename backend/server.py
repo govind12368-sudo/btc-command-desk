@@ -32,6 +32,7 @@ import autotrade
 import daytype
 import scanner
 import webpush
+import intel
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1026,6 +1027,25 @@ async def push_test(u=Depends(admin_user)):
     return r
 
 
+# ---------------- Market Intelligence ----------------
+@api.get("/intel")
+async def intel_get(u=Depends(current_user)):
+    return intel.public()
+
+
+@api.get("/intel/chart")
+async def intel_chart(tf: str = "1h", u=Depends(current_user)):
+    if tf not in intel.TF:
+        raise HTTPException(422, "Unknown timeframe")
+    return intel.chart(tf)
+
+
+@api.get("/intel/health")
+async def intel_health():
+    """Which data providers answer from this server (names and status only; nothing private)."""
+    return {"time": iso(now_utc()), "sources": [{k: s[k] for k in ("label", "module", "status", "age_sec", "error")} for s in intel.health()]}
+
+
 @api.get("/strategy-audit")
 async def strategy_audit(u=Depends(admin_user)):
     return plan_a.audit()
@@ -1250,7 +1270,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE)):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

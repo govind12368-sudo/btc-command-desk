@@ -15,6 +15,7 @@ import Market from "@/pages/Market";
 import StrategyPage from "@/pages/StrategyPage";
 import Pillars from "@/pages/Pillars";
 import Scanner from "@/pages/Scanner";
+import Intel from "@/pages/Intel";
 import News from "@/pages/News";
 import Journal from "@/pages/Journal";
 import Validation from "@/pages/Validation";
@@ -54,6 +55,7 @@ function Gate() {
         <Route path="/swing" element={<StrategyPage strat="swing" key="swing" />} />
         <Route path="/pillars" element={<Pillars />} />
         <Route path="/scanner" element={<Scanner />} />
+        <Route path="/intel" element={<Intel />} />
         <Route path="/planner" element={<Navigate to="/scanner" replace />} />
         <Route path="/news" element={<News />} />
         <Route path="/journal" element={<Journal />} />
