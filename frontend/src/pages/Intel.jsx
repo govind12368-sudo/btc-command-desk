@@ -173,6 +173,7 @@ function Liquidations({ l }) {
           <tbody>{l.large.map((e) => <tr key={`${e.ex}${e.t}${e.usd}`}><td className="font-mono text-[11.5px]">{ist(e.t)}</td><td>{e.ex}</td><td className={e.side === "long" ? "text-red-300" : "text-teal-300"}>{e.side === "long" ? "Long" : "Short"}</td><td className="num font-mono">{big(e.usd)}</td><td className="num font-mono">{n(e.price, 1)}</td></tr>)}</tbody>
         </table></div>
       ) : <p className="text-[12.5px] text-slate-500">No large liquidation reported in the last 24 hours.</p>}
+      {l.by_exchange && Object.keys(l.by_exchange).length > 0 && <p className="mt-2 text-[11.5px] text-slate-400">By exchange (24h): {Object.entries(l.by_exchange).map(([k, v]) => `${k} ${v.count} events, longs ${big(v.long_usd)}, shorts ${big(v.short_usd)}`).join(" · ")}</p>}
       <p className="mt-2 text-[11px] text-slate-500">Feeds working: {l.feeds_ok.join(", ") || "none"}{l.feeds_down.length ? ` · not working: ${l.feeds_down.join(", ")}` : ""}{l.collecting_since ? ` · collecting since ${ist(l.collecting_since)}` : ""}. {l.note}</p>
     </Card>
   );

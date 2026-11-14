@@ -328,12 +328,19 @@ def _prune():
         _seen.discard(LIQS.popleft()["_id"])
 
 
+def _okx_side(x):
+    """Which position was liquidated: a forced SELL closes a long, a forced BUY closes a short (posSide confirms when given)."""
+    if x.get("side") in ("sell", "buy"):
+        return "long" if x["side"] == "sell" else "short"
+    return "long" if x.get("posSide") == "long" else "short"
+
+
 async def okx_liqs():
     r = (await get("https://www.okx.com/api/v5/public/liquidation-orders", {"instType": "SWAP", "instFamily": "BTC-USDT", "state": "filled", "limit": "100"})).json()["data"]
     for grp in r:
         for x in grp.get("details") or []:
             px, sz = float(x["bkPx"]), float(x["sz"])
-            await add_liq("OKX", f"{x['ts']}-{x['posSide']}-{x['bkPx']}-{x['sz']}", int(x["ts"]) // 1000, "long" if x["posSide"] == "long" else "short", sz * 0.01 * px, px)
+            await add_liq("OKX", f"{x['ts']}-{x['posSide']}-{x['bkPx']}-{x['sz']}", int(x["ts"]) // 1000, _okx_side(x), sz * 0.01 * px, px)
     _prune()
 
 
@@ -407,8 +414,13 @@ def liq_summary():
         cascade = {"side": side, "text": f"{side.title()} liquidations in the last hour are {((h1['long_usd'] + h1['short_usd']) / day_avg if day_avg else 0):.1f}x the 24-hour hourly average: a liquidation cascade may be under way."}
     feeds = {k: v for k, v in SRC.items() if v["module"] == "liquidations"}
     since = min((e["t"] for e in ev), default=None)
+    by_ex = {}
+    for e in ev:
+        b = by_ex.setdefault(e["ex"], {"long_usd": 0.0, "short_usd": 0.0, "count": 0})
+        b["long_usd" if e["side"] == "long" else "short_usd"] += e["usd"]
+        b["count"] += 1
     return {"windows": win, "hourly": buckets, "large": [{k: e[k] for k in ("t", "ex", "side", "usd", "price")} for e in large], "large_threshold_usd": LARGE_LIQ_USD,
-            "cascade": cascade, "events_24h": len(ev), "collecting_since": since,
+            "cascade": cascade, "events_24h": len(ev), "by_exchange": by_ex, "collecting_since": since,
             "feeds_ok": sorted(v["label"] for v in feeds.values() if v["ok"]), "feeds_down": sorted(v["label"] for v in feeds.values() if v["ok"] is False),
             "note": "Exchange-reported liquidations only, from the feeds listed. Exchanges publish a sample, not every order, so real totals are higher. Totals cover the time since this server started collecting."}
 

@@ -118,3 +118,8 @@ def test_correlation(intel):
     h = intel.health() if intel.SRC else None
     intel.register()
     assert {s["status"] for s in intel.health()} == {"WAITING"} and len(intel.health()) == 16
+
+
+def test_okx_liquidation_side(intel):
+    assert intel._okx_side({"side": "sell", "posSide": "long"}) == "long" and intel._okx_side({"side": "buy", "posSide": "short"}) == "short"
+    assert intel._okx_side({"side": "sell", "posSide": "net"}) == "long" and intel._okx_side({"posSide": "short"}) == "short"
