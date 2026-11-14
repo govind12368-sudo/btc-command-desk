@@ -28,7 +28,9 @@ TF = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d
 BARS = 500
 LARGE_LIQ_USD = 250_000
 
-STATE = {"candles": {}, "tf": {}, "overview": {}, "levels": {}, "pressure": None, "deriv": None, "corr": None}
+STATE = {"candles": {}, "tf": {}, "overview": {}, "levels": {}, "pressure": None, "deriv": None, "corr": None, "score": {}, "forecast": None, "fc_card": None}
+FC_WIN = 260
+FC_HORIZONS = (("5m", 300), ("15m", 900), ("30m", 1800), ("1h", 3600), ("4h", 14400), ("8h", 28800), ("24h", 86400), ("7d", 604800))
 SRC = {}        # name -> {label, module, ok, updated, error, fails, note}
 LIQS = deque()  # exchange-reported liquidation events of the last 24 hours
 _seen = set()
@@ -104,6 +106,8 @@ async def load_tf(tf):
     a = ta.analyze(done, sec)
     a.update(timeframe=tf, gaps=gaps, updated=iso(now_utc()), source="Delta Exchange India BTCUSD perpetual")
     STATE["tf"][tf] = a
+    if tf in ("5m", "15m", "30m", "1h", "4h", "1d") and len(done) >= FC_WIN:
+        STATE["score"][tf] = ta.quick_score(done[-FC_WIN:], sec) + (done[-1]["t"] + sec,)
     if tf == "1d":
         _levels(done)
 
@@ -511,6 +515,129 @@ async def load_corr():
     STATE["corr"] = {"rows": rows, "btc_source": btc_src, "updated": iso(now_utc()), "method": "Correlation of daily returns over the last 7, 30 and 90 common trading days. 7-day values are very noisy."}
 
 
+# ------------------------------------------------------------------ forecasts (calibrated on history; see forecast_calibration.json)
+_CAL = None
+
+
+def calibration():
+    global _CAL
+    if _CAL is None:
+        import os
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "forecast_calibration.json")) as f:
+                _CAL = json.load(f)
+        except Exception:
+            _CAL = {}
+    return _CAL
+
+
+def fc_bucket(x):
+    return 0 if x <= -5 else 1 if x <= -2 else 2 if x <= 1 else 3 if x <= 4 else 4
+
+
+def _context():
+    """What the other modules say right now. Shown next to the forecast; not part of the probabilities (no long history to test them on yet)."""
+    out = []
+    d, p = STATE["deriv"], STATE["pressure"]
+    if d and d.get("positioning", {}).get("label") in ("BULLISH", "BEARISH", "NEUTRAL"):
+        out.append({"name": "Derivatives positioning", "side": {"BULLISH": 1, "BEARISH": -1}.get(d["positioning"]["label"], 0), "text": d["positioning"]["label"].title() + f" (funding {d['funding_8h'] * 100:+.4f}% per 8h)"})
+    w = ((p or {}).get("windows") or {}).get("1h")
+    if w and w.get("buy_share") is not None:
+        out.append({"name": "Spot pressure (1h)", "side": 1 if w["label"] == "BUYERS" else -1 if w["label"] == "SELLERS" else 0, "text": f"{w['buy_share'] * 100:.0f}% of spot volume was aggressive buying"})
+    lq = liq_summary()["windows"]["1h"]
+    if lq["count"]:
+        side = -1 if lq["long_usd"] > 1.5 * lq["short_usd"] else 1 if lq["short_usd"] > 1.5 * lq["long_usd"] else 0
+        out.append({"name": "Liquidations (1h)", "side": side, "text": f"longs ${lq['long_usd'] / 1e6:.1f}M, shorts ${lq['short_usd'] / 1e6:.1f}M liquidated"})
+    return out
+
+
+def build_forecast():
+    cal = calibration().get("horizons") or {}
+    price = overview().get("price")
+    ctx = _context()
+    rows = []
+    for name, sec in FC_HORIZONS:
+        c = cal.get(name)
+        sc = STATE["score"].get(c["tf"]) if c else None
+        hs = STATE["score"].get(c["higher"]) if c and c.get("higher") else None
+        if not c or not sc or not sc[1] or not price or (c.get("higher") and not hs):
+            rows.append({"horizon": name, "status": "INSUFFICIENT DATA"})
+            continue
+        comb = sc[0] + (0.5 * hs[0] if hs else 0)
+        b = fc_bucket(comb)
+        t = c["table"][b]
+        up, down = round(t["up"] * 100), round(t["down"] * 100)
+        unit = sc[1] / price * math.sqrt(c["bars"])
+        rg = c["range"]
+        a = STATE["tf"].get(c["tf"]) or {}
+        lean = t["up"] - t["down"]
+        test = c["test"]
+        proven = (test.get("direction_hit_pct") or 0) >= 55 and (test.get("skill_vs_base_pct") or 0) > 0.5
+        agree = sum(1 for x in ctx if x["side"] and (x["side"] > 0) == (lean > 0))
+        rows.append({"horizon": name, "status": "OK", "seconds": sec, "up": up, "down": down, "neutral": 100 - up - down,
+                     "base": {k: round(v * 100) for k, v in c["base"].items()}, "state": calibration()["buckets"][b], "score": comb, "samples": t["n"],
+                     "lean": "UP" if lean >= 0.03 else "DOWN" if lean <= -0.03 else "NONE", "lean_pct": round(lean * 100, 1),
+                     "confidence": "MEDIUM" if proven and abs(lean) >= 0.05 and agree >= 2 else "LOW",
+                     "range68": [price * (1 + rg["q16"] * unit), price * (1 + rg["q84"] * unit)], "range90": [price * (1 + rg["q05"] * unit), price * (1 + rg["q95"] * unit)],
+                     "neutral_move_pct": calibration()["neutral_band"] * unit * 100,
+                     "support": (a.get("support") or [{}])[0].get("price"), "resistance": (a.get("resistance") or [{}])[0].get("price"),
+                     "factors": [f"{v['name']}: {v['text']}" for v in (a.get("votes") or []) if v["vote"]][:5], "timeframe": c["tf"], "higher": c.get("higher"),
+                     "tested": {"n": test["n"], "direction_hit_pct": test.get("direction_hit_pct"), "direction_n": test.get("direction_n"), "skill_vs_base_pct": test.get("skill_vs_base_pct")}})
+    STATE["forecast"] = {"price": price, "rows": rows, "context": ctx, "updated": iso(now_utc()),
+                         "calibration": {k: calibration().get(k) for k in ("period", "train_until")},
+                         "method": "For the current technical state of each timeframe (and the one above it), the table shows how often BTC rose, stayed flat or fell over that horizon in the training history. "
+                                   "Flat = a move smaller than 0.3 of the normal move for that horizon."}
+    return STATE["forecast"]
+
+
+def _price_at(ts):
+    """Close at time ts from stored candles (5m first, then 1h); None if not available yet."""
+    for tf, sec in (("5m", 300), ("1h", 3600)):
+        for b in reversed(STATE["candles"].get(tf) or []):
+            if b["t"] + sec == ts - ts % sec and ts % sec == 0:
+                return b["c"]
+            if b["t"] + sec < ts:
+                break
+    return None
+
+
+async def forecast_tick():
+    f = build_forecast()
+    ok = [r for r in f["rows"] if r["status"] == "OK"]
+    if not ok:
+        raise RuntimeError("waiting for candles on every timeframe")
+    now = int(now_utc().timestamp())
+    slot = now - now % 900
+    await db.intel_fc.update_one({"_id": slot}, {"$setOnInsert": {"price": f["price"], "f": {r["horizon"]: {"up": r["up"], "neutral": r["neutral"], "down": r["down"], "band": r["neutral_move_pct"] / 100, "lean": r["lean"]} for r in ok}, "res": {}}}, upsert=True)
+    secs = dict(FC_HORIZONS)
+    async for d in db.intel_fc.find({"_id": {"$gte": slot - 9 * 86400, "$lt": slot}}):
+        upd = {}
+        for name, x in (d.get("f") or {}).items():
+            if name in (d.get("res") or {}) or d["_id"] + secs[name] > now:
+                continue
+            p1 = _price_at(d["_id"] + secs[name])
+            if p1 is None:
+                continue
+            r = p1 / d["price"] - 1
+            y = "up" if r > x["band"] else "down" if r < -x["band"] else "neutral"
+            top = max(("up", "neutral", "down"), key=lambda k: x[k])
+            upd[f"res.{name}"] = {"y": y, "top_hit": top == y, "lean_hit": None if x["lean"] == "NONE" or y == "neutral" else (x["lean"] == "UP") == (y == "up")}
+        if upd:
+            await db.intel_fc.update_one({"_id": d["_id"]}, {"$set": upd})
+    card = {name: {"checked": 0, "top_hit": 0, "lean_n": 0, "lean_hit": 0} for name, _ in FC_HORIZONS}
+    async for d in db.intel_fc.find({"_id": {"$gte": slot - 60 * 86400}}, {"res": 1}):
+        for name, x in (d.get("res") or {}).items():
+            c = card[name]
+            c["checked"] += 1
+            c["top_hit"] += bool(x["top_hit"])
+            if x.get("lean_hit") is not None:
+                c["lean_n"] += 1
+                c["lean_hit"] += bool(x["lean_hit"])
+    STATE["fc_card"] = card
+    if slot % 86400 == 0:
+        await db.intel_fc.delete_many({"_id": {"$lt": slot - 90 * 86400}})
+
+
 # ------------------------------------------------------------------ public views
 def overview():
     from sources import WS
@@ -541,6 +668,7 @@ def public():
     tf = {k: {x: y for x, y in v.items() if x != "volume_profile"} for k, v in STATE["tf"].items()}
     return {"server_time": iso(now_utc()), "overview": overview(), "timeframes": tf, "order": list(TF), "pressure": STATE["pressure"], "derivatives": STATE["deriv"],
             "liquidations": liq_summary(), "correlations": STATE["corr"], "sources": health(),
+            "forecast": {**(STATE["forecast"] or {"rows": [], "context": []}), "scorecard": STATE["fc_card"]},
             "disclaimer": "Monitoring and decision support only. It does not place trades and it is not a prediction."}
 
 
@@ -567,6 +695,7 @@ def register():
     reg("liq_bybit", "Bybit liquidation stream", "liquidations")
     reg("liq_binance", "Binance liquidation stream", "liquidations", "Binance publishes at most one liquidation per second")
     reg("corr", "Correlations (Yahoo / Stooq / Binance daily closes)", "correlations", "Refreshed every 3 hours")
+    reg("forecast", "Forecast engine (calculated on this server)", "forecast", "Probabilities from the 26-month calibration table")
 
 
 async def start():
@@ -582,7 +711,7 @@ async def start():
         log.warning("intel start-up: %s", e)
     jobs = [worker("candles_fast", _group(("1m", "5m")), 20), worker("candles_mid", _group(("15m", "30m")), 60), worker("candles_slow", _group(("1h", "4h", "1d")), 180),
             worker("ticker", load_ticker, 30), worker("global", load_global, 120), worker("pressure", load_pressure, 30), worker("derivs", load_derivs, 60),
-            worker("liq_okx", okx_liqs, 20), worker("corr", load_corr, 3 * 3600),
+            worker("liq_okx", okx_liqs, 20), worker("corr", load_corr, 3 * 3600), worker("forecast", forecast_tick, 60),
             ws_liqs("liq_bybit", "wss://stream.bybit.com/v5/public/linear", {"op": "subscribe", "args": ["allLiquidation.BTCUSDT"]}, parse_bybit),
             ws_liqs("liq_binance", "wss://fstream.binance.com/ws/btcusdt@forceOrder", None, parse_binance)]
     for j in jobs:

@@ -329,6 +329,34 @@ def analyze(bars, sec):
     }
 
 
+def quick_score(bars, sec):
+    """The same vote total as analyze() and the ATR, without the levels and profiles (fast: used for calibration)."""
+    c = [x["c"] for x in bars]
+    n, px = len(c), bars[-1]["c"]
+    e20, e50, e200 = ema(c, 20)[-1], ema(c, 50)[-1], ema(c, 200)[-1]
+    r = rsi(c)[-1]
+    ml, _, mh = macd(c)
+    hi, lo = pivots(bars[-120:])
+    st = structure(hi, lo)["trend"]
+    vw = session_vwap(bars, sec)
+    ob = obv(bars[-21:])
+    s = 0
+    if e20 and e50:
+        s += 1 if px > e20 > e50 else -1 if px < e20 < e50 else 0
+    if e200:
+        s += 1 if px > e200 else -1
+    s += 1 if st == "UP" else -1 if st == "DOWN" else 0
+    if mh[-1] is not None:
+        s += 1 if mh[-1] > 0 and ml[-1] > 0 else -1 if mh[-1] < 0 and ml[-1] < 0 else 0
+    if r is not None:
+        s += 1 if 55 <= r < 70 else -1 if 30 < r <= 45 else 0
+    if vw:
+        s += 1 if px > vw else -1
+    if n > 21:
+        s += 1 if ob[-1] > ob[0] and px > c[-21] else -1 if ob[-1] < ob[0] and px < c[-21] else 0
+    return s, atr(bars[-60:])[-1]
+
+
 def overlays(bars):
     """Series for the chart (aligned with bars)."""
     c = [x["c"] for x in bars]

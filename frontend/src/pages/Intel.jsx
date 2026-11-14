@@ -24,6 +24,66 @@ function Fig({ label, value, sub, cls = "text-slate-50" }) {
   );
 }
 
+const H_NAME = { "5m": "5 minutes", "15m": "15 minutes", "30m": "30 minutes", "1h": "1 hour", "4h": "4 hours", "8h": "8 hours", "24h": "24 hours", "7d": "7 days" };
+
+function Forecast({ f }) {
+  const [open, setOpen] = useState(null);
+  const rows = f?.rows || [];
+  const card = f?.scorecard || {};
+  const tested = rows.filter((r) => r.status === "OK" && r.tested?.direction_hit_pct != null).map((r) => r.tested.direction_hit_pct);
+  return (
+    <Card title="Market forecast: where price may move" testid="intel-forecast"
+      sub={`Chance of BTC rising, staying flat or falling over each period, measured from ${f?.calibration?.period?.[0] || "history"} to ${f?.calibration?.train_until || ""}. BTC ${n(f?.price, 1)}${f?.updated ? ` · updated ${ago(f.updated)}` : ""}.`}>
+      <Note tone="amber">Read this first: on data the model had never seen, its direction call was right {tested.length ? `${Math.min(...tested).toFixed(0)}–${Math.max(...tested).toFixed(0)}%` : "about 50%"} of the time, which is the same as chance. The probabilities below are honest, so they stay close to the normal rates. The <b>expected range</b> is the useful part: volatility can be estimated, direction cannot.</Note>
+      <div className="mt-3 overflow-x-auto scroll-thin">
+        <table className="desk-table">
+          <thead><tr><th>Next</th><th>Rise · Flat · Fall</th><th>Lean</th><th className="num">Likely range (68%)</th><th className="num">Wide range (90%)</th><th className="num">Support</th><th className="num">Resistance</th><th>Confidence</th><th /></tr></thead>
+          <tbody>{rows.map((r) => r.status !== "OK"
+            ? <tr key={r.horizon}><td className="font-semibold">{H_NAME[r.horizon]}</td><td colSpan={8} className="text-amber-300">INSUFFICIENT DATA</td></tr>
+            : (<React.Fragment key={r.horizon}>
+              <tr>
+                <td className="whitespace-nowrap font-semibold">{H_NAME[r.horizon]}</td>
+                <td style={{ minWidth: 230 }}>
+                  <div className="flex h-3 overflow-hidden rounded" role="img" aria-label={`Rise ${r.up} percent, flat ${r.neutral} percent, fall ${r.down} percent`}>
+                    <div className="bg-teal-400" style={{ width: `${r.up}%` }} /><div className="w-0.5 bg-[#0b1220]" /><div className="bg-slate-500" style={{ width: `${r.neutral}%` }} /><div className="w-0.5 bg-[#0b1220]" /><div className="flex-1 bg-red-400" />
+                  </div>
+                  <div className="mt-1 flex justify-between font-mono text-[11.5px]"><span className="text-teal-300">▲ {r.up}%</span><span className="text-slate-300">■ {r.neutral}%</span><span className="text-red-300">▼ {r.down}%</span></div>
+                </td>
+                <td className={`whitespace-nowrap text-[12px] font-semibold ${r.lean === "UP" ? "text-teal-300" : r.lean === "DOWN" ? "text-red-300" : "text-slate-400"}`}>{r.lean === "UP" ? `Slightly up (+${r.lean_pct})` : r.lean === "DOWN" ? `Slightly down (${r.lean_pct})` : "No lean"}</td>
+                <td className="num font-mono">{n(r.range68[0], 0)} – {n(r.range68[1], 0)}</td>
+                <td className="num font-mono text-slate-400">{n(r.range90[0], 0)} – {n(r.range90[1], 0)}</td>
+                <td className="num font-mono text-teal-300">{r.support ? n(r.support, 0) : "—"}</td><td className="num font-mono text-red-300">{r.resistance ? n(r.resistance, 0) : "—"}</td>
+                <td className={`text-[12px] font-semibold ${r.confidence === "LOW" ? "text-slate-400" : "text-amber-300"}`}>{r.confidence === "LOW" ? "Low" : "Medium"}</td>
+                <td><button type="button" className="rounded border border-[#1e2a4a] px-2 py-0.5 text-[11.5px] text-slate-200 hover:border-amber-500/50" aria-expanded={open === r.horizon} onClick={() => setOpen(open === r.horizon ? null : r.horizon)}>Why</button></td>
+              </tr>
+              {open === r.horizon && <tr><td colSpan={9} className="text-[12px] text-slate-300">
+                <p>Technical state on {r.timeframe}{r.higher ? ` (with ${r.higher})` : ""}: <b>{r.state}</b> (score {r.score}). In {r.samples.toLocaleString("en-US")} past cases like this, BTC rose {r.up}%, stayed flat {r.neutral}% and fell {r.down}% of the time. The normal rates for any moment are {r.base.up}% / {r.base.neutral}% / {r.base.down}%. Flat means a move smaller than {n(r.neutral_move_pct, 2)}%.</p>
+                {r.factors.length > 0 && <ul className="mt-1 list-disc pl-5">{r.factors.map((x) => <li key={x}>{x}</li>)}</ul>}
+                <p className="mt-1 text-slate-400">Test on unseen data ({r.tested.n.toLocaleString("en-US")} cases): direction right {r.tested.direction_hit_pct == null ? "— (the model never leaned)" : `${r.tested.direction_hit_pct}% of ${r.tested.direction_n}`}; skill against always using the normal rates {r.tested.skill_vs_base_pct}%.</p>
+              </td></tr>}
+            </React.Fragment>))}</tbody>
+        </table>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section>
+          <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">What the other modules say now</h3>
+          {f?.context?.length ? <ul className="space-y-1 text-[12.5px]">{f.context.map((x) => <li key={x.name} className="flex justify-between gap-3"><span className="text-slate-300">{x.name}<span className="block text-[11px] text-slate-500">{x.text}</span></span><span className={`whitespace-nowrap font-semibold ${vote(x.side)[1]}`}>{vote(x.side)[0]}</span></li>)}</ul> : <p className="text-[12.5px] text-slate-500">Waiting for derivatives, spot pressure and liquidation data.</p>}
+          <p className="mt-1 text-[11px] text-slate-500">Shown for context. They are not inside the probabilities yet, because there is no long history to test them on; this server is now recording them.</p>
+        </section>
+        <section>
+          <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Live score card</h3>
+          <table className="desk-table">
+            <thead><tr><th>Period</th><th className="num">Forecasts checked</th><th className="num">Most likely outcome was right</th><th className="num">Lean was right</th></tr></thead>
+            <tbody>{rows.map((r) => { const c = card[r.horizon] || {}; return <tr key={r.horizon}><td>{H_NAME[r.horizon]}</td><td className="num font-mono">{c.checked || 0}</td><td className="num font-mono">{c.checked ? `${Math.round((100 * c.top_hit) / c.checked)}%` : "—"}</td><td className="num font-mono">{c.lean_n ? `${Math.round((100 * c.lean_hit) / c.lean_n)}% of ${c.lean_n}` : "—"}</td></tr>; })}</tbody>
+          </table>
+          <p className="mt-1 text-[11px] text-slate-500">A forecast is saved every 15 minutes and checked when its period ends. Starts empty.</p>
+        </section>
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500">{f?.method} Not financial advice.</p>
+    </Card>
+  );
+}
+
 function Technical({ d }) {
   const [tf, setTf] = useState("1h");
   const { data: ch } = useFetch(`/intel/chart?tf=${tf}`, tf === "1m" || tf === "5m" ? 20000 : 60000);
@@ -222,6 +282,7 @@ export default function Intel() {
         </div>
       </Card>
       {down.length > 0 && <Note tone="amber">{down.length} of {d.sources.length} data sources are not answering from this server right now: {down.map((s) => s.label).join(", ")}. Their figures are left out, not estimated.</Note>}
+      <Forecast f={d.forecast} />
       <Technical d={d} />
       <Card title="Spot buying and selling pressure" sub="Share of traded value where the buyer was the aggressor (bought at the ask). Above 53% = buyers in control, below 47% = sellers." testid="intel-pressure"><Pressure p={d.pressure} /></Card>
       <Derivatives d={d.derivatives} />
@@ -236,7 +297,7 @@ export default function Intel() {
               <td className="font-mono text-[11.5px]">{s.updated ? ago(s.updated) : "—"}</td><td className="text-[11.5px] text-slate-400">{s.error || s.note}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">Coming in the next phases: US macro, spot ETF flows, on-chain, sentiment, crash-risk and recovery scores, forecasts with measured accuracy, the estimated liquidation heatmap and alerts.</p>
+        <p className="mt-2 text-[11px] text-slate-500">Coming in the next phases: US macro, spot ETF flows, on-chain, sentiment, crash-risk and recovery scores, the estimated liquidation heatmap and alerts.</p>
       </Card>
     </div>
   );

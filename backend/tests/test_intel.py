@@ -117,9 +117,40 @@ def test_correlation(intel):
     assert intel.corr([1, 2, 3], [1, 2, 3]) is None   # fewer than 5 points
     h = intel.health() if intel.SRC else None
     intel.register()
-    assert {s["status"] for s in intel.health()} == {"WAITING"} and len(intel.health()) == 16
+    assert {s["status"] for s in intel.health()} == {"WAITING"} and len(intel.health()) == 17
 
 
 def test_okx_liquidation_side(intel):
     assert intel._okx_side({"side": "sell", "posSide": "long"}) == "long" and intel._okx_side({"side": "buy", "posSide": "short"}) == "short"
     assert intel._okx_side({"side": "sell", "posSide": "net"}) == "long" and intel._okx_side({"posSide": "short"}) == "short"
+
+
+def test_forecast_probabilities_and_scoring(intel):
+    cal = intel.calibration()
+    assert set(cal["horizons"]) == {"5m", "15m", "30m", "1h", "4h", "8h", "24h", "7d"}
+    for h in cal["horizons"].values():
+        assert len(h["table"]) == 5 and all(abs(x["up"] + x["neutral"] + x["down"] - 1) < 0.001 for x in h["table"]) and h["range"]["q16"] < 0 < h["range"]["q84"]
+    assert [intel.fc_bucket(x) for x in (-7, -5, -4.5, -2, -1.5, 1, 1.5, 4, 4.5)] == [0, 0, 1, 1, 2, 2, 3, 3, 4]
+
+    async def go():
+        intel.register()
+        assert all(r["status"] == "INSUFFICIENT DATA" for r in intel.build_forecast()["rows"])     # never a forecast from missing data
+        now = int(intel.now_utc().timestamp()); slot = now - now % 900
+        for tf in ("5m", "15m", "30m", "1h", "4h", "1d"):
+            intel.STATE["score"][tf] = (5, 300.0, now)
+            intel.STATE["tf"][tf] = {"support": [{"price": 69000.0}], "resistance": [{"price": 71000.0}], "votes": [{"name": "Trend", "vote": 1, "text": "up"}]}
+        intel.STATE["overview"]["delta"] = {"price": 70000.0}
+        f = intel.build_forecast()
+        assert [r["horizon"] for r in f["rows"]] == ["5m", "15m", "30m", "1h", "4h", "8h", "24h", "7d"]
+        for r in f["rows"]:
+            assert r["status"] == "OK" and r["up"] + r["neutral"] + r["down"] == 100 and r["range68"][0] < 70000 < r["range68"][1] and r["range90"][0] < r["range68"][0]
+            assert r["confidence"] == "LOW" and r["support"] == 69000.0 and r["state"] == "strongly bullish"
+        # an old forecast is checked against the price that followed
+        t0 = slot - 3600
+        await intel.db.intel_fc.insert_one({"_id": t0, "price": 70000.0, "f": {"5m": {"up": 40, "neutral": 30, "down": 30, "band": 0.001, "lean": "UP"}, "7d": {"up": 30, "neutral": 40, "down": 30, "band": 0.01, "lean": "NONE"}}, "res": {}})
+        intel.STATE["candles"]["5m"] = [{"t": t0 + k * 300, "o": 70000, "h": 70300, "l": 69900, "c": 70200.0, "v": 1} for k in range(-2, 12)]
+        await intel.forecast_tick()
+        d = await intel.db.intel_fc.find_one({"_id": t0})
+        assert d["res"] == {"5m": {"y": "up", "top_hit": True, "lean_hit": True}} and intel.STATE["fc_card"]["5m"] == {"checked": 1, "top_hit": 1, "lean_n": 1, "lean_hit": 1}
+        assert await intel.db.intel_fc.find_one({"_id": slot})
+    run(go())
