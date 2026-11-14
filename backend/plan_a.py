@@ -32,7 +32,8 @@ VALID_SEC = 600
 HOLD_SEC = 6 * 3600
 FEES = {"maker": 0.0002, "taker": 0.0005, "gst": 0.18}
 STATE = {"computed_at": None, "rows": [], "summary": {}, "error": None, "live_price": None, "books": {}}
-SINCE_IST = os.environ.get("JOURNAL_START", "2026-11-13")  # "from today" start of the journal comparison
+SINCE_IST = os.environ.get("JOURNAL_START", "2026-11-13")
+JOURNAL_RR = 2.0  # Trade Journal results: target = 2 × stop distance for every signal (admin request, 14 Nov 2026)  # "from today" start of the journal comparison
 
 
 async def _fetch_1m(start, end):
@@ -179,8 +180,11 @@ async def compute():
         if taken:
             busy_until = -1 if res is None else exit_t
         # Follow the signal (Trade Journal way): the signal's own direction, stop and target, same 6-hour exit
-        f_res, f_bar = _first_exit(d0, st, tg, bars, ft, HOLD_SEC)
-        f_px = tg if f_res == "TARGET" else st if f_res == "STOP" else f_bar["c"] if f_res == "TIME" else None
+        # Trade Journal book: the signal's own direction, entry and stop, target at JOURNAL_RR × stop distance
+        # for every signal (older signals were captured with a 1.5R target; scored here at 1:2 like the rest)
+        f_tg = round((e + (1 if d0 == "LONG" else -1) * JOURNAL_RR * risk) * 2) / 2
+        f_res, f_bar = _first_exit(d0, st, f_tg, bars, ft, HOLD_SEC)
+        f_px = f_tg if f_res == "TARGET" else st if f_res == "STOP" else f_bar["c"] if f_res == "TIME" else None
         f_gross = ((f_px or live or e) - e) * q * (1 if d0 == "LONG" else -1)
         f_fees = _fee(e, q, "taker") + _fee(f_px or live or e, q, "maker" if f_res == "TARGET" else "taker")
         i0 = idx.get(ft)
@@ -189,7 +193,7 @@ async def compute():
             hh, ll = max(c["h"] for c in seg), min(c["l"] for c in seg)
             row.update(mfe=((hh - e) if d0 == "LONG" else (e - ll)) / risk, mae=((e - ll) if d0 == "LONG" else (hh - e)) / risk)
         row.update(fill_t=ft, plan_exit_t=exit_t, follow_result=f_res or "OPEN", follow_exit_t=f_bar["t"] if f_bar else None,
-                   follow_exit_ist=_ist(f_bar["t"]) if f_bar else "", follow_exit_price=f_px, follow_net=f_gross - f_fees)
+                   follow_exit_ist=_ist(f_bar["t"]) if f_bar else "", follow_exit_price=f_px, follow_net=f_gross - f_fees, follow_target=f_tg)
         rows.append(row)
     taken = [r for r in rows if r.get("taken") == "Yes"]
     closed = [r for r in taken if r["plan_result"] != "OPEN"]
@@ -288,7 +292,7 @@ def audit():
     avg_risk = sum(abs(r["entry"] - r["model_stop"]) * r["qty"] for r in rows) / len(rows) if rows else None
     return {"computed_at": STATE["computed_at"], "books": {k: {m: {x: y for x, y in b.items() if x != "picks"} for m, b in v.items()} if isinstance(v, dict) else v for k, v in STATE["books"].items()},
             "days": sorted(days.values(), key=lambda d: d["date"]),
-            "why": {"ran_1_5": bucket(1.5, 1e9), "ran_under_1": bucket(-1e9, 1.0), "between": bucket(1.0, 1.5),
+            "why": {"ran_2": bucket(2.0, 1e9), "ran_under_1": bucket(-1e9, 1.0), "between": bucket(1.0, 2.0),
                     "both_lost": sum(1 for r in rows if r["follow_net"] < 0 and r["net"] < 0 and r["follow_result"] != "OPEN" and r["plan_result"] != "OPEN"), "n": len(rows),
                     "avg_fee": avg_fee, "avg_risk": avg_risk, "breakeven_follow": be(fw, fl), "breakeven_plan_a": be(pw, pl),
                     "long": {"n": sum(r["model_dir"] == "LONG" for r in rows), "follow_wins": sum(r["model_dir"] == "LONG" and r["follow_net"] > 0 for r in rows)},

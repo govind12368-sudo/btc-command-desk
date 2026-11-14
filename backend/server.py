@@ -321,7 +321,7 @@ async def signals(page: int = 1, size: int = 25, u=Depends(current_user)):
     for r in rows:  # day type frozen at capture + the same-rules result of following this signal
         t, p = tags.get(r.get("signal_id")) or {}, pa.get(r.get("signal_id")) or {}
         r.update(day_type=t.get("type"), day_label=t.get("label"), playbook=t.get("playbook"),
-                 follow_result=p.get("follow_result"), follow_net=p.get("follow_net"), plan_result=p.get("plan_result"), plan_net=p.get("net"))
+                 follow_result=p.get("follow_result"), follow_net=p.get("follow_net"), follow_target=p.get("follow_target"), plan_result=p.get("plan_result"), plan_net=p.get("net"))
     return {"items": rows, "total": total, "page": page, "size": size,
             "note": "Model signals are automatic captures. Candle touches are observations — never actual exchange fills."}
 

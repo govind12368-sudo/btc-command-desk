@@ -9,7 +9,7 @@ const TYPE_TONE = {
 };
 export const TYPE_NAME = { TREND_UP: "Trend ▲", TREND_DOWN: "Trend ▼", RANGE: "Range", MIXED: "Unclear", NA: "—" };
 export const PLAYBOOK_NAME = { FOLLOW: "Follow signal", PLAN_A: "Plan A (reverse)", STAND_ASIDE: "Stand aside" };
-export const BOOK_NAME = { follow: "Follow the signal", plan_a: "Plan A (reverse 1:2)", switch: "Day-type switch" };
+export const BOOK_NAME = { follow: "Follow the signal (1:2)", plan_a: "Plan A (reverse 1:2)", switch: "Day-type switch" };
 const pnl = (v) => ((v || 0) >= 0 ? "text-teal-300" : "text-red-300");
 const r2 = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${n(v, 2)}R`);
 

@@ -95,12 +95,12 @@ function Signals({ isAdmin }) {
   return (
     <Card title="Automatic model-signal journal" sub={data?.note} testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
       {!data?.items?.length ? <Empty>No signal has passed all 12 checks yet. Captures are deduplicated by strategy, direction and confirmation bar.</Empty> : (
-        <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>Signal ID</th><th>Captured</th><th>Dir</th><th>Day type at signal</th><th>Traded as given (6h rule)</th><th>Entry / Stop / Target</th><th>Qty</th><th>Net R</th><th>Fill</th><th>Closed-candle observation</th><th /></tr></thead>
+        <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>Signal ID</th><th>Captured</th><th>Dir</th><th>Day type at signal</th><th>Result at 1:2 (6h rule)</th><th>Entry / Stop / Target</th><th>Qty</th><th>Net R</th><th>Fill</th><th>Closed-candle observation</th><th /></tr></thead>
           <tbody>{data.items.map((x) => (<React.Fragment key={x.id}>
             <tr><td className="font-mono text-[11px]">{x.signal_id}</td><td className="font-mono text-[11px]">{ist(x.captured_at)}</td><td><Chip status={x.direction} /></td>
               <td><DayChip type={x.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[x.playbook] || ""}</span></td>
               <td className="font-mono text-[11.5px]">{x.follow_result ? <span className={x.follow_net >= 0 ? "text-teal-300" : "text-red-300"}>{x.follow_result} {x.follow_net >= 0 ? "+" : "−"}${n(Math.abs(x.follow_net), 2)}</span> : "—"}</td>
-              <td className="font-mono">{n(x.entry, 1)} / {n(x.stop, 1)} / {n(x.target, 1)}</td><td className="font-mono">{x.qty_btc}</td><td className="font-mono">{n(x.net_r, 2)}</td>
+              <td className="font-mono">{n(x.entry, 1)} / {n(x.stop, 1)} / {n(x.follow_target ?? x.target, 1)}{x.follow_target != null && Math.abs(x.follow_target - x.target) > 0.6 && <span className="block text-[10px] text-slate-500" title="Target the signal was captured with (1.5R, before 14 Nov)">signal target {n(x.target, 1)}</span>}</td><td className="font-mono">{x.qty_btc}</td><td className="font-mono">{n(x.net_r, 2)}</td>
               <td title={x.entry_type || "MARKET"}><Chip status={x.fill_status === "MISSED" ? "FAIL" : x.fill_status === "WAITING FILL" ? "PENDING" : "PASS"} label={x.fill_status || "FILLED"} /><span className="block font-mono text-[10px] text-slate-500">{x.entry_type === "POST-ONLY LIMIT" ? "limit" : "market"}{x.filled_at ? ` · ${ist(x.filled_at)}` : ""}</span></td>
               <td><Chip status={x.observation} /> <span className="font-mono text-[10px] text-slate-500">{x.observed_at ? ist(x.observed_at) : ""}</span></td><td><Btn tone="ghost" onClick={() => setOpen(open === x.id ? null : x.id)}>Checks</Btn></td></tr>
             {open === x.id && <tr><td colSpan={11}><div className="grid sm:grid-cols-2 gap-1 font-mono text-[11px]">{x.checks.map((c) => <span key={c.id}>{c.id} {c.status} — {c.detail}</span>)}</div><div className="mt-1 font-mono text-[10.5px] text-slate-500">quote {x.quote_source} {ist(x.quote_time)} · candles retrieved {ist(x.candle_retrieved)}</div></td></tr>}
@@ -118,7 +118,7 @@ function TopPanel() {
   const money = (v) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}$${n(Math.abs(v), 2)}`);
   return (
     <div className="space-y-3" data-testid="journal-top">
-      <Card title="Scalp signals traded as given" sub="Each signal's own direction, entry, stop and target. Same rules as Plan A: 10-minute entry, one trade at a time, 6-hour exit, same fees."
+      <Card title="Scalp signals traded in their own direction, 1:2" sub="Each signal's own direction, entry and stop; target = 2 × stop distance for every signal (signals before 14 Nov were captured with 1.5×). Same rules as Plan A: 10-minute entry, one trade at a time, 6-hour exit, same fees."
         right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={data?.books?.since_date} />}>
         <BookPanel book={b.follow} sub="Closed trades, after estimated fees" testid="journal-book" />
         <p className="mt-3 text-[12.5px] text-slate-300">Same signals, same period: Plan A (reverse) <b className={b.plan_a?.net >= 0 ? "text-teal-300" : "text-red-300"}>{money(b.plan_a?.net)}</b> on {b.plan_a?.taken ?? 0} trades · Day-type switch <b className={b.switch?.net >= 0 ? "text-teal-300" : "text-red-300"}>{money(b.switch?.net)}</b> on {b.switch?.taken ?? 0} trades.</p>

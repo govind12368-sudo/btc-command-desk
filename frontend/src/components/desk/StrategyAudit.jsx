@@ -52,8 +52,8 @@ export default function StrategyAudit() {
 
       <Card title="Why targets and stops were hit" sub={`${w.n || 0} filled signals so far, on 1-minute Delta candles.`} testid="audit-why">
         <ul className="list-disc space-y-1.5 pl-5 text-[13px] text-slate-200">
-          <li>The scalp signal is a momentum signal: it sells after a strong down candle in a downtrend and buys the opposite. Its target needs price to keep going 1.5 stop-distances (signals before 14 Nov) or 2 stop-distances (from 14 Nov).</li>
-          {w.ran_1_5 && <li>Price ran at least 1.5 stop-distances the signal's way in {w.ran_1_5.n} signals: Follow won {w.ran_1_5.follow_wins} of them.</li>}
+          <li>The scalp signal is a momentum signal: it sells after a strong down candle in a downtrend and buys the opposite. Scored at 1:2, its target needs price to keep going 2 stop-distances.</li>
+          {w.ran_2 && <li>Price ran at least 2 stop-distances the signal's way in {w.ran_2.n} signals: Follow won {w.ran_2.follow_wins} of them.</li>}
           {w.ran_under_1 && <li>Price never ran even 1 stop-distance the signal's way in {w.ran_under_1.n} signals: Plan A won {w.ran_under_1.plan_a_wins} of them.</li>}
           <li>Both ways lost on {w.both_lost} signals (price hit one stop, then the other).</li>
           {w.avg_fee != null && <li>Fees average {usd(w.avg_fee)} a trade against {usd(w.avg_risk)} of risk. Follow needs {pct(w.breakeven_follow, 1)} wins to break even, Plan A needs {pct(w.breakeven_plan_a, 1)}.</li>}
