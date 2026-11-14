@@ -100,8 +100,8 @@ async def main():
 
     for m in ("F", "F20", "F24", "R"):
         pm, _ = port(m)
-        tw = [r[m]["net"] for r in fl if r[m]["res"] == "TARGET"]; ts = [r[m]["net"] for r in fl if r[m]["res"] == "STOP"]
-        print(f"LIVE44 {m:<4}", pm, f"avg target ${sum(tw)/max(1,len(tw)):+.1f} avg stop ${sum(ts)/max(1,len(ts)):+.1f}")
+        tw = [r[m]["net"] for r in fl if r[m]["res"] == "TARGET"]; tsl = [r[m]["net"] for r in fl if r[m]["res"] == "STOP"]
+        print(f"LIVE44 {m:<4}", pm, f"avg target ${sum(tw)/max(1,len(tw)):+.1f} avg stop ${sum(tsl)/max(1,len(tsl)):+.1f}")
     print("\nONE TRADE AT A TIME (model qty, fees incl.)")
     pf, df = port("F"); pr, dr = port("R")
     print(" FOLLOW  ", pf); print(" REVERSE ", pr)
