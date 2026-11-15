@@ -1,4 +1,4 @@
-"""Market Intelligence – phase 1: price and technicals on 7 timeframes, spot pressure, derivatives across
+"""Market Intelligence – phase 1 (phase 2 lives in intel2.py): price and technicals on 7 timeframes, spot pressure, derivatives across
 exchanges, exchange-reported liquidations and correlations.
 
 Monitoring and decision support only: nothing here places an order.
@@ -668,7 +668,7 @@ def public():
     tf = {k: {x: y for x, y in v.items() if x != "volume_profile"} for k, v in STATE["tf"].items()}
     return {"server_time": iso(now_utc()), "overview": overview(), "timeframes": tf, "order": list(TF), "pressure": STATE["pressure"], "derivatives": STATE["deriv"],
             "liquidations": liq_summary(), "correlations": STATE["corr"], "sources": health(),
-            "forecast": {**(STATE["forecast"] or {"rows": [], "context": []}), "scorecard": STATE["fc_card"]},
+            "forecast": {**(STATE["forecast"] or {"rows": [], "context": []}), "scorecard": STATE["fc_card"]}, **intel2.public(),
             "disclaimer": "Monitoring and decision support only. It does not place trades and it is not a prediction."}
 
 
@@ -714,5 +714,8 @@ async def start():
             worker("liq_okx", okx_liqs, 20), worker("corr", load_corr, 3 * 3600), worker("forecast", forecast_tick, 60),
             ws_liqs("liq_bybit", "wss://stream.bybit.com/v5/public/linear", {"op": "subscribe", "args": ["allLiquidation.BTCUSDT"]}, parse_bybit),
             ws_liqs("liq_binance", "wss://fstream.binance.com/ws/btcusdt@forceOrder", None, parse_binance)]
-    for j in jobs:
+    for j in jobs + intel2.jobs():
         asyncio.create_task(j)
+
+
+import intel2  # noqa: E402  (phase 2 builds on the helpers above)

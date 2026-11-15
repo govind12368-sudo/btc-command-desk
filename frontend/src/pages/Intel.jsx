@@ -3,6 +3,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { Card, PageHead, Note } from "@/components/desk/ui";
 import { n, ist, ago } from "@/lib/fmt";
 import IntelChart from "@/components/desk/IntelChart";
+import { Macro, Etf, OnChain, Sentiment } from "@/components/desk/Intel2";
 
 const BIAS = { BULLISH: "border-teal-500/40 bg-teal-500/10 text-teal-300", BEARISH: "border-red-500/40 bg-red-500/10 text-red-300", NEUTRAL: "border-slate-500/40 bg-slate-500/10 text-slate-300" };
 const SIDE = { bull: "text-teal-300", bear: "text-red-300", neutral: "text-amber-300" };
@@ -288,7 +289,11 @@ export default function Intel() {
       <Derivatives d={d.derivatives} />
       <Liquidations l={d.liquidations} />
       <Correlations c={d.correlations} />
-      <Card title="Data sources" sub="Every provider is free and public. Checked continuously; a failed source retries with a growing delay." testid="intel-sources">
+      <Etf e={d.etf} />
+      <Macro m={d.macro} />
+      <OnChain o={d.onchain} price={o.price} />
+      <Sentiment s={d.sentiment} />
+      <Card title="Data sources" sub="Every provider is free; FRED works best with your own free key. Checked continuously; a failed source retries with a growing delay." testid="intel-sources">
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Source</th><th>Module</th><th>Status</th><th>Last update</th><th>Detail</th></tr></thead>
@@ -297,7 +302,7 @@ export default function Intel() {
               <td className="font-mono text-[11.5px]">{s.updated ? ago(s.updated) : "—"}</td><td className="text-[11.5px] text-slate-400">{s.error || s.note}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">Coming in the next phases: US macro, spot ETF flows, on-chain, sentiment, crash-risk and recovery scores, the estimated liquidation heatmap and alerts.</p>
+        <p className="mt-2 text-[11px] text-slate-500">ETF flows, macro, on-chain and sentiment are shown for information and do not change the forecast yet. Coming next: crash-risk and recovery scores, the estimated liquidation heatmap, the backtest report and alerts.</p>
       </Card>
     </div>
   );

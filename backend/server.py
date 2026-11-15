@@ -1040,6 +1040,27 @@ async def intel_chart(tf: str = "1h", u=Depends(current_user)):
     return intel.chart(tf)
 
 
+class FredKeyIn(BaseModel):
+    key: str = ""
+
+
+@api.get("/intel/fred-key")
+async def intel_fred_get(u=Depends(admin_user)):
+    return await intel.intel2.fred_status()          # never returns the key itself
+
+
+@api.put("/intel/fred-key")
+async def intel_fred_put(body: FredKeyIn, request: Request, u=Depends(admin_user)):
+    try:
+        out = await intel.intel2.save_fred_key(body.key)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"FRED did not accept this key ({str(e)[:120]}). Nothing was saved.")
+    await SEC.log_event("fred_key", request, u["email"], detail="saved" if out["set"] else "removed")
+    return out
+
+
 @api.get("/intel/health")
 async def intel_health():
     """Which data providers answer from this server (names and status only; nothing private)."""
