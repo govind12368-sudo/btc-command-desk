@@ -44,6 +44,8 @@ def test_readings_and_weights(desk):
     assert desk.r_scanner(SCAN, "intraday")[0] == -1.0 and desk.r_scanner(SCAN, "swing")[0] == -0.5 and desk.r_scanner({}, "swing")[0] is None
     assert abs(desk.r_pillars(ST, "intraday")[0] + 0.7) < 1e-9 and abs(desk.r_pillars(ST, "swing")[0] + 0.4) < 1e-9          # swing uses the six-factor model
     assert desk.r_pillars({"live_direction": {"score": None, "reason": "required pillars unavailable"}}, "intraday")[0] is None
+    v, d = desk.r_pillars({"live_direction": {"score": -0.28, "direction": "WAIT", "coverage": 5}}, "intraday")
+    assert abs(v + 0.28 / 0.30 * 0.5) < 1e-9 and "half strength" in d                                                    # an unconfirmed model never counts in full
     v, d = desk.r_intel(INTEL, "intraday")
     assert abs(v - (-2 / 3 - 1 - 1) / 3) < 1e-9 and "15m Bearish" in d and "45% buying" in d
     v, _ = desk.r_intel(INTEL, "swing")
@@ -66,7 +68,9 @@ def test_summary_links_plans_without_changing_them(desk):
     assert s["reads"]["intraday"]["score"] <= -50 and s["reads"]["intraday"]["label"] == "BEARISH" and s["reads"]["swing"]["label"] in ("BEARISH", "LEAN BEARISH")
     scalp, swing = s["plans"]
     assert scalp["fit"] == "NO_SIGNAL" and "SHORT signal would have the wider picture behind it" in scalp["text"] and scalp["to"] == "/scalping"
-    assert swing["fit"] == "AGAINST" and swing["status"] == "BUY" and swing["direction"] == "LONG" and swing["levels"]["entry"] == 64000 and "unchanged" in swing["text"]
+    assert swing["fit"] == "AGAINST" and swing["status"] == "BUY" and swing["direction"] == "LONG" and swing["levels"]["entry"] == 64000 and "signal and its checks are unchanged" in swing["text"]
+    assert scalp["playbook"] == {"day_type": "Trend down", "text": "Trend down: follow SHORT signals.", "to": "/scanner"} and "playbook" not in swing
+    assert "this SHORT plan" in desk.plan_link({"direction": "SHORT", "status": "PLAN ONLY"}, {"score": -60, "label": "BEARISH"}, "x", "/x")["text"]
     read = {"score": 40, "label": "LEAN BULLISH"}
     assert desk.plan_link({"direction": "LONG"}, read, "x", "/x")["fit"] == "AGREES" and desk.plan_link({"direction": "SHORT"}, read, "x", "/x")["fit"] == "AGAINST"
     assert desk.plan_link({"direction": "LONG"}, {"score": 5, "label": "NEUTRAL"}, "x", "/x")["fit"] == "MIXED" and desk.plan_link(None, {"score": None, "label": None}, "x", "/x")["fit"] == "UNKNOWN"

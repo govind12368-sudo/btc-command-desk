@@ -47,6 +47,8 @@ def r_pillars(st, view):
         return clamp(six["score"] / 0.30), f"Six-factor model {six['direction']} ({six['score']:+.2f}, {low(six.get('strength'))})"
     if live.get("score") is None:
         return None, low(live.get("reason")) or "No data"
+    if live.get("direction") == "WAIT":                   # tilt exists but the 15-minute confirmation is not complete: count it at half strength
+        return clamp(live["score"] / 0.30) * 0.5, f"Direction model not confirmed yet (tilt {live['score']:+.2f}, {live.get('coverage', 0)} of 5 pillars): counted at half strength"
     return clamp(live["score"] / 0.30), f"Direction model {live['direction']} ({live['score']:+.2f}, {live.get('coverage', 0)} of 5 pillars)"
 
 
@@ -66,7 +68,7 @@ def r_intel(I, view):
     else:
         e, m, r = I.get("etf") or {}, (I.get("macro") or {}).get("summary") or {}, I.get("risk") or {}
         if e.get("label"):
-            parts.append((f"ETF: {e['label'].lower()}", 1 if "buying" in e["label"] else -1 if "selling" in e["label"] else 0))
+            parts.append((f"ETF: {e['label'][0].lower() + e['label'][1:]}", 1 if "buying" in e["label"] else -1 if "selling" in e["label"] else 0))
         if m.get("label"):
             parts.append((f"Macro: {m['headwinds']} against, {m['tailwinds']} in favour", 1 if "favour" in m["label"] else -1 if "against" in m["label"] else 0))
         c, rc = (r.get("crash") or {}).get("score"), (r.get("recovery") or {}).get("score")
@@ -105,6 +107,7 @@ def plan_link(ev, read, name, to):
     d, sc = ev.get("direction"), read["score"]
     side = 1 if d == "LONG" else -1 if d == "SHORT" else 0
     lean = "bearish" if (sc or 0) <= -20 else "bullish" if (sc or 0) >= 20 else None
+    word = "signal" if ev.get("status") in ("BUY", "SELL") else "plan"
     if sc is None:
         fit, text = "UNKNOWN", "The market read has no data yet."
     elif side == 0:
@@ -112,11 +115,11 @@ def plan_link(ev, read, name, to):
         text = "No signal direction right now. " + (f"The market read leans {lean}: a {'SHORT' if lean == 'bearish' else 'LONG'} signal would have the wider picture behind it, a {'LONG' if lean == 'bearish' else 'SHORT'} signal would be going against it."
                                                     if lean else "The market read is mixed, so it favours neither side.")
     elif side * sc >= 20:
-        fit, text = "AGREES", f"The market read agrees with this {d} signal."
+        fit, text = "AGREES", f"The market read agrees with this {d} {word}."
     elif side * sc <= -20:
-        fit, text = "AGAINST", f"The market read is against this {d} signal. The signal and its checks are unchanged; treat this as a caution."
+        fit, text = "AGAINST", f"The market read is against this {d} {word}. The {word} and its checks are unchanged; treat this as a caution."
     else:
-        fit, text = "MIXED", f"The market read is mixed, so it neither supports nor opposes this {d} signal."
+        fit, text = "MIXED", f"The market read is mixed, so it neither supports nor opposes this {d} {word}."
     lv = ev.get("levels") or {}
     return {"name": name, "to": to, "status": ev.get("status"), "direction": d, "passed": ev.get("passed"), "total": ev.get("total_checks") or len(ev.get("checks") or []) or None,
             "fit": fit, "text": text, "read": read["score"], "read_label": read["label"],
@@ -176,6 +179,10 @@ def summary(st, scan, I, events):
     st = st or {}
     reads = {v: compose(v, {"scanner": r_scanner(scan, v), "pillars": r_pillars(st, v), "intel": r_intel(I, v), "news": r_news(I)}) for v in ("intraday", "swing")}
     cs = cards(st, scan, I, events)
+    plans = [plan_link(st.get("scalp"), reads["intraday"], "Scalping plan", "/scalping"), plan_link(st.get("swing"), reads["swing"], "Swing plan", "/swing")]
+    day = (scan or {}).get("day_type") or {}
+    if day.get("label") and (scan or {}).get("playbook"):
+        plans[0]["playbook"] = {"day_type": day["label"], "text": scan["playbook"], "to": "/scanner"}
     return {"updated": iso(now_utc()), "price": st.get("price"), "decision": (st.get("decision") or {}).get("decision"), "reads": reads, "weights": WEIGHTS,
-            "plans": [plan_link(st.get("scalp"), reads["intraday"], "Scalping plan", "/scalping"), plan_link(st.get("swing"), reads["swing"], "Swing plan", "/swing")],
+            "plans": plans,
             "cards": cs, "event_risk": next((c["event_risk"] for c in cs if c.get("event_risk")), None), "note": NOTE}

@@ -7,6 +7,7 @@ const NAME = { BULLISH: "Bullish", "LEAN BULLISH": "Lean bullish", NEUTRAL: "Neu
 const INK = { BULLISH: "text-teal-300", "LEAN BULLISH": "text-teal-300", NEUTRAL: "text-slate-300", "LEAN BEARISH": "text-red-300", BEARISH: "text-red-300" };
 const PILL = { BULLISH: "border-teal-500/40 bg-teal-500/10 text-teal-300", "LEAN BULLISH": "border-teal-500/30 bg-teal-500/5 text-teal-300", NEUTRAL: "border-slate-500/40 bg-slate-500/10 text-slate-300",
   "LEAN BEARISH": "border-red-500/30 bg-red-500/5 text-red-300", BEARISH: "border-red-500/40 bg-red-500/10 text-red-300" };
+const SHORT = { scanner: "Scanner", pillars: "Pillars", intel: "Intelligence", news: "News" };
 const signed = (v, d = 0) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}`);
 const Tone = ({ label }) => <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${PILL[label] || "border-slate-600 text-slate-500"}`}>{NAME[label] || "No data"}</span>;
 const open = "text-[12px] font-semibold text-amber-400 underline-offset-2 hover:text-amber-300 hover:underline";
@@ -45,7 +46,7 @@ function Read({ title, forPlan, r, plan }) {
       <div className="mt-1 flex justify-between text-[10.5px] text-slate-500"><span>−100 bearish</span><span>0</span><span>bullish +100</span></div>
 
       <div className="mt-3 flex h-6 gap-[2px]" role="img" aria-label={`Weight of each module: ${r.rows.map((x) => `${x.name} ${x.weight} percent`).join(", ")}`}>
-        {r.rows.map((x) => <div key={x.key} className={`flex items-center justify-center overflow-hidden rounded-sm text-[10.5px] font-semibold ${x.reading == null ? "bg-slate-800 text-slate-600" : "bg-slate-600/70 text-slate-100"}`} style={{ width: `${x.weight}%` }} title={`${x.name}: weight ${x.weight}%`}>{x.weight}%</div>)}
+        {r.rows.map((x) => <div key={x.key} className={`flex items-center justify-center overflow-hidden rounded-sm text-[10.5px] font-semibold ${x.reading == null ? "bg-slate-800 text-slate-600" : "bg-slate-600/70 text-slate-100"}`} style={{ width: `${x.weight}%` }} title={`${x.name}: weight ${x.weight}%`}>{x.weight >= 20 ? `${SHORT[x.key]} ${x.weight}%` : SHORT[x.key]}</div>)}
       </div>
       <div className="mt-2 overflow-x-auto scroll-thin">
         <table className="desk-table">
@@ -70,6 +71,7 @@ function Read({ title, forPlan, r, plan }) {
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${fit[1]}`}>{fit[0]}</span>
         </div>
         <p className="mt-1.5 text-[12.5px] leading-snug text-slate-300">{plan.text}</p>
+        {plan.playbook && <p className="mt-1.5 text-[12.5px] leading-snug text-slate-300">Day type now: <Link to={plan.playbook.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{plan.playbook.day_type}</Link>. {plan.playbook.text}</p>}
         {plan.levels && <p className="mt-1 font-mono text-[12px] text-slate-300">Entry {n(plan.levels.entry, 1)} · Stop {n(plan.levels.stop, 1)} · Target {n(plan.levels.target, 1)}</p>}
         <Link to={plan.to} className={`mt-2 inline-block ${open}`} data-testid={`open-${r.view}-plan`}>Open the {plan.name.toLowerCase()}</Link>
       </div>}
