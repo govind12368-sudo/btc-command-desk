@@ -337,6 +337,12 @@ def test_backtest_report(intel):
     many = [(50, k % 10 < 8, -0.2) if k % 6 == 0 else (10, False, 0.0) for k in range(600)]                      # 100 separate warnings, 80% followed by the fall
     assert i3._metrics(many, 41, 0.13)["proven"] and i3._metrics(many, 41, 0.13)["episodes"] == 100
     assert "unproven" in i3._verdict("crash", {"days": 100, "base_rate": 0.2, "warn41": {**m, "warnings": 30, "episodes": 9}})
+    good = {"days": 600, "base_rate": 0.1, "warn41": i3._metrics(many, 41, 0.1)}
+    bad_val = {"days": 600, "base_rate": 0.1, "warn41": {"warnings": 21, "precision": 0.0, "episodes": 9}}
+    assert "larger than chance" in i3._verdict("crash", good, {"days": 600, "base_rate": 0.1, "warn41": {"warnings": 21, "precision": 0.3}})
+    assert "caution flag" in i3._verdict("crash", good, bad_val)                                                # an unseen period that failed is never hidden
+    res = {"available": 97}
+    assert i3._confidence(res, good, bad_val)[0] == "LOW" and i3._confidence(res, good, None)[0] == "HIGH" and i3._confidence({"available": 50}, good)[0] == "LOW"
     with pytest.raises(RuntimeError):
         i3.run_backtest({**H, "klines": H["klines"][:500]})
     rows = i3.build_days(H)

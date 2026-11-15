@@ -196,7 +196,7 @@ def crash_items(f, thr, live=None):
     falling = f.get("ema50_prev5") is not None and f["ema50"] is not None and f["ema50"] < f["ema50_prev5"]
     d7 = None if f.get("fng") is None or f.get("fng_7") is None else f["fng"] - f["fng_7"]
     return {
-        "technical": [I("Support broken", 10, brk is not None if ok else None, f"Price {c:,.0f} closed below the 20-day low {brk['level']:,.0f}" if brk else f"Price {c:,.0f} is holding above the 20-day low {f.get('low20') or 0:,.0f}"),
+        "technical": [I("Support broken", 10, brk is not None if ok else None, f"Price {c:,.0f} is below the 20-day low {brk['level']:,.0f}" if brk else f"Price {c:,.0f} is holding above the 20-day low {f.get('low20') or 0:,.0f}"),
                       I("Break on heavy volume", 5, None if not ok or (brk and brk["vol"] is None) else bool(brk and brk["vol"] >= 1.3), f"The break came on {brk['vol']:.1f}x normal volume" if brk and brk["vol"] else "No support break on heavy volume"),
                       I("Long trend down", 5, None if f.get("ema200") is None or f.get("ema50_prev5") is None else below and falling,
                         f"Price is {'below' if below else 'above'} the 200-day average {f.get('ema200') or 0:,.0f}; the 50-day average is {'falling' if falling else 'rising'}")],
@@ -322,13 +322,23 @@ def _split_report(pairs, bands_p, base_train, crash):
             "bands": [{"band": name, "days": sum(1 for s, _, _ in pairs if band(s) == name), "events": sum(1 for s, e, _ in pairs if band(s) == name and e)} for _, name in BANDS]}
 
 
-def _verdict(kind, t):
+def _failed(v):
+    """True when the validation period had enough warnings and they did no better than an ordinary day."""
+    w = (v or {}).get("warn41") or {}
+    return (w.get("warnings") or 0) >= 10 and (w.get("precision") or 0) <= (v.get("base_rate") or 0)
+
+
+def _verdict(kind, t, v=None):
     w, word = t["warn41"], "fall" if kind == "crash" else "rise"
     if not t["days"]:
         return "No test days yet."
     if w["warnings"] < 20 or w["episodes"] < 8:
         return f"In the test period the score reached 41 or more on {w['warnings']} of {t['days']} days, in {w['episodes']} separate warning periods: too few to judge. Treat the score as unproven."
     msg = f"In the unseen test period a score of 41 or more was followed by a 10% {word} within 7 days on {w['precision'] * 100:.0f}% of days, against {t['base_rate'] * 100:.0f}% on an ordinary day"
+    if w["proven"] and _failed(v):
+        vw = v["warn41"]
+        return msg + (f" ({w['lift']:.1f} times the normal rate). But in the validation period before it, the same warnings were followed by the {word} on {vw['precision'] * 100:.0f}% of {vw['warnings']} warning days,"
+                      f" against {v['base_rate'] * 100:.0f}% normally. The two periods disagree, so treat the score as a caution flag, not a proven signal.")
     if w["proven"]:
         return msg + f" ({w['lift']:.1f} times the normal rate). With {w['episodes']} separate warning periods the gap is larger than chance alone would explain." + (" Most warnings were still false alarms." if w["precision"] < 0.5 else "")
     return msg + f". With {w['episodes']} separate warning periods that gap is within what chance alone can produce, so treat the score as unproven."
@@ -368,7 +378,7 @@ def run_backtest(H):
                 d = [e for s, e, _ in tr if band(s) == name]
                 bp[name] = (sum(d) + 20 * base) / (len(d) + 20)
             out[kind][str(h)] = {"band_prob": bp, **{name: _split_report(pairs(idx), bp, base, k == 0) for name, idx in parts.items()}}
-        out[kind]["verdict"] = _verdict(kind, out[kind][str(MAIN_H)]["test"])
+        out[kind]["verdict"] = _verdict(kind, out[kind][str(MAIN_H)]["test"], out[kind][str(MAIN_H)]["validation"])
     span = lambda idx: {"from": rows[idx[0]]["date"], "to": rows[idx[-1]]["date"], "days": len(idx)} if idx else {"from": None, "to": None, "days": 0}
     have = lambda k: any(r.get(k) is not None for r in rows[-400:])
     missing = [label for label, k in (("ETF flows", "etf5"), ("Core inflation", "core"), ("2-year yield", "y2_chg20"), ("Dollar index", "usd_chg20"), ("Net liquidity", "liq_chg4w"),
@@ -380,7 +390,7 @@ def run_backtest(H):
 
 
 # ------------------------------------------------------------------ live scores
-def _confidence(res, test):
+def _confidence(res, test, val=None):
     cover = res["available"] / 100
     w = (test or {}).get("warn41") or {}
     if cover < 0.6:
@@ -389,6 +399,8 @@ def _confidence(res, test):
         return "LOW", "The test period had too few warnings to prove the score."
     if not w.get("proven"):
         return "LOW", "In the test period the score was not clearly better than chance."
+    if _failed(val):
+        return "LOW", "The score worked in the test period but failed in the validation period before it."
     if w["lift"] >= 2 and w["episodes"] >= 20 and cover >= 0.85:
         return "HIGH", f"In the test period warnings were followed by the move {w['lift']:.1f} times as often as normal."
     return "MEDIUM", f"In the test period warnings were followed by the move {w['lift']:.1f} times as often as normal."
@@ -405,7 +417,7 @@ def risk_view(rows, thr, report, live, prev=None):
             out[kind] = None
             continue
         h = ((report or {}).get(kind) or {}).get(str(MAIN_H)) or {}
-        conf, why = _confidence(res, h.get("test"))
+        conf, why = _confidence(res, h.get("test"), h.get("validation"))
         bname = band(tested["score"])
         row = lambda part: next((x for x in ((h.get(part) or {}).get("bands") or []) if x["band"] == bname), None)
         reasons = sorted(({"group": g["label"], "text": x["text"], "points": x["max"], "tested": g["tested"]} for g in res["groups"] for x in g["items"] if x["on"]), key=lambda x: -x["points"])
@@ -584,7 +596,7 @@ async def load_liq_est():
                         "assumptions": [f"New positions use this leverage mix: {', '.join(f'{lev}x {int(w * 100)}%' for lev, w in TIERS)}.", f"Maintenance margin {MMR * 100:.1f}%.",
                                         "Every rise in open interest is counted as equal new longs and new shorts at that hour's average price.",
                                         f"Only positions opened in the last {len(oi) // 24} days on Binance are modelled. Older positions and other exchanges are not."],
-                        "note": "ESTIMATED. Exchanges do not publish traders' real liquidation prices, so these zones are a model built on the assumptions listed. Use them as a rough map, not as fact."}
+                        "note": "Exchanges do not publish traders' real liquidation prices, so these zones are a model built on the assumptions listed. Use them as a rough map, not as fact."}
 
 
 # ------------------------------------------------------------------ wiring
