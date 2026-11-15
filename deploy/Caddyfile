@@ -23,7 +23,9 @@
 		root * /srv
 		@static path /static/*
 		header @static Cache-Control "public, max-age=31536000, immutable"
-		@shell path / /index.html /sw.js /manifest.json
+		# Everything else is the app shell (every page address returns index.html): always re-check it,
+		# so a new version shows on the next page load instead of hours later.
+		@shell not path /static/*
 		header @shell Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
