@@ -33,6 +33,7 @@ import daytype
 import scanner
 import webpush
 import intel
+import desk
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1028,6 +1029,14 @@ async def push_test(u=Depends(admin_user)):
 
 
 # ---------------- Market Intelligence ----------------
+@api.get("/desk-summary")
+async def desk_summary(u=Depends(current_user)):
+    """Dashboard summary of every module with its weight. Read-only: it never touches signals or settings."""
+    ev = list((REGISTRY["bls"].data or {}).get("events", [])) if "bls" in REGISTRY else []
+    ev += [x async for x in db.manual_events.find({}, {"_id": 0, "title": 1, "scheduled_utc": 1, "impact": 1})]
+    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev)
+
+
 @api.get("/intel")
 async def intel_get(u=Depends(current_user)):
     return intel.public()

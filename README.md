@@ -201,3 +201,10 @@ Monitoring and decision support only; it places no orders.
   Rules and weights are fixed in the code; only the top/bottom-fifth cut-offs are learned, from the training period.
 - FRED key: Settings → "Market Intelligence: FRED key". The key is tested before it is stored (`db.intel_cfg`) and no route
   returns it. Without a key the macro panel falls back to FRED's public chart download.
+
+## BTC Dashboard summary (`backend/desk.py`, `/api/desk-summary`)
+
+The dashboard opens with a "Market read and weightage" card: BTC Scanner, Five Pillars, Market Intelligence and
+News & Events each give a reading from -1 to +1, weighted 30/30/30/10 for the intraday read (scalping plan) and
+25/25/40/10 for the swing read. The card shows how each read sits against the current scalp and swing signal and links
+to every page. It is read-only: it never changes a signal, a check or a setting, and the total is not backtested.
