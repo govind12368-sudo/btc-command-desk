@@ -191,7 +191,7 @@ Monitoring and decision support only; it places no orders.
 
 - Phase 1 (`backend/intel.py`, `backend/ta.py`): technical engine on 7 timeframes, spot pressure, derivatives on 5 venues,
   exchange-reported liquidations, correlations and the calibrated forecast panel.
-- Phase 2 (`backend/intel2.py`): US macro from FRED, US spot-ETF flows (Bitbo, cross-checked against Farside), free on-chain
+- Phase 2 (`backend/intel2.py`): US macro from FRED, US spot-ETF flows (Farside, cross-checked against Bitbo, which is also the backup), free on-chain
   data (blockchain.com, mempool.space, Coin Metrics community, DefiLlama) and sentiment (Fear & Greed, news tone).
   Paid-only metrics are listed as "Needs API key", never estimated. Phase 2 panels do not change the forecast.
 - FRED key: Settings → "Market Intelligence: FRED key". The key is tested before it is stored (`db.intel_cfg`) and no route

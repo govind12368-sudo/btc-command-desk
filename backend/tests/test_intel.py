@@ -162,7 +162,7 @@ def test_macro_rows_and_summary(intel):
     m = {x[0]: x for x in i2.MACRO}
     cpi = [("2025-%02d-01" % k, 300.0) for k in range(1, 13)] + [("2026-01-01", 309.0), ("2026-02-01", 312.0)]
     r = i2.macro_row(*m["cpi"], cpi)
-    assert abs(r["value"] - 4.0) < 1e-9 and abs(r["previous"] - 3.0) < 1e-9 and r["date"] == "2026-02-01"      # year-on-year, not the raw index
+    assert abs(r["value"] - 4.0) < 1e-9 and abs(r["previous"] - 3.0) < 1e-9 and r["date"] == "2026-02-01" and r["freq"] == "M"      # year-on-year, not the raw index
     nfp = i2.macro_row(*m["nfp"], [("2026-01-01", 159000.0), ("2026-02-01", 159150.0), ("2026-03-01", 159100.0)])
     assert nfp["value"] == -50.0 and nfp["previous"] == 150.0                                                    # monthly change in thousand jobs
     with pytest.raises(RuntimeError):
@@ -170,8 +170,8 @@ def test_macro_rows_and_summary(intel):
     assert i2.parse_fred_json({"observations": [{"date": "2026-01-01", "value": "."}, {"date": "2026-01-02", "value": "4.1"}]}) == [("2026-01-02", 4.1)]
     assert i2.parse_fred_csv("observation_date,DGS10\n2026-01-01,\n2026-01-02,4.25\n") == [("2026-01-02", 4.25)]
     nl = i2.net_liquidity({"fed_assets": [("2026-01-07", 7_000_000.0), ("2026-01-14", 7_000_000.0)], "tga": [("2026-01-07", 800_000.0), ("2026-01-14", 700_000.0)],
-                           "rrp": [("2026-01-07", 100.0), ("2026-01-13", 50.0), ("2026-01-14", 90.0)]})
-    assert nl == [("2026-01-07", 6_100_000.0), ("2026-01-14", 6_210_000.0)]                                      # RRP is in billions, the others in millions
+                           "rrp": [("2026-01-07", 100.0), ("2026-01-13", 90.0)]})
+    assert nl == [("2026-01-07", 6_100_000.0), ("2026-01-14", 6_210_000.0)]                                      # RRP is in billions; a holiday uses the last value
     hist = lambda a, b: [{"d": str(k), "v": a} for k in range(25)] + [{"d": "x", "v": b}]
     rows = [{"key": "y10", "status": "OK", "value": 4.6, "change": 0.01, "history": hist(4.2, 4.6)}, {"key": "usd", "status": "OK", "value": 125.0, "change": 0.1, "history": hist(123.0, 125.0)},
             {"key": "fed_funds", "status": "OK", "value": 4.0, "change": -0.25, "history": []}, {"key": "cpi", "status": "UNAVAILABLE"}]
@@ -209,11 +209,17 @@ def test_etf_summary_and_farside(intel):
     s = i2.etf_summary(rows)
     assert s["streak"] == {"days": 2, "side": "OUTFLOW"} and abs(s["sum_5d"] + 290.5) < 1e-9 and s["sum_10d"] is None and "selling" in s["label"]
     assert i2.etf_summary([]) is None
-    html = "<table><tr><th>Date</th><th>IBIT</th><th>Total</th></tr><tr><td>12 Nov 2026</td><td>(50.0)</td><td>(80.5)</td></tr><tr><td>11 Nov 2026</td><td>1,200.0</td><td>1,300.0</td></tr>" \
-           "<tr><td>10 Nov 2026</td><td>-</td><td>10.0</td></tr><tr><td>Total</td><td>9</td><td>99</td></tr><tr><td>13 Nov 2026</td><td>-</td><td>-</td></tr></table>"
-    assert i2.parse_farside(html) == {"2026-11-12": -80.5, "2026-11-11": 1300.0, "2026-11-10": 10.0}             # brackets are outflows; unpublished days are skipped
+    html = "<table><tr><th></th><th>IBIT</th><th>FBTC</th><th>Total</th></tr><tr><td>Fee</td><td>0.25%</td><td>0.25%</td><td></td></tr>" \
+           "<tr><td>12 Nov 2026</td><td>(50.0)</td><td>(30.5)</td><td>(80.5)</td></tr><tr><td>11 Nov 2026</td><td>1,200.0</td><td>100.0</td><td>1,300.0</td></tr>" \
+           "<tr><td>10 Nov 2026</td><td>0.0</td><td>10.0</td><td>10.0</td></tr><tr><td>Total</td><td>9</td><td>9</td><td>99</td></tr><tr><td>13 Nov 2026</td><td>-</td><td>-</td><td>-</td></tr></table>"
+    tot, funds = i2.parse_farside(html)
+    assert tot == {"2026-11-12": -80.5, "2026-11-11": 1300.0, "2026-11-10": 10.0}                                 # brackets are outflows; unpublished days are skipped
+    assert funds["2026-11-12"] == {"IBIT": -50.0, "FBTC": -30.5} and funds["2026-11-10"] == {"FBTC": 10.0}
     with pytest.raises(RuntimeError):
         i2.parse_farside("<html>Just a moment...</html>")
+    c = i2.etf_compare(tot, {"2026-11-12": -80.0, "2026-11-11": 24.9, "2026-11-01": 5.0})
+    assert c["days_compared"] == 2 and [m["date"] for m in c["mismatches"]] == ["2026-11-11"] and "differs" in c["text"]
+    assert "agrees" in i2.etf_compare(tot, {"2026-11-12": -80.0})["text"]
 
 
 def test_onchain_and_sentiment(intel):

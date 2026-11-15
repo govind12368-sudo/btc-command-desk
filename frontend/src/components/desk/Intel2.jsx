@@ -33,6 +33,10 @@ function Spark({ data, label }) {
 const macroVal = (r, v) => (v == null ? "—" : r.unit === "USD million" ? `$${n(v / 1e6, 3)}T` : r.unit === "USD billion" ? `$${n(v, 1)}B` : r.unit === "thousand jobs" ? `${sign(v, 0)}K` : r.unit === "index" ? n(v, 2) : `${n(v, 2)}%`);
 const macroChg = (r) => (r.unit === "USD million" ? `${sign(r.change / 1e3, 1)}B` : r.unit === "USD billion" ? `${sign(r.change, 1)}B` : r.unit === "thousand jobs" ? `${sign(r.change, 0)}K` : sign(r.change, 2));
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Monthly and quarterly figures are dated by FRED on the first day of their period: show the period instead.
+const period = (r) => { const [y, mo] = (r.date || "").split("-"); return r.freq === "M" ? `${MONTHS[+mo - 1]} ${y}` : r.freq === "Q" ? `Q${Math.floor((+mo - 1) / 3) + 1} ${y}` : r.date; };
+
 export function Macro({ m }) {
   if (!m) return <Card title="US economy and interest rates" testid="intel-macro"><Wait what="Macro data" /></Card>;
   const s = m.summary;
@@ -45,10 +49,10 @@ export function Macro({ m }) {
       </div>}
       <div className="overflow-x-auto scroll-thin">
         <table className="desk-table">
-          <thead><tr><th>Measure</th><th className="num">Latest</th><th className="num">Before</th><th className="num">Change</th><th>Trend</th><th>As of</th><th>Why it matters</th></tr></thead>
+          <thead><tr><th>Measure</th><th className="num">Latest</th><th className="num">Before</th><th className="num">Change</th><th>Trend</th><th>Data for</th><th>Why it matters</th></tr></thead>
           <tbody>{m.rows.map((r) => r.status === "OK"
             ? <tr key={r.key}><td className="whitespace-nowrap font-semibold">{r.label}</td><td className="num font-mono">{macroVal(r, r.value)}</td><td className="num font-mono text-slate-400">{macroVal(r, r.previous)}</td>
-              <td className="num font-mono text-slate-200">{macroChg(r)}</td><td><Spark data={r.history} label={`${r.label} recent history`} /></td><td className="whitespace-nowrap font-mono text-[11.5px] text-slate-400">{r.date}</td><td className="min-w-[220px] text-[12px] text-slate-400">{r.why}</td></tr>
+              <td className="num font-mono text-slate-200">{macroChg(r)}</td><td><Spark data={r.history} label={`${r.label} recent history`} /></td><td className="whitespace-nowrap font-mono text-[11.5px] text-slate-400">{period(r)}</td><td className="min-w-[220px] text-[12px] text-slate-400">{r.why}</td></tr>
             : <tr key={r.key}><td className="font-semibold">{r.label}</td><td colSpan={6} className="text-[12px] text-amber-300">Unavailable: {r.reason}</td></tr>)}</tbody>
         </table>
       </div>
@@ -65,10 +69,11 @@ export function Etf({ e }) {
   const c = e.cross_check || {};
   return (
     <Card title="Spot Bitcoin ETF flows (US)" sub="Money going into or out of the US spot Bitcoin ETFs each trading day. Inflows mean funds must buy BTC." testid="intel-etf">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <Fig label={`Latest day (${e.latest.date})`} value={flow(e.latest.total_musd)} cls={tone(e.latest.total_musd)} />
         <Fig label="Last 5 trading days" value={flow(e.sum_5d)} cls={tone(e.sum_5d)} sub={e.label} />
         <Fig label="Last 10 trading days" value={flow(e.sum_10d)} cls={tone(e.sum_10d)} />
+        <Fig label="Last 20 trading days" value={flow(e.sum_20d)} cls={tone(e.sum_20d)} />
         <Fig label="Current run" value={e.streak.side === "FLAT" ? "—" : `${e.streak.days} day${e.streak.days === 1 ? "" : "s"}`} cls={e.streak.side === "INFLOW" ? "text-teal-300" : e.streak.side === "OUTFLOW" ? "text-red-300" : "text-slate-300"} sub={e.streak.side === "INFLOW" ? "of inflows in a row" : e.streak.side === "OUTFLOW" ? "of outflows in a row" : null} />
       </div>
       {hist.length > 1 && <>
@@ -84,8 +89,8 @@ export function Etf({ e }) {
       </>}
       {funds.length > 0 && <p className="mt-2 text-[12px] text-slate-300">Latest day by fund: {funds.slice(0, 8).map(([k, v]) => <span key={k} className="mr-3 whitespace-nowrap">{k} <span className={`font-mono ${tone(v)}`}>{flow(v)}</span></span>)}</p>}
       <p className={`mt-2 text-[12px] ${c.status === "OK" ? (c.mismatches?.length ? "text-amber-300" : "text-teal-300") : "text-slate-400"}`}>
-        Second-source check: {c.status === "OK" ? c.text : `Farside could not be read (${c.reason || "no answer"}), so these figures rest on one source.`}
-        {c.mismatches?.length > 0 && ` ${c.mismatches.map((x) => `${x.date}: Bitbo ${flow(x.bitbo)}, Farside ${flow(x.farside)}`).join("; ")}.`}
+        Second-source check: {c.status === "OK" ? c.text : `${c.reason || "the second source did not answer"}.`}
+        {c.mismatches?.length > 0 && ` Examples: ${c.mismatches.map((x) => `${x.date} shown ${flow(x.primary)}, other source ${flow(x.second)}`).join("; ")}.`}
       </p>
       <Src>Source: {e.source} · updated {ago(e.updated)}. {e.note}</Src>
     </Card>

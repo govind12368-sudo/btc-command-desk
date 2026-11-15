@@ -108,7 +108,9 @@ def macro_row(key, sid, label, kind, unit, why, obs):
     if len(vals) < 2:
         raise RuntimeError("not enough history")
     (d1, v1), (d0, v0) = vals[-1], vals[-2]
-    return {"key": key, "series": sid, "label": label, "unit": unit, "why": why, "status": "OK", "value": v1, "date": d1, "previous": v0, "previous_date": d0, "change": v1 - v0,
+    gaps = sorted((datetime.strptime(b[0], "%Y-%m-%d") - datetime.strptime(a[0], "%Y-%m-%d")).days for a, b in zip(obs[-7:], obs[-6:]))
+    gap = gaps[len(gaps) // 2] if gaps else 1
+    return {"freq": "Q" if gap >= 80 else "M" if gap >= 25 else "W" if gap >= 6 else "D", "key": key, "series": sid, "label": label, "unit": unit, "why": why, "status": "OK", "value": v1, "date": d1, "previous": v0, "previous_date": d0, "change": v1 - v0,
             "history": [{"d": d, "v": v} for d, v in vals[-60:]]}
 
 
@@ -143,10 +145,16 @@ def macro_summary(rows):
 
 
 def net_liquidity(series):
-    """Fed assets minus the Treasury account minus reverse repo, on the weekly dates all three exist (USD million)."""
-    a, t, rr = (dict(series.get(k) or []) for k in ("fed_assets", "tga", "rrp"))
-    days = sorted(set(a) & set(t) & set(rr))
-    return [(d, a[d] - t[d] - rr[d] * 1000) for d in days]
+    """Fed assets minus the Treasury account minus reverse repo, on the weekly dates of the first two (USD million).
+    Reverse repo is daily and has no value on holidays, so the last value within a week before the date is used."""
+    a, t = (dict(series.get(k) or []) for k in ("fed_assets", "tga"))
+    rr = sorted(series.get("rrp") or [])
+    out = []
+    for d in sorted(set(a) & set(t)):
+        prior = [(x, v) for x, v in rr if x <= d]
+        if prior and (datetime.strptime(d, "%Y-%m-%d") - datetime.strptime(prior[-1][0], "%Y-%m-%d")).days <= 7:
+            out.append((d, a[d] - t[d] - prior[-1][1] * 1000))
+    return out
 
 
 async def load_macro():
@@ -201,26 +209,39 @@ async def macro_loop():
 
 
 # ------------------------------------------------------------------ ETF flows
+def _fs_num(x):
+    """Farside number: '1,234.5' is an inflow, '(95.0)' an outflow; '-' or blank means not published."""
+    m = re.match(r"^\(?(-?[\d,]+\.?\d*)\)?$", x or "")
+    if not m:
+        return None
+    v = float(m.group(1).replace(",", ""))
+    return -abs(v) if x.startswith("(") else v
+
+
 def parse_farside(html):
-    """Farside daily table: first cell '11 Jan 2024', last cell the total in USD million, negatives in brackets."""
+    """Farside daily table -> ({day: total}, {day: {fund: flow}}), USD million. First cell '11 Jan 2024', last cell the total."""
     html = re.sub(r"<script.*?</script>|<style.*?</style>", "", html, flags=re.S)
-    out = {}
+    totals, funds, head = {}, {}, None
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S):
-        c = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", x)).strip() for x in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)]
+        c = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", x)).replace("&nbsp;", " ").strip() for x in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)]
         if len(c) < 3:
+            continue
+        if head is None and "IBIT" in c and c[-1].lower().startswith("total"):
+            head = c
             continue
         try:
             d = datetime.strptime(c[0], "%d %b %Y").date()
         except ValueError:
             continue
-        m = re.match(r"^\(?(-?[\d,]+\.?\d*)\)?$", c[-1])
-        if not m or d > now_utc().date():
+        v = _fs_num(c[-1])
+        if v is None or d > now_utc().date():
             continue
-        v = float(m.group(1).replace(",", ""))
-        out[d.isoformat()] = -abs(v) if c[-1].startswith("(") else v
-    if len(out) < 3:
+        totals[d.isoformat()] = v
+        if head and len(head) == len(c):
+            funds[d.isoformat()] = {k: x for k, x in ((k, _fs_num(x)) for k, x in zip(head[1:-1], c[1:-1])) if x}
+    if len(totals) < 3:
         raise RuntimeError("Farside table not readable (layout changed or automated access blocked)")
-    return out
+    return totals, funds
 
 
 def etf_summary(rows):
@@ -236,30 +257,52 @@ def etf_summary(rows):
             break
     s5 = sum(tot[:5]) if len(tot) >= 5 else None
     label = "No clear flow" if s5 is None or abs(s5) < 100 else "Steady buying by ETF investors" if s5 > 0 else "Steady selling by ETF investors"
-    return {"latest": rows[0], "sum_5d": s5, "sum_10d": sum(tot[:10]) if len(tot) >= 10 else None, "days": len(tot),
+    return {"latest": rows[0], "sum_5d": s5, "sum_10d": sum(tot[:10]) if len(tot) >= 10 else None, "sum_20d": sum(tot[:20]) if len(tot) >= 20 else None, "days": len(tot),
             "streak": {"days": streak, "side": "INFLOW" if sign > 0 else "OUTFLOW" if sign < 0 else "FLAT"}, "label": label}
+
+
+def etf_compare(primary, second, a="Farside", b="Bitbo", days=10):
+    """Compare the two tables on the latest days both publish. A gap above $5M and 3% counts as a mismatch."""
+    both = [(d, primary[d], second[d]) for d in sorted(set(primary) & set(second), reverse=True)[:days]]
+    bad = [{"date": d, "primary": x, "second": y} for d, x, y in both if abs(x - y) > max(5.0, 0.03 * abs(x))]
+    text = "No common days to compare yet" if not both else f"{b} agrees with {a} on all {len(both)} latest common days" if not bad else \
+        f"{b} differs from {a} on {len(bad)} of the {len(both)} latest common days. {b} fills in fund by fund and is often incomplete for recent days, so {a} is the one shown."
+    return {"status": "OK", "days_compared": len(both), "mismatches": bad[:5], "text": text}
 
 
 async def load_etf():
     import sources
-    d = await sources.bitbo_etf()
-    rows = d["rows"]
-    for r in rows:
-        await db.intel_etf.update_one({"_id": r["date"]}, {"$set": {"total_musd": r["total_musd"], "funds": r["funds"], "source": "bitbo"}}, upsert=True)
-    hist = [{"date": x["_id"], "total_musd": x["total_musd"]} async for x in db.intel_etf.find({}, {"total_musd": 1}).sort("_id", -1).limit(60)]
-    check = {"status": "UNAVAILABLE", "reason": None}
+    fs, bb = await asyncio.gather(get("https://farside.co.uk/bitcoin-etf-flow-all-data/"), sources.bitbo_etf(), return_exceptions=True)
     try:
-        fs = parse_farside((await get("https://farside.co.uk/bitcoin-etf-flow-all-data/")).text)
-        both = [(r["date"], r["total_musd"], fs[r["date"]]) for r in rows if r["date"] in fs]
-        bad = [{"date": a, "bitbo": b, "farside": c} for a, b, c in both if abs(b - c) > max(5.0, 0.03 * abs(c))]
-        check = {"status": "OK", "days_compared": len(both), "mismatches": bad, "text": "No common days to compare yet" if not both else
-                 f"Farside agrees with Bitbo on all {len(both)} common days" if not bad else f"Farside differs from Bitbo on {len(bad)} of {len(both)} days"}
+        if isinstance(fs, Exception):
+            raise fs
+        fs_tot, fs_funds = parse_farside(fs.text)
         intel.mark("etf_farside")
     except Exception as e:
-        check["reason"] = str(e)[:140]
+        fs_tot, fs_funds = None, {}
         intel.mark("etf_farside", False, e)
-    STATE["etf"] = {**etf_summary(rows), "rows": rows, "history": hist[::-1], "unit": "USD million net flow per day (US spot Bitcoin ETFs)", "source": d["source_note"],
-                    "cross_check": check, "updated": iso(now_utc()), "note": "Flows are published after the US market closes, so the latest row is the last finished US trading day."}
+    bb_tot = None if isinstance(bb, Exception) else {r["date"]: r["total_musd"] for r in bb["rows"]}
+    intel.mark("etf_bitbo", bb_tot is not None, bb if bb_tot is None else None)
+    if fs_tot:
+        for d in sorted(fs_tot)[-90:]:
+            await db.intel_etf.update_one({"_id": d}, {"$set": {"total_musd": fs_tot[d], "funds": fs_funds.get(d, {}), "source": "farside"}}, upsert=True)
+        src, name = "Farside Investors daily flow table", "farside"
+        check = etf_compare(fs_tot, bb_tot) if bb_tot else {"status": "UNAVAILABLE", "reason": "Bitbo could not be read: " + str(bb)[:100]}
+    elif bb_tot:
+        for r in bb["rows"]:                              # never overwrite a day Farside already supplied
+            cur = await db.intel_etf.find_one({"_id": r["date"]})
+            if not cur or cur.get("source") != "farside":
+                await db.intel_etf.update_one({"_id": r["date"]}, {"$set": {"total_musd": r["total_musd"], "funds": {}, "source": "bitbo"}}, upsert=True)
+        src, name = "Bitbo ETF flow table (backup source; recent days can be incomplete)", "bitbo"
+        check = {"status": "UNAVAILABLE", "reason": "Farside could not be read, so these figures rest on Bitbo alone and recent days may be incomplete"}
+    else:
+        raise RuntimeError("neither Farside nor Bitbo could be read")
+    rows = [{"date": x["_id"], "total_musd": x["total_musd"], "funds": x.get("funds") or {}, "source": x.get("source")} async for x in db.intel_etf.find({}).sort("_id", -1).limit(60)]
+    if name == "bitbo":
+        rows = [r for r in rows if r["date"] in bb_tot] or rows
+    STATE["etf"] = {**etf_summary(rows), "history": [{"date": r["date"], "total_musd": r["total_musd"]} for r in rows[::-1]], "unit": "USD million net flow per day (US spot Bitcoin ETFs)",
+                    "source": src, "primary": name, "cross_check": check, "updated": iso(now_utc()),
+                    "note": "Flows are published after the US market closes, so the latest row is the last finished US trading day that has been published."}
 
 
 # ------------------------------------------------------------------ on-chain
@@ -312,7 +355,7 @@ async def load_onchain():
     jobs = {
         "addresses": (_bc_chart("n-unique-addresses"), "Active addresses", "addresses a day", "blockchain.com", "More active addresses means more real use of the network."),
         "tx": (_bc_chart("n-transactions"), "Transactions", "a day", "blockchain.com", "Network activity."),
-        "hashrate": (_bc_chart("hash-rate"), "Hash rate", "TH/s", "blockchain.com", "Miner computing power. A sharp fall can mean miners are under stress."),
+        "hashrate": (_bc_chart("hash-rate"), "Hash rate", "EH/s", "blockchain.com", "Miner computing power. A sharp fall can mean miners are under stress."),
         "miner_rev": (_bc_chart("miners-revenue"), "Miner revenue", "USD a day", "blockchain.com", "Falling revenue can force miners to sell coins."),
         "volume": (_bc_chart("estimated-transaction-volume-usd"), "On-chain transfer volume", "USD a day", "blockchain.com (estimate by blockchain.com)", "Value moved on the chain."),
         "stables": (_stablecoins(), "Stablecoin supply (all chains)", "USD", "DefiLlama", "Growing stablecoin supply is new buying power for crypto."),
@@ -328,6 +371,8 @@ async def load_onchain():
         try:
             if isinstance(r, Exception):
                 raise r
+            if k == "hashrate":                              # blockchain.com reports TH/s; 1 EH/s = 1,000,000 TH/s
+                r = [(d, v / 1e6 if v is not None else None) for d, v in r]
             row = series_row(label, r, unit, src, why, digits=2 if k == "mvrv" else 0)
             ok[k] = row
         except Exception as e:
@@ -399,8 +444,9 @@ def public():
 
 def register():
     reg("macro", "US macro data (FRED, St. Louis Fed)", "macro", "Refreshed every hour; most series change daily, weekly or monthly")
-    reg("etf", "US spot Bitcoin ETF flows (Bitbo)", "etf", "Published after the US market closes")
-    reg("etf_farside", "ETF flow cross-check (Farside)", "etf", "Second source, used only to confirm Bitbo")
+    reg("etf", "US spot Bitcoin ETF flows (summary)", "etf", "Published after the US market closes")
+    reg("etf_farside", "Farside ETF flow table (main source)", "etf")
+    reg("etf_bitbo", "Bitbo ETF flow table (second source)", "etf", "Used to cross-check Farside, and as backup")
     reg("onchain", "On-chain data (blockchain.com, mempool.space, Coin Metrics, DefiLlama)", "onchain", "Daily figures, one day late")
     reg("sentiment", "Sentiment (Fear & Greed, news tone)", "sentiment")
 
