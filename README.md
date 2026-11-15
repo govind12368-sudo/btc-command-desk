@@ -194,5 +194,10 @@ Monitoring and decision support only; it places no orders.
 - Phase 2 (`backend/intel2.py`): US macro from FRED, US spot-ETF flows (Farside, cross-checked against Bitbo, which is also the backup), free on-chain
   data (blockchain.com, mempool.space, Coin Metrics community, DefiLlama) and sentiment (Fear & Greed, news tone).
   Paid-only metrics are listed as "Needs API key", never estimated. Phase 2 panels do not change the forecast.
+- Phase 3 (`backend/intel3.py`): crash-risk and recovery scores (0-100) from 8 independent evidence groups with an
+  agreement rule (above 40 needs 2 groups, above 60 needs 4, above 80 needs 5; chart signals are capped at 20 points),
+  an estimated liquidation-zone model (always labelled as estimated) and a backtest that re-scores every past day with
+  publication delays applied, split by time into training, validation and an untouched test period.
+  Rules and weights are fixed in the code; only the top/bottom-fifth cut-offs are learned, from the training period.
 - FRED key: Settings → "Market Intelligence: FRED key". The key is tested before it is stored (`db.intel_cfg`) and no route
   returns it. Without a key the macro panel falls back to FRED's public chart download.

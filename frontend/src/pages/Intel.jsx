@@ -4,6 +4,7 @@ import { Card, PageHead, Note } from "@/components/desk/ui";
 import { n, ist, ago } from "@/lib/fmt";
 import IntelChart from "@/components/desk/IntelChart";
 import { Macro, Etf, OnChain, Sentiment } from "@/components/desk/Intel2";
+import { RiskScores, LiqMap, Backtest } from "@/components/desk/Intel3";
 
 const BIAS = { BULLISH: "border-teal-500/40 bg-teal-500/10 text-teal-300", BEARISH: "border-red-500/40 bg-red-500/10 text-red-300", NEUTRAL: "border-slate-500/40 bg-slate-500/10 text-slate-300" };
 const SIDE = { bull: "text-teal-300", bear: "text-red-300", neutral: "text-amber-300" };
@@ -209,7 +210,7 @@ function Derivatives({ d }) {
 function Liquidations({ l }) {
   const max = Math.max(1, ...l.hourly.map((b) => Math.max(b.long_usd, b.short_usd)));
   return (
-    <Card title="Liquidations (exchange-reported)" sub="Actual forced closures reported by exchanges. Estimated liquidation zones (the heatmap) are a separate, later module." testid="intel-liq">
+    <Card title="Liquidations (exchange-reported)" sub="Actual forced closures reported by exchanges. Estimated liquidation zones are a separate model in the next card." testid="intel-liq">
       {l.cascade && <Note tone="red">{l.cascade.text}</Note>}
       <div className="overflow-x-auto scroll-thin">
         <table className="desk-table">
@@ -283,16 +284,19 @@ export default function Intel() {
         </div>
       </Card>
       {down.length > 0 && <Note tone="amber">{down.length} of {d.sources.length} data sources are not answering from this server right now: {down.map((s) => s.label).join(", ")}. Their figures are left out, not estimated.</Note>}
+      <RiskScores r={d.risk} />
       <Forecast f={d.forecast} />
       <Technical d={d} />
       <Card title="Spot buying and selling pressure" sub="Share of traded value where the buyer was the aggressor (bought at the ask). Above 53% = buyers in control, below 47% = sellers." testid="intel-pressure"><Pressure p={d.pressure} /></Card>
       <Derivatives d={d.derivatives} />
       <Liquidations l={d.liquidations} />
+      <LiqMap m={d.liq_est} />
       <Correlations c={d.correlations} />
       <Etf e={d.etf} />
       <Macro m={d.macro} />
       <OnChain o={d.onchain} price={o.price} />
       <Sentiment s={d.sentiment} />
+      <Backtest b={d.backtest} />
       <Card title="Data sources" sub="Every provider is free; FRED works best with your own free key. Checked continuously; a failed source retries with a growing delay." testid="intel-sources">
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
@@ -302,7 +306,7 @@ export default function Intel() {
               <td className="font-mono text-[11.5px]">{s.updated ? ago(s.updated) : "—"}</td><td className="text-[11.5px] text-slate-400">{s.error || s.note}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">ETF flows, macro, on-chain and sentiment are shown for information and do not change the forecast yet. Coming next: crash-risk and recovery scores, the estimated liquidation heatmap, the backtest report and alerts.</p>
+        <p className="mt-2 text-[11px] text-slate-500">ETF flows, macro, on-chain and sentiment feed the crash-risk and recovery scores. They do not change the short-term forecast table. Coming next: alerts.</p>
       </Card>
     </div>
   );

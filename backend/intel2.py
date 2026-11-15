@@ -67,9 +67,9 @@ def parse_fred_csv(text):
     return out
 
 
-async def fred_series(sid, key):
+async def fred_series(sid, key, days=800):
     """Observations oldest first. With a key the official API is used; without one the public chart download."""
-    start = (now_utc() - timedelta(days=800)).strftime("%Y-%m-%d")
+    start = (now_utc() - timedelta(days=days)).strftime("%Y-%m-%d")
     if key:
         r = await intel.client().get(FRED_API, params={"series_id": sid, "api_key": key, "file_type": "json", "observation_start": start})
         if r.status_code == 400:
@@ -277,6 +277,7 @@ async def load_etf():
         if isinstance(fs, Exception):
             raise fs
         fs_tot, fs_funds = parse_farside(fs.text)
+        STATE["etf_all"] = fs_tot                         # full daily history, reused by the backtest
         intel.mark("etf_farside")
     except Exception as e:
         fs_tot, fs_funds = None, {}
@@ -328,9 +329,9 @@ async def _coinmetrics(metric):
     return sorted((x["time"][:10], fnum(x.get(metric))) for x in j.get("data", []))
 
 
-async def _stablecoins():
+async def _stablecoins(n=120):
     j = (await get("https://stablecoins.llama.fi/stablecoincharts/all")).json()
-    return [(_day(x["date"]), fnum((x.get("totalCirculatingUSD") or {}).get("peggedUSD"))) for x in j[-120:]]
+    return [(_day(x["date"]), fnum((x.get("totalCirculatingUSD") or {}).get("peggedUSD"))) for x in j[-n:]]
 
 
 async def _mempool():
