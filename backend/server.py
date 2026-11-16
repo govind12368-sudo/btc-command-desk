@@ -1034,7 +1034,7 @@ async def desk_summary(u=Depends(current_user)):
     """Dashboard summary of every module with its weight. Read-only: it never touches signals or settings."""
     ev = list((REGISTRY["bls"].data or {}).get("events", [])) if "bls" in REGISTRY else []
     ev += [x async for x in db.manual_events.find({}, {"_id": 0, "title": 1, "scheduled_utc": 1, "impact": 1})]
-    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev)
+    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"))
 
 
 @api.get("/intel")

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, Note } from "@/components/desk/ui";
-import { n, ist, ago } from "@/lib/fmt";
+import { n, ist, ago, signedUsd } from "@/lib/fmt";
+import { PeriodSwitch } from "@/components/desk/Books";
 
 const NAME = { BULLISH: "Bullish", "LEAN BULLISH": "Lean bullish", NEUTRAL: "Neutral", "LEAN BEARISH": "Lean bearish", BEARISH: "Bearish" };
 const INK = { BULLISH: "text-teal-300", "LEAN BULLISH": "text-teal-300", NEUTRAL: "text-slate-300", "LEAN BEARISH": "text-red-300", BEARISH: "text-red-300" };
@@ -134,5 +135,37 @@ export function ModuleCards({ d }) {
       <h3 className="mb-2 text-[15px] font-semibold tracking-tight text-slate-100">What each page says now</h3>
       <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">{d.cards.map((c) => <ModuleCard key={c.key} c={c} />)}</div>
     </div>
+  );
+}
+
+// The three paper books from the Trade Journal, side by side: the same scalp signals traded three ways.
+export function PaperBooks({ d }) {
+  const [period, setPeriod] = useState("since");
+  const b = d?.books;
+  if (!b) return null;
+  const rows = b[period] || [];
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.net || 0)));
+  const ink = (v) => (v == null ? "text-slate-500" : v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-slate-300");
+  return (
+    <Card title="Paper results: the same scalp signals traded three ways" testid="paper-books" sub="Estimated net result after fees. One trade at a time, 10-minute entry, 6-hour exit."
+      right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={b.since_date} />}>
+      <div className="overflow-x-auto scroll-thin">
+        <table className="desk-table">
+          <thead><tr><th>Way of trading</th><th className="num">Net result</th><th className="w-[18%]"><span className="sr-only">Net result bar</span></th><th className="num">Trades</th><th className="num">Win rate</th><th className="num">Target / Stop / 6h exit</th><th className="num">Still open</th><th className="num">Worst drawdown</th></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.key} data-testid={`book-${r.key}`}>
+              <td className="min-w-[210px]"><Link to={r.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{r.name}</Link><div className="text-[11.5px] leading-snug text-slate-400">{r.how}</div></td>
+              <td className={`num font-mono text-[15px] font-bold ${ink(r.net)}`}>{signedUsd(r.net)}</td>
+              <td className="min-w-[110px]"><Diverge value={r.net} max={max} height={8} label={`${r.name} net result ${signedUsd(r.net)}`} /></td>
+              <td className="num font-mono">{r.taken ?? "—"}{r.stood_aside ? <span className="text-slate-500"> ({r.stood_aside} stood aside)</span> : null}</td>
+              <td className="num font-mono">{r.win_rate == null ? "—" : `${Math.round(r.win_rate * 100)}%`}</td>
+              <td className="num font-mono">{r.target ?? 0} / {r.stop ?? 0} / {r.time ?? 0}</td>
+              <td className="num font-mono">{r.open ?? 0}</td>
+              <td className="num font-mono text-red-300">{signedUsd(r.max_drawdown)}</td>
+            </tr>))}</tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[11.5px] leading-snug text-slate-500">{b.note} Full trade lists are on the <Link to="/journal" className="underline">Trade Journal</Link> and <Link to="/plan-a" className="underline">Plan A</Link> pages.</p>
+    </Card>
   );
 }

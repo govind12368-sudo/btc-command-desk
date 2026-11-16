@@ -175,7 +175,22 @@ def cards(st, scan, I, events):
     return out
 
 
-def summary(st, scan, I, events):
+BOOKS = (("follow", "Follow the signal (1:2)", "/journal", "Each scalp signal traded in its own direction."),
+         ("plan_a", "Plan A (reverse 1:2)", "/plan-a", "Each scalp signal traded the opposite way."),
+         ("switch", "Day-type switch", "/scanner", "Range day: Plan A. Trend day with the signal: follow. Otherwise no trade."))
+BOOK_KEYS = ("signals", "taken", "skipped", "stood_aside", "open", "target", "stop", "time", "win_rate", "net", "max_drawdown")
+
+
+def paper_books(books):
+    """The three paper books from the Trade Journal, without their curves. Same signals, same fees, same rules."""
+    if not books or not books.get("since"):
+        return None
+    period = lambda p: [{"key": k, "name": name, "to": to, "how": how, **{x: (books.get(p) or {}).get(k, {}).get(x) for x in BOOK_KEYS}} for k, name, to, how in BOOKS]
+    return {"since_date": books.get("since_date"), "since": period("since"), "all": period("all"),
+            "note": "Paper results after estimated fees, one trade at a time. A handful of trades proves nothing either way: in the long history test, switching by day type did not make money."}
+
+
+def summary(st, scan, I, events, books=None):
     st = st or {}
     reads = {v: compose(v, {"scanner": r_scanner(scan, v), "pillars": r_pillars(st, v), "intel": r_intel(I, v), "news": r_news(I)}) for v in ("intraday", "swing")}
     cs = cards(st, scan, I, events)
@@ -184,5 +199,5 @@ def summary(st, scan, I, events):
     if day.get("label") and (scan or {}).get("playbook"):
         plans[0]["playbook"] = {"day_type": day["label"], "text": scan["playbook"], "to": "/scanner"}
     return {"updated": iso(now_utc()), "price": st.get("price"), "decision": (st.get("decision") or {}).get("decision"), "reads": reads, "weights": WEIGHTS,
-            "plans": plans,
+            "plans": plans, "books": paper_books(books),
             "cards": cs, "event_risk": next((c["event_risk"] for c in cs if c.get("event_risk")), None), "note": NOTE}

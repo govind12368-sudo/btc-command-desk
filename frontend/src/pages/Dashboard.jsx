@@ -12,7 +12,7 @@ import { Sparkles } from "lucide-react";
 import { Ring, Sparkline, PillarBars, MtfStrip, VIZ } from "@/components/desk/charts";
 import { PILLAR_NAMES } from "@/components/desk/Pillars";
 import { NextSetup } from "@/components/desk/NextSetup";
-import { MarketRead, ModuleCards } from "@/components/desk/DeskSummary";
+import { MarketRead, ModuleCards, PaperBooks } from "@/components/desk/DeskSummary";
 
 const TONE = { BULLISH: "text-teal-300 border-teal-500/40 bg-teal-500/10", "LEAN BULLISH": "text-teal-300 border-teal-500/30 bg-teal-500/5",
   BEARISH: "text-red-300 border-red-500/40 bg-red-500/10", "LEAN BEARISH": "text-red-300 border-red-500/30 bg-red-500/5", NEUTRAL: "text-slate-300 border-slate-500/40 bg-slate-500/10" };
@@ -201,6 +201,7 @@ export default function Dashboard() {
       <NextSetup scalp={s.scalp} swing={s.swing} isAdmin={isAdmin} />
       <ModuleCards d={sum} />
       <DayTypeCard day={s.day_type} compact />
+      <PaperBooks d={sum} />
       <DeskBrief b={s.brief} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card title="BTC Direction · confirmed 15-minute model" sub="Completed-candle confirmation · OKX market data + Fed/EIA macro data · news/calendar excluded" testid="direction-card"><DirectionPanel live={s.live_direction} /></Card>
