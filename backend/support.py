@@ -120,3 +120,30 @@ def split(trades, snaps):
     recorded = sum(r["trades"] for r in out if r["level"] != "NONE")
     return {"rows": out, "recorded": recorded, "need": NEED, "ready": recorded >= NEED,
             "note": "Information only: support does not change which trades are taken. The split means little until about 30 recorded trades."}
+
+
+# ------------------------------------------------------------------ lookups for the journal pages (read-only)
+DAY_TYPES = ("RANGE", "TREND_UP", "TREND_DOWN", "MIXED")
+PLAYBOOKS = ("PLAN_A", "FOLLOW", "STAND_ASIDE")
+LEVEL_KEYS = ("STRONG", "MEDIUM", "WEAK")
+
+
+async def all_snaps():
+    """Every saved support snapshot, keyed by signal id."""
+    return {x["_id"]: {k: x.get(k) for k in ("level", "passed", "of", "checks", "plan", "trade_dir", "at")} async for x in db.switch_support.find({})}
+
+
+async def filter_ids(day="", playbook="", level=""):
+    """Signal ids whose frozen day type, switch action and recorded support level match. Empty values match everything."""
+    ids = {t["_id"] async for t in db.signal_tags.find({}, {"type": 1, "playbook": 1})
+           if (not day or t.get("type") == day) and (not playbook or t.get("playbook") == playbook)}
+    if level:
+        ids &= {x["_id"] async for x in db.switch_support.find({"level": level}, {"_id": 1})}
+    return ids
+
+
+def follow_summary(rows, ids):
+    """Result of trading each matching, filled signal in its own direction (every signal counted, not one at a time)."""
+    closed = [r for r in rows or [] if r.get("signal_id") in ids and r.get("fill_status") == "FILLED" and r.get("follow_result") in ("TARGET", "STOP", "TIME")]
+    wins = sum(1 for r in closed if (r.get("follow_net") or 0) > 0)
+    return {"signals": len(ids), "trades": len(closed), "wins": wins, "win_rate": wins / len(closed) if closed else None, "net": sum(r.get("follow_net") or 0 for r in closed)}

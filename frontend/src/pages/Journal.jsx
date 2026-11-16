@@ -5,6 +5,7 @@ import { useDesk } from "@/context/DeskContext";
 import { useFetch } from "@/hooks/useFetch";
 import { BookPanel, DayChip, DayTypeCard, PeriodSwitch, PLAYBOOK_NAME } from "@/components/desk/Books";
 import { SignalCell, ResultCell, NetCell, PriceCell, WhyCell } from "@/components/desk/TradeCells";
+import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, isActive } from "@/components/desk/DayFilter";
 import { api, errText, API } from "@/lib/api";
 import { Card, Chip, KV, PageHead, Empty, Note, Stat } from "@/components/desk/ui";
 import { Field, Input, Select, Btn, Area } from "@/components/desk/forms";
@@ -91,11 +92,17 @@ function Actual({ isAdmin }) {
 
 function Signals({ isAdmin }) {
   const [page, setPage] = useState(1);
-  const { data } = useFetch(`/signals?page=${page}&size=25`, 15000);
+  const [f, setFilter] = useDayFilter("journal");
+  const setF = (next) => { setFilter(next); setPage(1); };
+  const sup = useSupport();
+  const { data } = useFetch(`/signals?page=${page}&size=25&day=${f.day}&playbook=${f.action}&support_level=${f.level}`, 15000);
   const [open, setOpen] = useState(null);
+  const fs = data?.filter_summary;
   return (
     <Card title="Signals, newest first" sub="Result, net and the reason are for the signal traded in its own direction at 1:2 with the 6-hour exit. Tap Checks for the 11 checks, quantity and observation." testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
-      {!data?.items?.length ? <Empty>No signal has passed all 12 checks yet. Captures are deduplicated by strategy, direction and confirmation bar.</Empty> : (
+      <DayFilterBar f={f} setF={setF} testid="journal-filter" />
+      <FilterSummary f={f} setF={setF} shown={data?.total ?? 0} total={data?.all_total ?? 0} what="signals" trades={fs?.trades} wins={fs?.wins} net={fs?.net} basis="every filled signal traded in its own direction" />
+      {!data?.items?.length ? <Empty>{isActive(f) ? "No signal matches this filter." : "No signal has passed all 12 checks yet. Captures are deduplicated by strategy, direction and confirmation bar."}</Empty> : (
         <div className="overflow-x-auto scroll-thin"><table className="desk-table">
           <thead><tr><th>Signal</th><th>Direction</th><th>Day type</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target 1:2</th><th>Fill</th><th>Result</th><th className="num">Net</th><th>Why it won or lost</th><th /></tr></thead>
           <tbody>{data.items.map((x) => {
@@ -105,7 +112,7 @@ function Signals({ isAdmin }) {
             <tr>
               <SignalCell id={x.signal_id} captured={ist(x.captured_at).replace(" IST", "")} extra={`${x.qty_btc} BTC`} />
               <td><Chip status={x.direction} /><span className="mt-0.5 block text-[10.5px] text-slate-500">{x.strategy}</span></td>
-              <td><DayChip type={x.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[x.playbook] || ""}</span></td>
+              <td><DayChip type={x.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[x.playbook] || ""}</span><SupportLine sup={sup[x.signal_id]} playbook={x.playbook} /></td>
               <PriceCell v={x.entry} />
               <PriceCell v={x.stop} />
               <PriceCell v={scalp ? x.follow_target ?? x.target : x.target} sub={oldTarget ? `signal: ${n(x.target, 1)}` : null} />

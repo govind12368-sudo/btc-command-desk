@@ -90,3 +90,21 @@ def test_adx_is_read_from_the_real_analysis_output(sup):
     assert a["adx"] is not None
     cs = sup.checks("PLAN_A", "LONG", 0, {"tf": {"1h": a}}, 0, None, None)
     assert cs[1]["ok"] is not None and "ADX" in cs[1]["text"]             # the range check finds the 1h ADX in what the engine really produces
+
+
+def test_filter_lookups(sup):
+    from core import db
+    run(db.signal_tags.insert_many([{"_id": "a", "type": "RANGE", "playbook": "PLAN_A"}, {"_id": "b", "type": "TREND_DOWN", "playbook": "FOLLOW"},
+                                    {"_id": "c", "type": "TREND_DOWN", "playbook": "STAND_ASIDE"}, {"_id": "d", "type": "RANGE", "playbook": "PLAN_A"}]))
+    run(db.switch_support.insert_many([{"_id": "a", "level": "STRONG", "passed": 4, "of": 5, "checks": []}, {"_id": "b", "level": "WEAK", "passed": 2, "of": 5, "checks": []}]))
+    ids = lambda **k: run(sup.filter_ids(**k))
+    assert ids() == {"a", "b", "c", "d"} and ids(day="RANGE") == {"a", "d"} and ids(day="TREND_DOWN", playbook="FOLLOW") == {"b"}
+    assert ids(level="STRONG") == {"a"} and ids(day="RANGE", level="WEAK") == set() and ids(playbook="STAND_ASIDE") == {"c"}
+    snaps = run(sup.all_snaps())
+    assert snaps["a"]["level"] == "STRONG" and snaps["b"]["passed"] == 2 and set(snaps) == {"a", "b"}
+    rows = [{"signal_id": "a", "fill_status": "FILLED", "follow_result": "STOP", "follow_net": -61.5}, {"signal_id": "d", "fill_status": "FILLED", "follow_result": "TARGET", "follow_net": 91.3},
+            {"signal_id": "b", "fill_status": "FILLED", "follow_result": "TARGET", "follow_net": 91.4}, {"signal_id": "x", "fill_status": "NOT FILLED", "follow_result": None}]
+    before = [dict(r) for r in rows]
+    f = sup.follow_summary(rows, {"a", "d"})
+    assert (f["signals"], f["trades"], f["wins"], f["win_rate"]) == (2, 2, 1, 0.5) and abs(f["net"] - 29.8) < 1e-9 and rows == before     # a viewing filter never alters a row
+    assert sup.follow_summary(rows, set())["win_rate"] is None

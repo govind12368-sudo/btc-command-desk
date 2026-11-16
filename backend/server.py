@@ -316,17 +316,31 @@ async def plan_cancel(pid: str, u=Depends(admin_user)):
 
 # ---------------- journals ----------------
 @api.get("/signals")
-async def signals(page: int = 1, size: int = 25, u=Depends(current_user)):
-    total = await db.signals.count_documents({})
-    rows = [clean(x) async for x in db.signals.find().sort("captured_at", -1).skip((page - 1) * size).limit(size)]
+async def signals(page: int = 1, size: int = 25, day: str = "", playbook: str = "", support_level: str = "", u=Depends(current_user)):
+    if (day and day not in support.DAY_TYPES) or (playbook and playbook not in support.PLAYBOOKS) or (support_level and support_level not in support.LEVEL_KEYS):
+        raise HTTPException(422, "unknown filter value")
+    q, filt = {}, None
+    if day or playbook or support_level:                  # a viewing filter only: it never changes a signal, a book or a total
+        ids = await support.filter_ids(day, playbook, support_level)
+        q = {"signal_id": {"$in": list(ids)}}
+        filt = support.follow_summary(plan_a.STATE["rows"], ids)
+    total = await db.signals.count_documents(q)
+    all_total = await db.signals.count_documents({}) if q else total
+    rows = [clean(x) async for x in db.signals.find(q).sort("captured_at", -1).skip((page - 1) * size).limit(size)]
     tags = {t["_id"]: t async for t in db.signal_tags.find({"_id": {"$in": [r.get("signal_id") for r in rows]}})}
     pa = {r["signal_id"]: r for r in plan_a.STATE["rows"]}
     for r in rows:  # day type frozen at capture + the same-rules result of following this signal
         t, p = tags.get(r.get("signal_id")) or {}, pa.get(r.get("signal_id")) or {}
         r.update(day_type=t.get("type"), day_label=t.get("label"), playbook=t.get("playbook"),
                  follow_result=p.get("follow_result"), follow_net=p.get("follow_net"), follow_target=p.get("follow_target"), follow_why=p.get("follow_why"), follow_exit_ist=p.get("follow_exit_ist"), context=p.get("context"), plan_result=p.get("plan_result"), plan_net=p.get("net"))
-    return {"items": rows, "total": total, "page": page, "size": size,
+    return {"items": rows, "total": total, "all_total": all_total, "filter_summary": filt, "page": page, "size": size,
             "note": "Model signals are automatic captures. Candle touches are observations — never actual exchange fills."}
+
+
+@api.get("/switch-support")
+async def switch_support(u=Depends(current_user)):
+    """Support snapshots saved when signals fired (information only)."""
+    return {"items": await support.all_snaps()}
 
 
 class FillIn(BaseModel):

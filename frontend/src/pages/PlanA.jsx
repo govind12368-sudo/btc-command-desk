@@ -8,6 +8,7 @@ import { n, usd, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 import { DayChip, DayTypeCard, PLAYBOOK_NAME } from "@/components/desk/Books";
 import { SignalCell, ResultCell, FillCell, NetCell, PriceCell, WhyCell, DIR_TONE } from "@/components/desk/TradeCells";
+import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, matches, isActive } from "@/components/desk/DayFilter";
 
 function Stat({ label, value, tone = "text-slate-50" }) {
   return (
@@ -26,7 +27,11 @@ export default function PlanA() {
   let eq = 0;
   const curve = taken.filter((r) => r.plan_result !== "OPEN").map((r) => ({ t: r.exit_ist, v: (eq += r.net) }));
   const copy = async () => { try { await navigator.clipboard.writeText(data.feed_url); toast.success("Feed link copied"); } catch { toast.error("Copy failed — select the link and copy it"); } };
-  const rows = [...(data?.rows || [])].reverse();
+  const [f, setF] = useDayFilter("plan-a");
+  const sup = useSupport();
+  const all = [...(data?.rows || [])].reverse();
+  const rows = all.filter((r) => matches(f, r.day_type, r.playbook, sup[r.signal_id]?.level));
+  const closed = rows.filter((r) => r.taken === "Yes" && ["TARGET", "STOP", "TIME"].includes(r.plan_result));
   return (
     <div className="space-y-4" data-testid="plan-a-page">
       <PageHead title="Plan A – live" sub={`Reverse of every scalp signal, 1:2, 6-hour exit, one trade at a time · updated ${ist(data?.computed_at)} · BTC ${n(data?.live_price, 1)}`} />
@@ -47,6 +52,8 @@ export default function PlanA() {
         </Card>
       )}
       <Card title="Trades" sub="Newest first. Each filled scalp signal is traded in the opposite direction: stop = the signal's stop gap, target = 2 x that gap, closed after 6 hours. While a Plan A trade is open, new signals are skipped." testid="plan-a-table">
+        <DayFilterBar f={f} setF={setF} testid="plan-a-filter" />
+        <FilterSummary f={f} setF={setF} shown={rows.length} total={all.length} what="signals" trades={closed.length} wins={closed.filter((r) => r.net > 0).length} net={closed.reduce((a, r) => a + (r.net || 0), 0)} basis="Plan A trades taken" />
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Signal</th><th>Signal → Plan A</th><th>Day type</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Filled</th><th>Result</th><th className="num">Net</th><th>Taken</th><th>Why it won or lost</th></tr></thead>
@@ -55,7 +62,7 @@ export default function PlanA() {
                 <tr key={r.signal_id} className={r.taken === "Skip" ? "opacity-60" : ""}>
                   <SignalCell id={r.signal_id} captured={(r.captured_ist || "").slice(5).replace("-", "/")} />
                   <td className="whitespace-nowrap text-[12px]"><span className={DIR_TONE[r.model_dir]}>{r.model_dir}</span> <span className="text-slate-500">→</span> <span className={`font-semibold ${DIR_TONE[r.plan_dir] || "text-slate-500"}`}>{r.plan_dir || "—"}</span></td>
-                  <td><DayChip type={r.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[r.playbook] || ""}</span></td>
+                  <td><DayChip type={r.day_type} /><span className="block text-[10.5px] text-slate-500">{PLAYBOOK_NAME[r.playbook] || ""}</span><SupportLine sup={sup[r.signal_id]} playbook={r.playbook} /></td>
                   <PriceCell v={r.entry} />
                   <PriceCell v={r.plan_stop} />
                   <PriceCell v={r.plan_target} />
@@ -66,7 +73,7 @@ export default function PlanA() {
                   <WhyCell why={r.fill_status === "FILLED" ? r.plan_why : r.fill_status === "NOT FILLED" ? "Price never reached the entry within 10 minutes, so no trade." : "Waiting for the entry price."} context={r.context} />
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">No scalp signals captured yet. New ones appear here automatically.</td></tr>}
+              {!rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">{isActive(f) ? "No signal matches this filter." : "No scalp signals captured yet. New ones appear here automatically."}</td></tr>}
             </tbody>
           </table>
         </div>

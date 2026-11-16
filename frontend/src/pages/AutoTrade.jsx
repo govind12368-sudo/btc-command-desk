@@ -7,6 +7,7 @@ import { Btn, Field, Input } from "@/components/desk/forms";
 import { n, ist } from "@/lib/fmt";
 import { PushCard } from "@/components/desk/Push";
 import { SoundPicker } from "@/components/desk/SoundPicker";
+import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, matches, isActive, LABEL_TYPE } from "@/components/desk/DayFilter";
 
 const inr = (v) => (v == null ? "—" : `${v < 0 ? "−" : ""}₹${Math.round(Math.abs(v)).toLocaleString("en-IN")}`);
 const money = (v) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}$${n(Math.abs(v), 2)}`);
@@ -151,7 +152,10 @@ export default function AutoTrade() {
   const [word, setWord] = useState("");
   const [skew, setSkew] = useState(0);
   useEffect(() => { if (d?.server_time) setSkew(Date.parse(d.server_time) - Date.now()); }, [d?.server_time]);
+  const [f, setF] = useDayFilter("autotrade");
+  const sup = useSupport();
   if (!d) return <div className="text-sm text-slate-400">Loading auto-trade…</div>;
+  const journal = d.journal.filter((r) => matches(f, LABEL_TYPE[r.day_type], r.plan, sup[r.signal_id]?.level));
 
   const act = async (fn, ok) => {
     setBusy(true);
@@ -274,15 +278,17 @@ export default function AutoTrade() {
 
       <Card title="Trade journal" sub="Closed auto-trades, newest first. Fees: taker 0.05%, maker 0.02%, plus 18% GST." testid="autotrade-journal"
         right={<Btn tone="ghost" onClick={exportCsv} data-testid="autotrade-csv">Download CSV</Btn>}>
+        <DayFilterBar f={f} setF={setF} stoodAside={false} testid="autotrade-filter" />
+        <FilterSummary f={f} setF={setF} shown={journal.length} total={d.journal.length} what="closed trades" trades={journal.length} wins={journal.filter((r) => r.net_usd > 0).length} net={journal.reduce((a, r) => a + (r.net_usd || 0), 0)} basis="Auto-Trade's own fills" />
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Signal</th><th>Mode</th><th>Method</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Mode</th><th>Method and day type</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
             <tbody>
-              {d.journal.map((r) => (
+              {journal.map((r) => (
                 <tr key={r.signal_id}>
                   <td className="font-mono text-[11.5px]">{r.signal_id}</td>
                   <td>{MODE_NAME[r.mode]}</td>
-                  <td className="text-[11.5px]">{r.plan === "FOLLOW" ? "Follow" : "Plan A"}{r.day_type ? <span className="block text-slate-500">{r.day_type}</span> : null}</td>
+                  <td className="text-[11.5px]">{r.plan === "FOLLOW" ? "Follow" : "Plan A"}{r.day_type ? <span className="block text-slate-500">{r.day_type}</span> : null}<SupportLine sup={sup[r.signal_id]} playbook={r.plan || "PLAN_A"} /></td>
                   <td className={DIR[r.model_dir]}>{r.model_dir}</td>
                   <td className={DIR[r.bot_dir]}>{r.bot_dir}</td>
                   <td className="font-mono text-[11.5px]">{ist(r.captured_at)}</td>
@@ -299,7 +305,7 @@ export default function AutoTrade() {
                   <td className={`font-mono ${pnlTone(r.net_inr)}`}>{inr(r.net_inr)}</td>
                 </tr>
               ))}
-              {!d.journal.length && <tr><td colSpan={17} className="py-6 text-center text-slate-500">No closed trades yet. They appear here as soon as a trade exits.</td></tr>}
+              {!journal.length && <tr><td colSpan={17} className="py-6 text-center text-slate-500">{isActive(f) ? "No closed trade matches this filter." : "No closed trades yet. They appear here as soon as a trade exits."}</td></tr>}
             </tbody>
           </table>
         </div>
