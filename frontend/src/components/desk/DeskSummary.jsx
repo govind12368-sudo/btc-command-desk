@@ -24,6 +24,7 @@ function Diverge({ value, max = 100, height = 10, label }) {
   );
 }
 
+const SUP = { STRONG: ["Strong", "border-teal-500/40 bg-teal-500/10 text-teal-300"], MEDIUM: ["Medium", "border-amber-500/40 bg-amber-500/10 text-amber-300"], WEAK: ["Weak", "border-slate-500/40 bg-slate-500/10 text-slate-300"] };
 const FIT = {
   AGREES: ["Market read agrees", "border-teal-500/40 bg-teal-500/10 text-teal-300"], AGAINST: ["Market read is against it", "border-red-500/40 bg-red-500/10 text-red-300"],
   MIXED: ["Market read is mixed", "border-slate-500/40 bg-slate-500/10 text-slate-300"], NO_SIGNAL: ["No signal now", "border-slate-500/40 bg-slate-500/10 text-slate-300"],
@@ -167,6 +168,38 @@ export function SwitchFocus({ d }) {
         {a.open_trade && <> · in a trade: {a.open_trade.bot_dir} from {px(a.open_trade.entry)}, stop {px(a.open_trade.stop)}, target {px(a.open_trade.target)}</>}
         {" · "}<Link to="/autotrade" className={open}>Open Auto-Trade</Link>
       </p>}
+      {d.support_now && <div className="mt-4" data-testid="switch-support-now">
+        <h4 className="mb-1 text-[13px] font-semibold text-slate-100">Support if a scalp signal fires now</h4>
+        <div className="grid gap-2 md:grid-cols-2">{d.support_now.map((x) => (
+          <div key={x.signal} className="rounded-md border border-[#1e2a4a] bg-[#0b132b]/60 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+              <span className="text-slate-300">A {x.signal} signal: {x.plan === "STAND_ASIDE" ? <b className="text-slate-100">no trade (stand aside)</b> : <><b className="text-slate-100">{x.plan === "PLAN_A" ? "Plan A (reverse)" : "follow it"}</b>, trade <b className={x.trade_dir === "LONG" ? "text-teal-300" : "text-red-300"}>{x.trade_dir}</b></>}</span>
+              {x.level && <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${SUP[x.level][1]}`}>{SUP[x.level][0]} support · {x.passed} of {x.of}</span>}
+            </div>
+            {x.checks.length > 0 && <ul className="mt-1.5 space-y-0.5 text-[12px] leading-snug">{x.checks.map((c) => <li key={c.key} className={c.ok ? "text-slate-200" : "text-slate-500"}>{c.ok == null ? "—" : c.ok ? "✓" : "✗"} <b>{c.name}.</b> {c.text}</li>)}</ul>}
+          </div>))}
+        </div>
+      </div>}
+      {(() => {
+        const sp = b.support_split?.[period];
+        if (!sp) return null;
+        return (
+          <div className="mt-4" data-testid="switch-support-split">
+            <h4 className="mb-1 text-[13px] font-semibold text-slate-100">Results by support level</h4>
+            <div className="overflow-x-auto scroll-thin">
+              <table className="desk-table">
+                <thead><tr><th>Support when the signal fired</th><th className="num">Trades</th><th className="num">Closed</th><th className="num">Won</th><th className="num">Win rate</th><th className="num">Net result</th></tr></thead>
+                <tbody>{sp.rows.map((r) => (
+                  <tr key={r.level} className={r.trades ? "" : "text-slate-500"}>
+                    <td>{r.name}</td><td className="num font-mono">{r.trades}</td><td className="num font-mono">{r.closed}</td><td className="num font-mono">{r.wins}</td>
+                    <td className="num font-mono">{r.win_rate == null ? "—" : `${Math.round(r.win_rate * 100)}%`}</td><td className={`num font-mono font-semibold ${r.trades ? ink(r.net) : "text-slate-500"}`}>{r.trades ? signedUsd(r.net) : "—"}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-[11.5px] leading-snug text-slate-500">{sp.ready ? `${sp.recorded} recorded trades.` : `Collecting: ${sp.recorded} of ${sp.need} recorded trades.`} {sp.note} Support is saved once, at the moment the signal fires; trades from before this was added are "not recorded".</p>
+          </div>
+        );
+      })()}
       <div className="mt-4" data-testid="switch-trades">
         <h4 className="mb-1 text-[13px] font-semibold text-slate-100">The {tr.length} trade{tr.length === 1 ? "" : "s"} it took</h4>
         {tr.length ? <div className="overflow-x-auto scroll-thin">

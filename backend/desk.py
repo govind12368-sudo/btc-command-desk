@@ -197,17 +197,20 @@ def book_trades(rows, picks):
     return out
 
 
-def paper_books(books, rows=None):
+def paper_books(books, rows=None, snaps=None):
     """The three paper books from the Trade Journal, without their curves. Same signals, same fees, same rules."""
     if not books or not books.get("since"):
         return None
     period = lambda p: [{"key": k, "name": name, "to": to, "how": how, **{x: (books.get(p) or {}).get(k, {}).get(x) for x in BOOK_KEYS}} for k, name, to, how in BOOKS]
+    import support
     trades = lambda p: book_trades(rows, ((books.get(p) or {}).get("switch") or {}).get("picks"))
-    return {"since_date": books.get("since_date"), "since": period("since"), "all": period("all"), "switch_trades": {"since": trades("since"), "all": trades("all")},
+    tr = {"since": trades("since"), "all": trades("all")}
+    return {"since_date": books.get("since_date"), "since": period("since"), "all": period("all"), "switch_trades": tr,
+            "support_split": {p: support.split(tr[p], snaps) for p in tr},
             "note": "Paper results after estimated fees, one trade at a time. A handful of trades proves nothing either way: in the long history test, switching by day type did not make money."}
 
 
-def summary(st, scan, I, events, books=None, rows=None, auto=None):
+def summary(st, scan, I, events, books=None, rows=None, auto=None, snaps=None, support_now=None):
     st = st or {}
     reads = {v: compose(v, {"scanner": r_scanner(scan, v), "pillars": r_pillars(st, v), "intel": r_intel(I, v), "news": r_news(I)}) for v in ("intraday", "swing")}
     cs = cards(st, scan, I, events)
@@ -216,5 +219,5 @@ def summary(st, scan, I, events, books=None, rows=None, auto=None):
     if day.get("label") and (scan or {}).get("playbook"):
         plans[0]["playbook"] = {"day_type": day["label"], "text": scan["playbook"], "to": "/scanner"}
     return {"updated": iso(now_utc()), "price": st.get("price"), "decision": (st.get("decision") or {}).get("decision"), "reads": reads, "weights": WEIGHTS,
-            "plans": plans, "books": paper_books(books, rows), "auto": auto,
+            "plans": plans, "books": paper_books(books, rows, snaps), "auto": auto, "support_now": support_now,
             "cards": cs, "event_risk": next((c["event_risk"] for c in cs if c.get("event_risk")), None), "note": NOTE}

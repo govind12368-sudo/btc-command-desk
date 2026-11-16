@@ -212,3 +212,8 @@ to every page. It is read-only: it never changes a signal, a check or a setting,
 Auto-Trade is held on the Day-type switch (`autotrade.DAY_TYPE_ONLY = True`, admin request 16 Nov 2026): range day -> Plan A,
 trend day with the signal -> follow, anything else -> no trade. The dashboard leads with that plan's results and trade list;
 the "follow" and "Plan A" books are shown for comparison only.
+
+Support data for the Day-type switch (`backend/support.py`): five yes/no checks (clear day type, higher timeframes, market read,
+order flow, no shock nearby) saved once in `db.switch_support` while a signal is fresh. Information only: neither the day-type
+rule, the paper books nor Auto-Trade read it. The dashboard shows the support for a signal firing now and the results split
+by support level (Strong 4-5, Medium 3, Weak 0-2); the split is marked "collecting" until 30 recorded trades.

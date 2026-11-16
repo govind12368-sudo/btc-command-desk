@@ -34,6 +34,7 @@ import scanner
 import webpush
 import intel
 import desk
+import support
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1040,7 +1041,14 @@ async def desk_summary(u=Depends(current_user)):
                 "open_trade": {k: a["open_trade"].get(k) for k in ("plan", "day_type", "bot_dir", "entry", "stop", "target")} if a.get("open_trade") else None, "armed": len(a.get("armed") or [])}
     except Exception:
         auto = None
-    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"), auto)
+    snaps, now_sup = {}, None
+    try:
+        snaps = {x["_id"]: {"level": x.get("level"), "passed": x.get("passed")} async for x in db.switch_support.find({}, {"level": 1, "passed": 1})}
+        I, read, soon, cascade = await support.context()
+        now_sup = support.now_view(daytype.public(), I, read, soon, cascade)
+    except Exception:
+        pass
+    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"), auto, snaps, now_sup)
 
 
 @api.get("/intel")

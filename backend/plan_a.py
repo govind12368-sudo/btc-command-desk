@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 from core import db, now_utc, iso, parse_iso, IST
 from sources import http_get, DELTA
+import support
 import daytype
 
 log = logging.getLogger("plan_a")
@@ -175,6 +176,7 @@ async def _row(s, bars, now, live):
     row = {"signal_id": s["_id"], "captured_ist": _ist(cap), "cap_t": cap, "model_dir": d0, "entry": e, "model_stop": st, "model_target": tg, "qty": q}
     tag = await daytype.tag_signal(s["_id"], cap, d0)
     row.update(day_type=tag.get("type"), day_label=tag.get("label"), playbook=tag.get("playbook"))
+    await support.snapshot(s["_id"], cap, d0, tag)        # information only; it never raises and never changes the row
     i = _bar_index(bars, cap_min)
     fill = None
     while i < len(bars) and bars[i]["t"] < valid_end:
