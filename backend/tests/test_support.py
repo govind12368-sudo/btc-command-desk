@@ -23,7 +23,7 @@ def sup(monkeypatch):
     return importlib.import_module("support")
 
 
-INTEL = {"tf": {"1h": {"score": -2, "indicators": {"adx": 18.0}}, "4h": {"score": -4}}, "pressure": {"windows": {"1h": {"label": "SELLERS"}}}, "deriv": {"positioning": {"label": "NEUTRAL"}}}
+INTEL = {"tf": {"1h": {"score": -2, "adx": 18.0}, "4h": {"score": -4}}, "pressure": {"windows": {"1h": {"label": "SELLERS"}}}, "deriv": {"positioning": {"label": "NEUTRAL"}}}
 
 
 def test_checks_and_levels(sup):
@@ -81,3 +81,12 @@ def test_split_by_support_level(sup):
     assert r["WEAK"]["win_rate"] == 0.0 and r["MEDIUM"]["wins"] == 1 and r["NONE"]["trades"] == 1 and abs(r["NONE"]["net"] - 91.4) < 1e-9
     assert s["recorded"] == 4 and s["need"] == 30 and not s["ready"] and abs(sum(x["net"] for x in s["rows"]) - sum(t["net"] for t in trades)) < 1e-9
     assert sup.split([], None)["recorded"] == 0
+
+
+def test_adx_is_read_from_the_real_analysis_output(sup):
+    import ta
+    bars = [{"t": 1700000000 + i * 3600, "o": 100 + i * 0.1, "h": 101 + i * 0.1, "l": 99 + i * 0.1, "c": 100.5 + i * 0.1, "v": 10.0} for i in range(300)]
+    a = ta.analyze(bars, 3600)
+    assert a["adx"] is not None
+    cs = sup.checks("PLAN_A", "LONG", 0, {"tf": {"1h": a}}, 0, None, None)
+    assert cs[1]["ok"] is not None and "ADX" in cs[1]["text"]             # the range check finds the 1h ADX in what the engine really produces

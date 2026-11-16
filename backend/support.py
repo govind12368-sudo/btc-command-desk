@@ -38,7 +38,7 @@ def checks(plan, tdir, day_score, I, read_score, soon_event, cascade):
                       f"1h score {s1 or 0:+d}, 4h score {s4 or 0:+d}; both must point {'up' if side > 0 else 'down'} for a {tdir} trade"))
     else:
         out.append(_c("day_clear", "Day type is clear", None if day_score is None else day_score == 0, f"{day_score} of 5 trend measures are on (clear range at 0)"))
-        adx = ((tf.get("1h") or {}).get("indicators") or {}).get("adx")
+        adx = (tf.get("1h") or {}).get("adx")
         out.append(_c("higher_tf", "Higher timeframes fit", None if adx is None else adx < 25, f"1h ADX {adx or 0:.0f} (a range trade wants no strong trend: below 25)"))
     out.append(_c("market_read", "Market read is not against it", None if read_score is None else read_score * side > -20, f"Intraday market read {read_score or 0:+d}; against a {tdir} trade at {'-20 or lower' if side > 0 else '+20 or higher'}"))
     press = (((I.get("pressure") or {}).get("windows") or {}).get("1h") or {}).get("label")
