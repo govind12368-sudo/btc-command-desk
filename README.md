@@ -217,3 +217,7 @@ Support data for the Day-type switch (`backend/support.py`): five yes/no checks 
 order flow, no shock nearby) saved once in `db.switch_support` while a signal is fresh. Information only: neither the day-type
 rule, the paper books nor Auto-Trade read it. The dashboard shows the support for a signal firing now and the results split
 by support level (Strong 4-5, Medium 3, Weak 0-2); the split is marked "collecting" until 30 recorded trades.
+
+Edge search of 16 Nov 2026 (`docs/research/edge_search_2026_11/`, results in `backend/daytype_evidence.json` under `edge_search`):
+492 versions of 26 setups, selected on training data only; none reached a 50% win rate with a profit after fees.
+The scripts use `lib.py` and the candle files on the `study/follow-vs-reverse` and `study-data` branches.

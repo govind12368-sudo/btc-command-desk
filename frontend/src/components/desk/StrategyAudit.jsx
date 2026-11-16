@@ -4,6 +4,7 @@ import { Card } from "@/components/desk/ui";
 import { n, usd, ist } from "@/lib/fmt";
 import { BOOK_NAME, DayChip, EvidenceCard, PeriodSwitch } from "@/components/desk/Books";
 import LongTest from "@/components/desk/LongTest";
+import EdgeSearch from "@/components/desk/EdgeSearch";
 
 const pnl = (v) => ((v || 0) >= 0 ? "text-teal-300" : "text-red-300");
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "—");
@@ -79,6 +80,7 @@ export default function StrategyAudit() {
           </table>
         </div>
       </Card>
+      <EdgeSearch e={ev?.edge_search} />
       <LongTest lt={ev?.long_test_26m} />
       <EvidenceCard ev={ev} />
     </div>
