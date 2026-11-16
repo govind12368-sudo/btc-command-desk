@@ -221,3 +221,10 @@ by support level (Strong 4-5, Medium 3, Weak 0-2); the split is marked "collecti
 Edge search of 16 Nov 2026 (`docs/research/edge_search_2026_11/`, results in `backend/daytype_evidence.json` under `edge_search`):
 492 versions of 26 setups, selected on training data only; none reached a 50% win rate with a profit after fees.
 The scripts use `lib.py` and the candle files on the `study/follow-vs-reverse` and `study-data` branches.
+
+Delta API keys can be pasted on the Auto-Trade page ("Delta Exchange connection", `backend/broker_keys.py`): each key is
+checked with Delta from the server, stored Fernet-encrypted in `db.broker_keys` (key derived from BROKER_KEYS_SECRET or
+JWT_SECRET), never returned by any route, and locked while the bot trades in that mode. Keys in `.env` still take priority.
+The LIVE gate is unchanged: Testnet key, one completed Testnet trade, Live key, then type LIVE.
+Signal alerts (`alerts.SWITCH_ALERTS_ONLY = True`) go out only for Day-type switch trades, with the switch's own direction,
+stop and target; swing signals and stand-aside (unclear) signals are logged as "not sent".

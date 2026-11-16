@@ -7,6 +7,7 @@ import { Btn, Field, Input } from "@/components/desk/forms";
 import { n, ist } from "@/lib/fmt";
 import { PushCard } from "@/components/desk/Push";
 import { SoundPicker } from "@/components/desk/SoundPicker";
+import DeltaKeys from "@/components/desk/DeltaKeys";
 import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, matches, isActive, LABEL_TYPE } from "@/components/desk/DayFilter";
 
 const inr = (v) => (v == null ? "—" : `${v < 0 ? "−" : ""}₹${Math.round(Math.abs(v)).toLocaleString("en-IN")}`);
@@ -25,7 +26,7 @@ const REASON_TONE = { TARGET: "text-teal-300", STOP: "text-red-300", TIME: "text
 const LEVEL_TONE = { error: "text-red-300", warn: "text-amber-300", info: "text-slate-300" };
 
 const FIELDS = [
-  ["margin_inr", "Margin per trade (₹)", "Money put behind each trade"],
+  ["margin_inr", "Capital per trade (₹ margin)", "Money put behind each trade; capped by your free Delta balance"],
   ["leverage", "Leverage (×)", "Position size = margin × leverage"],
   ["daily_loss_usd", "Daily loss limit ($)", "Trading stops for the day at this loss"],
   ["daily_target_usd", "Daily profit target ($)", "Trading stops for the day at this profit"],
@@ -228,13 +229,15 @@ export default function AutoTrade() {
               </div>
             )}
             <ul className="mt-3 space-y-1 text-[11.5px] text-slate-400" data-testid="autotrade-checklist">
-              <li>Testnet API key on the server: {yes(lr.testnet_key)}</li>
-              <li>One completed Testnet trade (entry, stop and target confirmed, exit): {yes(lr.testnet_trade_done)}</li>
-              <li>Live API key on the server (Trading permission only, server IP whitelisted): {yes(lr.live_key)}</li>
+              <li>1. Testnet key connected (Delta Exchange connection card): {yes(lr.testnet_key)}</li>
+              <li>2. One completed Testnet trade (entry, stop and target confirmed, exit): {yes(lr.testnet_trade_done)}</li>
+              <li>3. Live key connected (Read Data and Trading only, server IP whitelisted): {yes(lr.live_key)}</li>
             </ul>
           </div>
         </Card>
       </div>
+
+      <DeltaKeys />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Open trade" sub={t ? `${t.signal_id} · filled ${ist(t.fill_time)}` : "No trade is open"} testid="autotrade-open">

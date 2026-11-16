@@ -1,8 +1,8 @@
 """Delta Exchange India order adapter for auto-trade (TESTNET and LIVE only – PAPER never comes here).
 
 Written against https://docs.delta.exchange (India): signed REST, market entry with bracket stop/target,
-real-time position, fills, cancel-all, leverage. API keys are read ONLY from the server environment
-(never stored in the database, never sent to the browser, never logged):
+real-time position, fills, cancel-all, leverage. API keys come from the server environment or, if absent, from the key pasted in the site
+(stored encrypted by broker_keys.py; never sent to the browser, never logged):
     LIVE     DELTA_TRADE_API_KEY / DELTA_TRADE_API_SECRET        (Trading permission only, server IP whitelisted)
     TESTNET  DELTA_TESTNET_API_KEY / DELTA_TESTNET_API_SECRET
 
@@ -27,9 +27,15 @@ ENV = {"LIVE": ("DELTA_TRADE_API_KEY", "DELTA_TRADE_API_SECRET"), "TESTNET": ("D
 SYMBOL = "BTCUSD"
 
 
-def keys(mode):
+def env_keys(mode):
     k, s = (os.environ.get(x, "").strip() for x in ENV[mode])
     return (k, s) if k and s else None
+
+
+def keys(mode):
+    """Keys in the server's .env file win; otherwise the key pasted in the site (decrypted in memory by broker_keys)."""
+    import broker_keys
+    return env_keys(mode) or broker_keys.CACHE.get(mode)
 
 
 def sign(secret, method, ts, path, qs, body):
@@ -48,8 +54,9 @@ def _px(x):
 
 
 class DeltaBroker:
-    def __init__(self, mode, transport=None):
+    def __init__(self, mode, transport=None, keys_override=None):
         self.mode, self.base, self.transport = mode, BASES[mode], transport
+        self._keys = keys_override                         # only used to check a key before it is saved
         self.name = mode
         self._product = None
         self._prepared = None
@@ -62,7 +69,7 @@ class DeltaBroker:
         payload = json.dumps(body, separators=(",", ":")) if body is not None else ""
         headers = {"User-Agent": "VantageBTC-autotrade", "Content-Type": "application/json", "Accept": "application/json"}
         if auth:
-            k = keys(self.mode)
+            k = self._keys or keys(self.mode)
             if not k:
                 raise RuntimeError(f"{self.mode} API key is not set on the server")
             ts = str(int(time.time()))  # Delta accepts a signature for 5 seconds
@@ -260,6 +267,11 @@ class DeltaBroker:
 
 
 _BROKERS = {}
+
+
+def forget(mode):
+    """Drop the cached broker so the next call uses the new key."""
+    _BROKERS.pop(mode, None)
 
 
 def get(mode):

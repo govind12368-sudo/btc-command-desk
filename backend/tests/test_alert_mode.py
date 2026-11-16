@@ -24,7 +24,9 @@ def mods(monkeypatch):
     for m in ("core", "alert_mode", "messaging", "alerts"):
         sys.modules.pop(m, None)
     core = importlib.import_module("core")
-    return core, importlib.import_module("alert_mode"), importlib.import_module("alerts")
+    al = importlib.import_module("alerts")
+    al.SWITCH_ALERTS_ONLY = False      # these tests cover the arming switch; the Day-type switch filter is tested in test_broker_keys.py
+    return core, importlib.import_module("alert_mode"), al
 
 
 def run(c):

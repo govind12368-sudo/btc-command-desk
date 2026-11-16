@@ -35,6 +35,7 @@ import webpush
 import intel
 import desk
 import support
+import broker_keys
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1181,6 +1182,39 @@ async def autotrade_mode(body: AutoModeIn, request: Request, u=Depends(admin_use
     return await autotrade.status()
 
 
+class BrokerKeyIn(BaseModel):
+    mode: str
+    key: str = ""
+    secret: str = ""
+
+
+@api.get("/autotrade/keys")
+async def autotrade_keys_get(u=Depends(admin_user)):
+    return await broker_keys.status()                  # never the key or secret, only whether one is saved
+
+
+@api.put("/autotrade/keys")
+async def autotrade_keys_put(body: BrokerKeyIn, request: Request, u=Depends(admin_user)):
+    try:
+        out = await broker_keys.save(body.mode, body.key, body.secret, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("broker_key_saved", request, u["email"], detail=body.mode)
+    await autotrade.ENGINE.event("settings", f"{body.mode} Delta API key saved and checked by {u['email']}")
+    return out
+
+
+@api.delete("/autotrade/keys/{mode}")
+async def autotrade_keys_delete(mode: str, request: Request, u=Depends(admin_user)):
+    try:
+        out = await broker_keys.remove(mode, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("broker_key_removed", request, u["email"], detail=mode)
+    await autotrade.ENGINE.event("settings", f"{mode} Delta API key removed by {u['email']}")
+    return out
+
+
 @api.get("/autotrade/journal.csv")
 async def autotrade_journal(u=Depends(admin_user)):
     return Response(await autotrade.journal_csv(), media_type="text/csv",
@@ -1298,6 +1332,7 @@ async def startup():
     await db.validation_snapshots.create_index([("model", 1), ("capture_ts", -1)])
     await db.oi_history.create_index([("venue", 1), ("t", -1)])
     await seed_users()
+    await broker_keys.load()                          # pasted Delta keys, decrypted into memory before Auto-Trade starts
     await restore_cache()
     recovery.start_ws()
     async def delta_loop():

@@ -73,7 +73,7 @@ class FakeExchange:
 @pytest.fixture()
 def env(monkeypatch):
     monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
-    for m in ("core", "autotrade", "delta_broker", "daytype"):
+    for m in ("core", "autotrade", "delta_broker", "daytype", "broker_keys"):
         sys.modules.pop(m, None)
     core = importlib.import_module("core")
     at = importlib.import_module("autotrade")
@@ -381,7 +381,7 @@ def test_controls_and_live_lock(env, monkeypatch):
         assert t["exit_reason"] == "MANUAL" and (await env.at.get_state())["paused"] is True
         for k in ("DELTA_TRADE_API_KEY", "DELTA_TRADE_API_SECRET"):
             monkeypatch.delenv(k, raising=False)
-        with pytest.raises(ValueError, match="not on the server"):
+        with pytest.raises(ValueError, match="not saved yet"):
             await eng.set_mode("LIVE", "LIVE", "me")
         monkeypatch.setenv("DELTA_TRADE_API_KEY", "k")
         monkeypatch.setenv("DELTA_TRADE_API_SECRET", "s")

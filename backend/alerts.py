@@ -179,6 +179,13 @@ def _template(sig, test=False):
     if test:
         subject = f"{_from_name()}: test alert"
         rows = "<p>This is a test of signal alerts. Real alerts are sent only when a Scalping or Swing signal passes every active check (11; F31 excluded).</p>"
+    elif sig.get("switch_plan"):
+        subject = f"{_from_name()}: Day-type switch {sig['direction']} — {sig['switch_plan']} ({sig['switch_day']})"
+        rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(str(v))}</b></td></tr>" for k, v in [
+            ("Trade", f"{sig['direction']} BTCUSD"), ("Plan", sig["switch_plan"]), ("Day type", sig["switch_day"]),
+            ("Entry (USD)", sig["entry"]), ("Stop (USD)", sig["stop"]), ("Target (USD)", sig["target"]), ("Valid until (UTC)", sig.get("valid_until") or "10 minutes after capture"),
+            ("Scalp signal it came from", f"{sig['signal_direction']} · {sig['signal_id']}"), ("Captured (UTC)", sig["captured_at"]), ("Venue", "Delta Exchange India BTCUSD perpetual")])
+        rows = f"<table role='presentation'>{rows}</table>"
     else:
         subject = f"{_from_name()}: {sig['strategy'].upper()} {sig['direction']} — all {len(sig.get('checks') or []) or 11} active checks passed"
         rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(str(v))}</b></td></tr>" for k, v in [
@@ -191,8 +198,33 @@ def _template(sig, test=False):
     html = (f"<table role='presentation' width='100%'><tr><td style='padding:24px;font-family:Arial,sans-serif;color:#111'>"
             f"<h2 style='margin:0 0 12px'>{name}</h2>{rows}"
             f"<p>Open the desk to review: <a href='{escape(app)}'>{escape(app)}</a></p>"
-            f"<p style='font-size:12px;color:#888'>Sent by {name}. Model signal only — no order was placed. Verify on the exchange before trading.</p></td></tr></table>")
+            f"<p style='font-size:12px;color:#888'>Sent by {name}. {'The Auto-Trade page shows whether the bot placed this trade.' if sig and sig.get('switch_plan') else 'Model signal only — no order was placed.'} Verify on the exchange before trading.</p></td></tr></table>")
     return subject, html
+
+
+SWITCH_ALERTS_ONLY = True  # admin request, 16 Nov 2026: alert only Day-type switch trades (no swing, no stand-aside signals)
+
+
+async def switch_view(sig):
+    """The trade the Day-type switch takes on this signal, or (None, reason) when it takes none.
+    Range day: Plan A (reverse, stop = the signal's stop gap, target = RR x gap). Trend day with the signal: follow it."""
+    if sig.get("strategy") != "scalp":
+        return None, "swing signal: the Day-type switch trades scalp signals only"
+    try:
+        import autotrade
+        import daytype
+        day = daytype.public()
+        plan = daytype.playbook(day, sig["direction"])
+        if plan == "STAND_ASIDE":
+            return None, f"day type is {day.get('label') or 'unclear'}: stand aside"
+        cfg = await autotrade.settings()
+        lv = (autotrade.levels(sig["direction"], float(sig["entry"]), float(sig["stop"]), cfg["rr"], cfg["stop_mult"]) if plan == "PLAN_A"
+              else autotrade.follow_levels(sig["direction"], float(sig["entry"]), float(sig["stop"]), float(sig["target"])))
+    except Exception as e:                                   # never lose an alert because the day type could not be read
+        logger.warning(f"switch view failed, sending the plain signal: {e}")
+        return sig, None
+    return {**sig, "signal_direction": sig["direction"], "direction": lv["bot_dir"], "entry": lv["entry"], "stop": lv["stop"], "target": lv["target"],
+            "switch_plan": {"PLAN_A": "Plan A (reverse the signal)", "FOLLOW": "Follow the signal"}[plan], "switch_day": day.get("label")}, None
 
 
 def _day_tag(sig):
@@ -208,6 +240,13 @@ def _day_tag(sig):
 
 async def notify(sig, test=False):
     import messaging
+    if not test and SWITCH_ALERTS_ONLY:
+        view, why = await switch_view(sig)
+        if view is None:                                 # not a Day-type switch trade: logged, nothing sent
+            entry = {"at": iso(now_utc()), "signal_id": sig.get("signal_id"), "channel": "all", "test": False, "result": f"not sent ({why})"}
+            await db.alerts_log.insert_one(dict(entry))
+            return entry
+        sig = view
     if not test:
         mode = await alert_mode.get_mode()
         if not mode["effective_armed"]:
@@ -232,7 +271,9 @@ async def notify(sig, test=False):
             logger.warning(f"alert failed: {e}")
             entry["result"] = f"failed: {e}"
     await db.alerts_log.insert_one(dict(entry))
-    text = f"{APP_NAME}: test alert. " + messaging.ALERT_TEXT if test else messaging.signal_text(sig)
+    text = (f"{APP_NAME}: test alert. " + messaging.ALERT_TEXT if test else
+            f"{APP_NAME}: Day-type switch {sig['direction']} BTCUSD ({sig['switch_plan']}, {sig['switch_day']}). Entry {sig['entry']} stop {sig['stop']} target {sig['target']}. "
+            f"From scalp signal {sig['signal_direction']}. Delta BTCUSD." if sig.get("switch_plan") else messaging.signal_text(sig))
     for ch, ok, fn in (("sms", messaging.sms_configured(), messaging.send_sms), ("telegram", messaging.telegram_configured(), messaging.send_telegram)):
         e2 = {"at": iso(now_utc()), "signal_id": entry["signal_id"], "channel": ch, "test": test}
         if not ok:
@@ -254,8 +295,10 @@ async def notify(sig, test=False):
     if test:
         pr = await webpush.send("Vantage BTC test", "Test signal alert.", "/journal", "test")
     else:
-        pr = await webpush.send(f"Signal: {sig['strategy'].upper()} {sig['direction']}", f"Entry {sig['entry']}, stop {sig['stop']}, target {sig['target']}. Day type: {_day_tag(sig)}.",
-                                "/journal", sig["signal_id"])
+        title = f"Day-type switch: {sig['direction']}" if sig.get("switch_plan") else f"Signal: {sig['strategy'].upper()} {sig['direction']}"
+        body = (f"{sig['switch_plan']} ({sig['switch_day']}). Entry {sig['entry']}, stop {sig['stop']}, target {sig['target']}." if sig.get("switch_plan")
+                else f"Entry {sig['entry']}, stop {sig['stop']}, target {sig['target']}. Day type: {_day_tag(sig)}.")
+        pr = await webpush.send(title, body, "/auto-trade" if sig.get("switch_plan") else "/journal", sig["signal_id"])
     entry["push"] = f"sent to {pr['sent']} device(s)" if pr.get("sent") else "no device" if not pr.get("devices") else f"failed ({pr.get('failed')})"
     return entry
 

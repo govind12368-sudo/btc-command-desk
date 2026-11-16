@@ -572,8 +572,7 @@ class Engine:
                 raise ValueError("Close the open trade (or wait for armed signals to finish) before changing mode")
             if mode != "PAPER":
                 if not delta_broker.keys(mode):
-                    k = delta_broker.ENV[mode]
-                    raise ValueError(f"The {mode} API key is not on the server yet (add {k[0]} and {k[1]} to the server's .env file)")
+                    raise ValueError(f"The {mode} API key is not saved yet. Paste it in the 'Delta Exchange connection' card on this page.")
                 if mode == "LIVE":
                     if (confirm or "").strip() != "LIVE":
                         raise ValueError("Type LIVE to confirm")
