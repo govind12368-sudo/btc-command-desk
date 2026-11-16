@@ -49,6 +49,24 @@ class DeltaError(Exception):
         super().__init__(f"Delta {status}: {detail}")
 
 
+def wallet_inr(rows, usd_inr):
+    """Free balance in rupees from Delta's wallet list. An account can hold an empty INR row next to a funded USD row,
+    so every INR / USD / USDT row is valued and the largest is used (the first match used to win, even at zero)."""
+    vals = []
+    for r in rows or []:
+        sym = str(r.get("asset_symbol", "")).upper()
+        if sym not in ("INR", "USD", "USDT"):
+            continue
+        if r.get("available_balance_inr") not in (None, ""):
+            vals.append(float(r["available_balance_inr"]))
+        else:
+            v = float(r.get("available_balance") or 0)
+            vals.append(v if sym == "INR" else v * usd_inr)
+    if not vals:
+        raise RuntimeError("no INR/USD balance found in the Delta wallet")
+    return max(vals)
+
+
 def tick_fits(tick):
     """Prices are sent in 0.5 steps. They are valid when the exchange tick divides 0.5 exactly
     (live BTCUSD tick 0.5, testnet tick 0.1)."""
@@ -118,15 +136,7 @@ class DeltaBroker:
         return self._product
 
     async def available_inr(self, cfg):
-        rows = (await self._get("/v2/wallet/balances"))["result"]
-        for sym in ("INR", "USD", "USDT"):
-            for r in rows:
-                if str(r.get("asset_symbol", "")).upper() == sym:
-                    if r.get("available_balance_inr") not in (None, ""):
-                        return float(r["available_balance_inr"])
-                    v = float(r.get("available_balance") or 0)
-                    return v if sym == "INR" else v * cfg["usd_inr"]
-        raise RuntimeError("no INR/USD balance found in the Delta wallet")
+        return wallet_inr((await self._get("/v2/wallet/balances"))["result"], cfg["usd_inr"])
 
     async def prepare(self, cfg):
         """Isolated margin + leverage, set and verified before the first trade of each IST day."""

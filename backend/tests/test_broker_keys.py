@@ -134,3 +134,14 @@ def test_tick_check_accepts_live_and_testnet(m):
     f = m.delta_broker.tick_fits
     assert f(0.5) and f(0.1) and f(0.25) and f(0.05)          # live 0.5, testnet 0.1: 0.5-step prices are valid on both
     assert not f(1.0) and not f(0.3) and not f(0) and not f(2.0)
+
+
+def test_wallet_balance_uses_the_funded_row(m):
+    w = m.delta_broker.wallet_inr
+    rows = [{"asset_symbol": "INR", "available_balance": "0", "available_balance_inr": "0"},
+            {"asset_symbol": "USD", "available_balance": "100.0", "available_balance_inr": "8500.0"}, {"asset_symbol": "BTC", "available_balance": "1"}]
+    assert w(rows, 85) == 8500.0                              # an empty INR row no longer hides the USD balance
+    assert w([{"asset_symbol": "USD", "available_balance": "100"}], 85) == 8500.0
+    assert w([{"asset_symbol": "INR", "available_balance": "12000"}], 85) == 12000.0
+    with pytest.raises(RuntimeError):
+        w([{"asset_symbol": "BTC", "available_balance": "1"}], 85)
