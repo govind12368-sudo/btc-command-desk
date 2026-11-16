@@ -1198,6 +1198,7 @@ async def autotrade_keys_put(body: BrokerKeyIn, request: Request, u=Depends(admi
     try:
         out = await broker_keys.save(body.mode, body.key, body.secret, u["email"])
     except ValueError as e:
+        await autotrade.ENGINE.event("settings", f"{body.mode} Delta API key was NOT saved: {e}", level="warn")   # the reason only, never the key
         raise HTTPException(400, str(e))
     await SEC.log_event("broker_key_saved", request, u["email"], detail=body.mode)
     await autotrade.ENGINE.event("settings", f"{body.mode} Delta API key saved and checked by {u['email']}")
