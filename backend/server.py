@@ -323,7 +323,8 @@ async def signals(page: int = 1, size: int = 25, day: str = "", playbook: str = 
     if day or playbook or support_level:                  # a viewing filter only: it never changes a signal, a book or a total
         ids = await support.filter_ids(day, playbook, support_level)
         q = {"signal_id": {"$in": list(ids)}}
-        filt = support.follow_summary(plan_a.STATE["rows"], ids)
+        listed = {x["signal_id"] async for x in db.signals.find(q, {"signal_id": 1})}      # only signals this list shows (older ones live on the Plan A page)
+        filt = support.follow_summary(plan_a.STATE["rows"], listed)
     total = await db.signals.count_documents(q)
     all_total = await db.signals.count_documents({}) if q else total
     rows = [clean(x) async for x in db.signals.find(q).sort("captured_at", -1).skip((page - 1) * size).limit(size)]
