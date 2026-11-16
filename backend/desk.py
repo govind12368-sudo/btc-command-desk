@@ -181,16 +181,33 @@ BOOKS = (("follow", "Follow the signal (1:2)", "/journal", "Each scalp signal tr
 BOOK_KEYS = ("signals", "taken", "skipped", "stood_aside", "open", "target", "stop", "time", "win_rate", "net", "max_drawdown")
 
 
-def paper_books(books):
+def book_trades(rows, picks):
+    """The trades one paper book actually took, oldest first, with the leg (follow or Plan A) it used for each signal."""
+    out = []
+    for r in rows or []:
+        pick = (picks or {}).get(r.get("signal_id"))
+        if pick not in ("follow", "plan_a"):
+            continue
+        f = pick == "follow"
+        out.append({"signal_id": r["signal_id"], "day_type": r.get("day_label") or r.get("day_type"), "way": "Follow the signal" if f else "Plan A (reverse)",
+                    "direction": r.get("model_dir") if f else r.get("plan_dir"), "entry_time": r.get("fill_ist"), "entry": r.get("entry"),
+                    "stop": r.get("model_stop") if f else r.get("plan_stop"), "target": r.get("follow_target") if f else r.get("plan_target"),
+                    "exit_time": (r.get("follow_exit_ist") if f else r.get("exit_ist")) or None, "exit_price": r.get("follow_exit_price") if f else r.get("exit_price"),
+                    "result": r.get("follow_result") if f else r.get("plan_result"), "net": r.get("follow_net") if f else r.get("net")})
+    return out
+
+
+def paper_books(books, rows=None):
     """The three paper books from the Trade Journal, without their curves. Same signals, same fees, same rules."""
     if not books or not books.get("since"):
         return None
     period = lambda p: [{"key": k, "name": name, "to": to, "how": how, **{x: (books.get(p) or {}).get(k, {}).get(x) for x in BOOK_KEYS}} for k, name, to, how in BOOKS]
-    return {"since_date": books.get("since_date"), "since": period("since"), "all": period("all"),
+    trades = lambda p: book_trades(rows, ((books.get(p) or {}).get("switch") or {}).get("picks"))
+    return {"since_date": books.get("since_date"), "since": period("since"), "all": period("all"), "switch_trades": {"since": trades("since"), "all": trades("all")},
             "note": "Paper results after estimated fees, one trade at a time. A handful of trades proves nothing either way: in the long history test, switching by day type did not make money."}
 
 
-def summary(st, scan, I, events, books=None):
+def summary(st, scan, I, events, books=None, rows=None):
     st = st or {}
     reads = {v: compose(v, {"scanner": r_scanner(scan, v), "pillars": r_pillars(st, v), "intel": r_intel(I, v), "news": r_news(I)}) for v in ("intraday", "swing")}
     cs = cards(st, scan, I, events)
@@ -199,5 +216,5 @@ def summary(st, scan, I, events, books=None):
     if day.get("label") and (scan or {}).get("playbook"):
         plans[0]["playbook"] = {"day_type": day["label"], "text": scan["playbook"], "to": "/scanner"}
     return {"updated": iso(now_utc()), "price": st.get("price"), "decision": (st.get("decision") or {}).get("decision"), "reads": reads, "weights": WEIGHTS,
-            "plans": plans, "books": paper_books(books),
+            "plans": plans, "books": paper_books(books, rows),
             "cards": cs, "event_risk": next((c["event_risk"] for c in cs if c.get("event_risk")), None), "note": NOTE}

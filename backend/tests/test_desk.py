@@ -102,3 +102,17 @@ def test_paper_books_on_dashboard(desk):
     assert [x["key"] for x in b["since"]] == ["follow", "plan_a", "switch"] and sw["net"] == 396.24 and sw["taken"] == 6 and sw["name"] == "Day-type switch"
     assert "curve" not in sw and "picks" not in sw and b["all"][2]["taken"] == 12 and b["since_date"] == "2026-11-13" and "proves nothing" in b["note"]
     assert desk.summary(ST, SCAN, INTEL, [])["books"] is None and desk.paper_books({"since": {}}) is None
+
+
+def test_switch_trades_listed(desk):
+    row = lambda sid, d, fr, pr: {"signal_id": sid, "day_label": "Range", "model_dir": d, "plan_dir": "LONG" if d == "SHORT" else "SHORT", "fill_ist": "2026-11-13 21:10", "entry": 100.0,
+                                  "model_stop": 101.0, "plan_stop": 99.0, "follow_target": 98.0, "plan_target": 102.0, "follow_exit_ist": "2026-11-13 22:00", "exit_ist": "2026-11-13 21:20",
+                                  "follow_exit_price": 101.0, "exit_price": 102.0, "follow_result": fr, "plan_result": pr, "follow_net": -61.5, "net": 91.3}
+    rows = [row("a", "SHORT", "STOP", "TARGET"), row("b", "SHORT", "STOP", "TARGET"), row("c", "SHORT", "TARGET", "STOP"), row("d", "SHORT", "STOP", "STOP")]
+    t = desk.book_trades(rows, {"a": "plan_a", "b": "aside", "c": "follow", "d": "busy"})
+    assert [x["signal_id"] for x in t] == ["a", "c"]                                        # only trades the book really took
+    assert (t[0]["way"], t[0]["direction"], t[0]["stop"], t[0]["target"], t[0]["exit_price"], t[0]["result"], t[0]["net"]) == ("Plan A (reverse)", "LONG", 99.0, 102.0, 102.0, "TARGET", 91.3)
+    assert (t[1]["way"], t[1]["direction"], t[1]["stop"], t[1]["target"], t[1]["exit_time"], t[1]["net"]) == ("Follow the signal", "SHORT", 101.0, 98.0, "2026-11-13 22:00", -61.5)
+    books = {"since_date": "2026-11-13", "since": {"switch": {"picks": {"a": "plan_a"}, "taken": 1}}, "all": {"switch": {"picks": {"a": "plan_a", "c": "follow"}}}}
+    b = desk.paper_books(books, rows)
+    assert len(b["switch_trades"]["since"]) == 1 and len(b["switch_trades"]["all"]) == 2 and desk.book_trades(None, None) == []

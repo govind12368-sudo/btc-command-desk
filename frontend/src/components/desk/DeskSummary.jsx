@@ -165,6 +165,31 @@ export function PaperBooks({ d }) {
             </tr>))}</tbody>
         </table>
       </div>
+      {(() => {
+        const tr = b.switch_trades?.[period] || [];
+        const px = (v) => (v == null ? "—" : n(v, 1));
+        return (
+          <div className="mt-4" data-testid="switch-trades">
+            <h4 className="mb-1 text-[13px] font-semibold text-slate-100">Day-type switch: the {tr.length} trade{tr.length === 1 ? "" : "s"} it took</h4>
+            {tr.length ? <div className="overflow-x-auto scroll-thin">
+              <table className="desk-table">
+                <thead><tr><th className="num">#</th><th>Day type</th><th>Trade taken</th><th>Entry time (IST)</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Exit time (IST)</th><th className="num">Exit price</th><th>Result</th><th className="num">Net result</th></tr></thead>
+                <tbody>{tr.map((t, i) => (
+                  <tr key={t.signal_id}>
+                    <td className="num font-mono text-slate-500">{i + 1}</td><td className="whitespace-nowrap">{t.day_type || "—"}</td>
+                    <td className="whitespace-nowrap">{t.way} · <b className={t.direction === "LONG" ? "text-teal-300" : "text-red-300"}>{t.direction}</b></td>
+                    <td className="whitespace-nowrap font-mono text-[12px]">{t.entry_time || "—"}</td><td className="num font-mono">{px(t.entry)}</td><td className="num font-mono">{px(t.stop)}</td><td className="num font-mono">{px(t.target)}</td>
+                    <td className="whitespace-nowrap font-mono text-[12px]">{t.exit_time || "still open"}</td><td className="num font-mono">{px(t.exit_price)}</td>
+                    <td className={`whitespace-nowrap font-semibold ${t.result === "TARGET" ? "text-teal-300" : t.result === "STOP" ? "text-red-300" : "text-amber-300"}`}>{{ TARGET: "Target hit", STOP: "Stop hit", TIME: "6h exit", OPEN: "Open" }[t.result] || t.result}</td>
+                    <td className={`num font-mono font-semibold ${ink(t.net)}`}>{signedUsd(t.net)}</td>
+                  </tr>))}
+                  <tr><td /><td colSpan={9} className="font-semibold text-slate-100">Total</td><td className={`num font-mono font-bold ${ink(tr.reduce((a, t) => a + (t.net || 0), 0))}`}>{signedUsd(tr.reduce((a, t) => a + (t.net || 0), 0))}</td></tr>
+                </tbody>
+              </table>
+            </div> : <p className="text-[12.5px] text-slate-500">No trades taken in this period.</p>}
+          </div>
+        );
+      })()}
       <p className="mt-2 text-[11.5px] leading-snug text-slate-500">{b.note} Full trade lists are on the <Link to="/journal" className="underline">Trade Journal</Link> and <Link to="/plan-a" className="underline">Plan A</Link> pages.</p>
     </Card>
   );
