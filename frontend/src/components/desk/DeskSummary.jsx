@@ -202,25 +202,45 @@ export function SwitchFocus({ d }) {
       })()}
       <div className="mt-4" data-testid="switch-trades">
         <h4 className="mb-1 text-[13px] font-semibold text-slate-100">The {tr.length} trade{tr.length === 1 ? "" : "s"} it took</h4>
-        {tr.length ? <div className="overflow-x-auto scroll-thin">
-          <table className="desk-table">
-            <thead><tr><th className="num">#</th><th>Day type</th><th>Trade taken</th><th>Entry time (IST)</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Exit time (IST)</th><th className="num">Exit price</th><th>Result</th><th className="num">Net result</th></tr></thead>
-            <tbody>{tr.map((t, i) => (
-              <tr key={t.signal_id}>
-                <td className="num font-mono text-slate-500">{i + 1}</td><td className="whitespace-nowrap">{t.day_type || "—"}</td>
-                <td className="whitespace-nowrap">{t.way} · <b className={t.direction === "LONG" ? "text-teal-300" : "text-red-300"}>{t.direction}</b></td>
-                <td className="whitespace-nowrap font-mono text-[12px]">{t.entry_time || "—"}</td><td className="num font-mono">{px(t.entry)}</td><td className="num font-mono">{px(t.stop)}</td><td className="num font-mono">{px(t.target)}</td>
-                <td className="whitespace-nowrap font-mono text-[12px]">{t.exit_time || "still open"}</td><td className="num font-mono">{px(t.exit_price)}</td>
-                <td className={`whitespace-nowrap font-semibold ${t.result === "TARGET" ? "text-teal-300" : t.result === "STOP" ? "text-red-300" : "text-amber-300"}`}>{{ TARGET: "Target hit", STOP: "Stop hit", TIME: "6h exit", OPEN: "Open" }[t.result] || t.result}</td>
-                <td className={`num font-mono font-semibold ${ink(t.net)}`}>{signedUsd(t.net)}</td>
-              </tr>))}
-              <tr><td /><td colSpan={9} className="font-semibold text-slate-100">Total</td><td className={`num font-mono font-bold ${ink(total)}`}>{signedUsd(total)}</td></tr>
-            </tbody>
-          </table>
-        </div> : <p className="text-[12.5px] text-slate-500">No trades taken in this period.</p>}
+        <SwitchTradesTable trades={tr} />
       </div>
       <p className="mt-3 text-[12px] text-slate-400" data-testid="switch-compare">For comparison only, not traded by Auto-Trade: {others.map((r, i) => <span key={r.key}>{i > 0 && " · "}<Link to={r.to} className="underline decoration-slate-600 underline-offset-2">{r.name}</Link> <span className={`font-mono ${ink(r.net)}`}>{signedUsd(r.net)}</span> on {r.taken ?? 0} trades</span>)}.</p>
       <p className="mt-1 text-[11.5px] leading-snug text-slate-500">{b.note} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</p>
     </Card>
+  );
+}
+
+const SUP_SHORT = { STRONG: ["Strong", "text-teal-300"], MEDIUM: ["Medium", "text-amber-300"], WEAK: ["Weak", "text-slate-300"] };
+
+// Every trade the Day-type switch took: day type, plan, entry, stop, target, exit and result. Shared by the dashboard and the Trade Journal.
+export function SwitchTradesTable({ trades, support }) {
+  const tr = trades || [];
+  const ink = (v) => (v == null ? "text-slate-500" : v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-slate-300");
+  const px = (v) => (v == null ? "—" : n(v, 1));
+  const total = tr.reduce((x, t) => x + (t.net || 0), 0);
+  const cols = support ? 12 : 11;
+  if (!tr.length) return <p className="text-[12.5px] text-slate-500">No trades taken in this period.</p>;
+  return (
+    <div className="overflow-x-auto scroll-thin">
+      <table className="desk-table">
+        <thead><tr><th className="num">#</th><th>Day type</th><th>Plan · side</th>{support && <th>Support</th>}<th>Entry time (IST)</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Exit time (IST)</th><th className="num">Exit price</th><th>Result</th><th className="num">P&amp;L</th></tr></thead>
+        <tbody>{tr.map((t, i) => {
+          const sp = support?.[t.signal_id];
+          return (
+            <tr key={t.signal_id}>
+              <td className="num font-mono text-slate-500">{i + 1}</td><td className="whitespace-nowrap">{t.day_type || "—"}</td>
+              <td className="whitespace-nowrap">{t.way === "Follow the signal" ? "Follow" : "Plan A"} · <b className={t.direction === "LONG" ? "text-teal-300" : "text-red-300"}>{t.direction}</b></td>
+              {support && <td className={`whitespace-nowrap text-[12px] ${sp?.level ? SUP_SHORT[sp.level][1] : "text-slate-600"}`}>{sp?.level ? `${SUP_SHORT[sp.level][0]} ${sp.passed}/${sp.of}` : "not recorded"}</td>}
+              <td className="whitespace-nowrap font-mono text-[12px]">{t.entry_time || "—"}</td><td className="num font-mono">{px(t.entry)}</td><td className="num font-mono">{px(t.stop)}</td><td className="num font-mono">{px(t.target)}</td>
+              <td className="whitespace-nowrap font-mono text-[12px]">{t.exit_time || "still open"}</td><td className="num font-mono">{px(t.exit_price)}</td>
+              <td className={`whitespace-nowrap font-semibold ${t.result === "TARGET" ? "text-teal-300" : t.result === "STOP" ? "text-red-300" : "text-amber-300"}`}>{{ TARGET: "Target hit", STOP: "Stop hit", TIME: "6h exit", OPEN: "Open" }[t.result] || t.result}</td>
+              <td className={`num font-mono font-semibold ${ink(t.net)}`}>{signedUsd(t.net)}</td>
+            </tr>
+          );
+        })}
+          <tr><td /><td colSpan={cols - 2} className="font-semibold text-slate-100">Total ({tr.length} trade{tr.length === 1 ? "" : "s"})</td><td className={`num font-mono font-bold ${ink(total)}`}>{signedUsd(total)}</td></tr>
+        </tbody>
+      </table>
+    </div>
   );
 }

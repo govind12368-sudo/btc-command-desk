@@ -6,6 +6,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { BookPanel, DayChip, DayTypeCard, PeriodSwitch, PLAYBOOK_NAME } from "@/components/desk/Books";
 import { SignalCell, ResultCell, NetCell, PriceCell, WhyCell } from "@/components/desk/TradeCells";
 import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, isActive } from "@/components/desk/DayFilter";
+import { SwitchTradesTable } from "@/components/desk/DeskSummary";
 import { api, errText, API } from "@/lib/api";
 import { Card, Chip, KV, PageHead, Empty, Note, Stat } from "@/components/desk/ui";
 import { Field, Input, Select, Btn, Area } from "@/components/desk/forms";
@@ -153,6 +154,25 @@ function TopPanel() {
   );
 }
 
+// Every trade the Day-type switch took, in full. Same figures as the dashboard card.
+function SwitchTrades() {
+  const { data } = useFetch("/desk-summary", 60000);
+  const sup = useSupport();
+  const [period, setPeriod] = useState("since");
+  const b = data?.books;
+  if (!b) return null;
+  const sw = (b[period] || []).find((r) => r.key === "switch") || {};
+  const tr = b.switch_trades?.[period] || [];
+  return (
+    <Card title={`Day-type switch: ${signedUsd(sw.net)} on ${sw.taken ?? 0} trades`} testid="journal-switch-trades"
+      sub={`Range day: Plan A (reverse the signal). Trend day and the signal goes with the trend: follow it. Anything else: no trade. ${sw.target ?? 0} targets, ${sw.stop ?? 0} stops, ${sw.time ?? 0} 6-hour exits${sw.win_rate == null ? "" : `, ${Math.round(sw.win_rate * 100)}% won`}. Estimated, after fees.`}
+      right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={b.since_date} />}>
+      <SwitchTradesTable trades={tr} support={sup} />
+      <p className="mt-2 text-[11.5px] leading-snug text-slate-500">This is the plan Auto-Trade follows in paper mode. {b.note}</p>
+    </Card>
+  );
+}
+
 function DayTypeNow() {
   const { data } = useFetch("/plan-a", 60000);
   return <DayTypeCard day={data?.day_type} compact />;
@@ -168,6 +188,7 @@ export default function Journal() {
         {[["auto", "A. Model signals"], ...(isAdmin ? [["actual", "B. Actual fills"]] : [])].map(([k, l]) => <button key={k} data-testid={`tab-${k}`} onClick={() => setTab(k)} className={`rounded px-4 py-2 text-sm border transition-colors ${tab === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-[#1e2a4a] text-slate-400"}`}>{l}</button>)}
       </div>
       {(tab === "auto" || !isAdmin) && <TopPanel />}
+      {(tab === "auto" || !isAdmin) && <SwitchTrades />}
       {tab === "auto" || !isAdmin ? <Signals isAdmin={isAdmin} /> : <Actual isAdmin={isAdmin} />}
       {(tab === "auto" || !isAdmin) && <DayTypeNow />}
     </div>
