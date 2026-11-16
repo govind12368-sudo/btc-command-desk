@@ -175,9 +175,9 @@ def cards(st, scan, I, events):
     return out
 
 
-BOOKS = (("follow", "Follow the signal (1:2)", "/journal", "Each scalp signal traded in its own direction."),
-         ("plan_a", "Plan A (reverse 1:2)", "/plan-a", "Each scalp signal traded the opposite way."),
-         ("switch", "Day-type switch", "/scanner", "Range day: Plan A. Trend day with the signal: follow. Otherwise no trade."))
+BOOKS = (("switch", "Day-type switch", "/autotrade", "Range day: Plan A. Trend day with the signal: follow. Otherwise no trade."),
+         ("follow", "Follow the signal (1:2)", "/journal", "Each scalp signal traded in its own direction."),
+         ("plan_a", "Plan A (reverse 1:2)", "/plan-a", "Each scalp signal traded the opposite way."))
 BOOK_KEYS = ("signals", "taken", "skipped", "stood_aside", "open", "target", "stop", "time", "win_rate", "net", "max_drawdown")
 
 
@@ -207,7 +207,7 @@ def paper_books(books, rows=None):
             "note": "Paper results after estimated fees, one trade at a time. A handful of trades proves nothing either way: in the long history test, switching by day type did not make money."}
 
 
-def summary(st, scan, I, events, books=None, rows=None):
+def summary(st, scan, I, events, books=None, rows=None, auto=None):
     st = st or {}
     reads = {v: compose(v, {"scanner": r_scanner(scan, v), "pillars": r_pillars(st, v), "intel": r_intel(I, v), "news": r_news(I)}) for v in ("intraday", "swing")}
     cs = cards(st, scan, I, events)
@@ -216,5 +216,5 @@ def summary(st, scan, I, events, books=None, rows=None):
     if day.get("label") and (scan or {}).get("playbook"):
         plans[0]["playbook"] = {"day_type": day["label"], "text": scan["playbook"], "to": "/scanner"}
     return {"updated": iso(now_utc()), "price": st.get("price"), "decision": (st.get("decision") or {}).get("decision"), "reads": reads, "weights": WEIGHTS,
-            "plans": plans, "books": paper_books(books, rows),
+            "plans": plans, "books": paper_books(books, rows), "auto": auto,
             "cards": cs, "event_risk": next((c["event_risk"] for c in cs if c.get("event_risk")), None), "note": NOTE}

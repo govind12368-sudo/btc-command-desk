@@ -208,3 +208,7 @@ The dashboard opens with a "Market read and weightage" card: BTC Scanner, Five P
 News & Events each give a reading from -1 to +1, weighted 30/30/30/10 for the intraday read (scalping plan) and
 25/25/40/10 for the swing read. The card shows how each read sits against the current scalp and swing signal and links
 to every page. It is read-only: it never changes a signal, a check or a setting, and the total is not backtested.
+
+Auto-Trade is held on the Day-type switch (`autotrade.DAY_TYPE_ONLY = True`, admin request 16 Nov 2026): range day -> Plan A,
+trend day with the signal -> follow, anything else -> no trade. The dashboard leads with that plan's results and trade list;
+the "follow" and "Plan A" books are shown for comparison only.

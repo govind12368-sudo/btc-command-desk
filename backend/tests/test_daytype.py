@@ -154,6 +154,10 @@ def test_autotrade_direction_modes(mods):
         await sig("SCALP-SHORT-4", "SHORT", 71500.0, 71857.5, 70964.0)
         await eng.tick(71505)
         assert (await core.db.autotrade_signals.find_one({"_id": "SCALP-SHORT-4"}))["status"] == "SKIPPED"
+        assert (await at.settings())["direction_mode"] == 2                # held on the day-type switch
+        await at.save_settings({"direction_mode": 1}, "me")
+        assert (await at.settings())["direction_mode"] == 2                # asking for another mode changes nothing while the lock is on
+        at.DAY_TYPE_ONLY = False                                             # the other modes still work in code if the lock is ever lifted
         await at.save_settings({"direction_mode": 1}, "me")              # follow always, whatever the day type
         clock[0] += timedelta(minutes=30)
         await sig("SCALP-LONG-5", "LONG", 71400.0, 71043.0, 71935.5)

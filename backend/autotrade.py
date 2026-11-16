@@ -40,6 +40,7 @@ RANGES = {"margin_inr": (1000, 5_000_000), "leverage": (1, 100), "daily_loss_usd
           "rr": (0.25, 10), "stop_mult": (0.25, 5), "usd_inr": (50, 200), "buffer_inr": (0, 1_000_000),
           "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1), "direction_mode": (0, 2)}
 _INTS = ("leverage", "max_contracts", "tp_limit", "direction_mode")
+DAY_TYPE_ONLY = True  # admin request, 16 Nov 2026: Auto-Trade takes Day-type switch trades only (direction_mode is held at 2)
 PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal"}
 
 
@@ -100,7 +101,10 @@ def size(price, stop, cfg, available_inr, realized_today):
 # ---------------- settings / state ----------------
 async def settings():
     doc = await db.settings.find_one({"_id": "autotrade"}) or {}
-    return {**DEFAULTS, **{k: v for k, v in (doc.get("values") or {}).items() if k in DEFAULTS}}
+    cur = {**DEFAULTS, **{k: v for k, v in (doc.get("values") or {}).items() if k in DEFAULTS}}
+    if DAY_TYPE_ONLY:
+        cur["direction_mode"] = 2
+    return cur
 
 
 async def save_settings(values, by):

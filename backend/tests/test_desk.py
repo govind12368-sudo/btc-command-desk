@@ -98,9 +98,9 @@ def test_paper_books_on_dashboard(desk):
     bk = lambda net, taken: {"signals": 20, "taken": taken, "skipped": 2, "stood_aside": 0, "open": 0, "target": 3, "stop": 2, "time": 1, "win_rate": 0.5, "net": net, "max_drawdown": -80.0, "curve": [1], "picks": {"a": "follow"}}
     books = {"since_date": "2026-11-13", "since": {"follow": bk(-120.5, 9), "plan_a": bk(210.0, 9), "switch": bk(396.24, 6)}, "all": {"follow": bk(-1.0, 30), "plan_a": bk(2.0, 30), "switch": bk(3.0, 12)}}
     b = desk.summary(ST, SCAN, INTEL, [], books)["books"]
-    sw = b["since"][2]
-    assert [x["key"] for x in b["since"]] == ["follow", "plan_a", "switch"] and sw["net"] == 396.24 and sw["taken"] == 6 and sw["name"] == "Day-type switch"
-    assert "curve" not in sw and "picks" not in sw and b["all"][2]["taken"] == 12 and b["since_date"] == "2026-11-13" and "proves nothing" in b["note"]
+    sw = b["since"][0]
+    assert [x["key"] for x in b["since"]] == ["switch", "follow", "plan_a"] and sw["net"] == 396.24 and sw["taken"] == 6 and sw["name"] == "Day-type switch"
+    assert "curve" not in sw and "picks" not in sw and b["all"][0]["taken"] == 12 and b["since_date"] == "2026-11-13" and "proves nothing" in b["note"]
     assert desk.summary(ST, SCAN, INTEL, [])["books"] is None and desk.paper_books({"since": {}}) is None
 
 

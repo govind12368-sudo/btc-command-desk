@@ -78,6 +78,7 @@ def env(monkeypatch):
     core = importlib.import_module("core")
     at = importlib.import_module("autotrade")
     at.DEFAULTS["direction_mode"] = 0   # these tests cover Plan A; the day-type modes are tested in test_daytype.py
+    at.DAY_TYPE_ONLY = False
     clock, alerts = Clock(), []
 
     async def alert(mode, title, text):

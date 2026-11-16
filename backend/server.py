@@ -1034,7 +1034,13 @@ async def desk_summary(u=Depends(current_user)):
     """Dashboard summary of every module with its weight. Read-only: it never touches signals or settings."""
     ev = list((REGISTRY["bls"].data or {}).get("events", [])) if "bls" in REGISTRY else []
     ev += [x async for x in db.manual_events.find({}, {"_id": 0, "title": 1, "scheduled_utc": 1, "impact": 1})]
-    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"))
+    try:
+        a = await autotrade.status()
+        auto = {"mode": a["mode"], "status": a["status"], "day_type_only": a["settings"].get("direction_mode") == 2, "today": a["today"]["total"],
+                "open_trade": {k: a["open_trade"].get(k) for k in ("plan", "day_type", "bot_dir", "entry", "stop", "target")} if a.get("open_trade") else None, "armed": len(a.get("armed") or [])}
+    except Exception:
+        auto = None
+    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"), auto)
 
 
 @api.get("/intel")

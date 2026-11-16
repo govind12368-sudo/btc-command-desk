@@ -38,7 +38,6 @@ const FIELDS = [
   ["buffer_inr", "Balance kept free (₹)", "Never used as margin"],
   ["paper_balance_inr", "Paper starting balance (₹)", "Paper mode only"],
   ["tp_limit", "Take-profit order (0 or 1)", "0 = market order at target, 1 = limit order at target"],
-  ["direction_mode", "Direction (0, 1 or 2)", "0 = Plan A always, 1 = follow the signal always, 2 = by day type (range → Plan A, trend → follow, unclear → no trade)"],
 ];
 
 function useNow() {
@@ -178,7 +177,7 @@ export default function AutoTrade() {
 
   return (
     <div className="space-y-4" data-testid="autotrade-page">
-      <PageHead title="Auto-trade" sub={`Scalp signals only, one trade at a time, 6-hour exit. Direction: ${["Plan A (reverse 1:2) always", "follow the signal always", "by day type – range → Plan A, trend → follow, unclear → no trade"][d.settings.direction_mode] || ""}.`}
+      <PageHead title="Auto-trade" sub={`Scalp signals only, one trade at a time, 6-hour exit. Direction: ${["Plan A (reverse 1:2) always", "follow the signal always", "Day-type switch only – range day → Plan A, trend day with the signal → follow, anything else → no trade"][d.settings.direction_mode] || ""}.`}
         right={<span className="flex items-center gap-2"><Chip status={MODE_CHIP[d.mode]} label={`${MODE_NAME[d.mode].toUpperCase()} MODE`} testid="autotrade-mode" /><Chip status={STATUS_CHIP[d.status]} label={d.status.toUpperCase()} testid="autotrade-status" /></span>} />
 
       {d.mode === "PAPER" && <Note>Paper mode: trades are simulated from the live Delta price with the same rules, sizing and fees. No order is sent to the exchange.</Note>}

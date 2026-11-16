@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, Note } from "@/components/desk/ui";
 import { n, ist, ago, signedUsd } from "@/lib/fmt";
-import { PeriodSwitch } from "@/components/desk/Books";
+import { PeriodSwitch, Stat } from "@/components/desk/Books";
 
 const NAME = { BULLISH: "Bullish", "LEAN BULLISH": "Lean bullish", NEUTRAL: "Neutral", "LEAN BEARISH": "Lean bearish", BEARISH: "Bearish" };
 const INK = { BULLISH: "text-teal-300", "LEAN BULLISH": "text-teal-300", NEUTRAL: "text-slate-300", "LEAN BEARISH": "text-red-300", BEARISH: "text-red-300" };
@@ -138,59 +138,56 @@ export function ModuleCards({ d }) {
   );
 }
 
-// The three paper books from the Trade Journal, side by side: the same scalp signals traded three ways.
-export function PaperBooks({ d }) {
+// The Day-type switch is the plan Auto-Trade follows, so it leads; the two fixed ways are kept below for comparison only.
+export function SwitchFocus({ d }) {
   const [period, setPeriod] = useState("since");
   const b = d?.books;
   if (!b) return null;
   const rows = b[period] || [];
-  const max = Math.max(1, ...rows.map((r) => Math.abs(r.net || 0)));
+  const sw = rows.find((r) => r.key === "switch") || {};
+  const others = rows.filter((r) => r.key !== "switch");
+  const tr = b.switch_trades?.[period] || [];
+  const a = d.auto;
   const ink = (v) => (v == null ? "text-slate-500" : v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-slate-300");
+  const px = (v) => (v == null ? "—" : n(v, 1));
+  const total = tr.reduce((x, t) => x + (t.net || 0), 0);
   return (
-    <Card title="Paper results: the same scalp signals traded three ways" testid="paper-books" sub="Estimated net result after fees. One trade at a time, 10-minute entry, 6-hour exit."
+    <Card title="Day-type switch: the plan Auto-Trade follows" testid="switch-focus" sub="Range day: Plan A (reverse the signal). Trend day and the signal goes with the trend: follow it. Anything else: no trade."
       right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={b.since_date} />}>
-      <div className="overflow-x-auto scroll-thin">
-        <table className="desk-table">
-          <thead><tr><th>Way of trading</th><th className="num">Net result</th><th className="w-[18%]"><span className="sr-only">Net result bar</span></th><th className="num">Trades</th><th className="num">Win rate</th><th className="num">Target / Stop / 6h exit</th><th className="num">Still open</th><th className="num">Worst drawdown</th></tr></thead>
-          <tbody>{rows.map((r) => (
-            <tr key={r.key} data-testid={`book-${r.key}`}>
-              <td className="min-w-[210px]"><Link to={r.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{r.name}</Link><div className="text-[11.5px] leading-snug text-slate-400">{r.how}</div></td>
-              <td className={`num font-mono text-[15px] font-bold ${ink(r.net)}`}>{signedUsd(r.net)}</td>
-              <td className="min-w-[110px]"><Diverge value={r.net} max={max} height={8} label={`${r.name} net result ${signedUsd(r.net)}`} /></td>
-              <td className="num font-mono">{r.taken ?? "—"}{r.stood_aside ? <span className="text-slate-500"> ({r.stood_aside} stood aside)</span> : null}</td>
-              <td className="num font-mono">{r.win_rate == null ? "—" : `${Math.round(r.win_rate * 100)}%`}</td>
-              <td className="num font-mono">{r.target ?? 0} / {r.stop ?? 0} / {r.time ?? 0}</td>
-              <td className="num font-mono">{r.open ?? 0}</td>
-              <td className="num font-mono text-red-300">{signedUsd(r.max_drawdown)}</td>
-            </tr>))}</tbody>
-        </table>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" data-testid="switch-stats">
+        <Stat label="Net result (est.)" value={signedUsd(sw.net)} tone={ink(sw.net)} />
+        <Stat label="Trades taken" value={sw.taken ?? "—"} sub={sw.open ? `${sw.open} still open` : null} />
+        <Stat label="Signals it stood aside on" value={sw.stood_aside ?? "—"} sub={`of ${sw.signals ?? 0} signals`} />
+        <Stat label="Win rate" value={sw.win_rate == null ? "—" : `${Math.round(sw.win_rate * 100)}%`} />
+        <Stat label="Target / Stop / 6h exit" value={`${sw.target ?? 0} / ${sw.stop ?? 0} / ${sw.time ?? 0}`} />
+        <Stat label="Worst drawdown" value={signedUsd(sw.max_drawdown)} tone="text-red-300" />
       </div>
-      {(() => {
-        const tr = b.switch_trades?.[period] || [];
-        const px = (v) => (v == null ? "—" : n(v, 1));
-        return (
-          <div className="mt-4" data-testid="switch-trades">
-            <h4 className="mb-1 text-[13px] font-semibold text-slate-100">Day-type switch: the {tr.length} trade{tr.length === 1 ? "" : "s"} it took</h4>
-            {tr.length ? <div className="overflow-x-auto scroll-thin">
-              <table className="desk-table">
-                <thead><tr><th className="num">#</th><th>Day type</th><th>Trade taken</th><th>Entry time (IST)</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Exit time (IST)</th><th className="num">Exit price</th><th>Result</th><th className="num">Net result</th></tr></thead>
-                <tbody>{tr.map((t, i) => (
-                  <tr key={t.signal_id}>
-                    <td className="num font-mono text-slate-500">{i + 1}</td><td className="whitespace-nowrap">{t.day_type || "—"}</td>
-                    <td className="whitespace-nowrap">{t.way} · <b className={t.direction === "LONG" ? "text-teal-300" : "text-red-300"}>{t.direction}</b></td>
-                    <td className="whitespace-nowrap font-mono text-[12px]">{t.entry_time || "—"}</td><td className="num font-mono">{px(t.entry)}</td><td className="num font-mono">{px(t.stop)}</td><td className="num font-mono">{px(t.target)}</td>
-                    <td className="whitespace-nowrap font-mono text-[12px]">{t.exit_time || "still open"}</td><td className="num font-mono">{px(t.exit_price)}</td>
-                    <td className={`whitespace-nowrap font-semibold ${t.result === "TARGET" ? "text-teal-300" : t.result === "STOP" ? "text-red-300" : "text-amber-300"}`}>{{ TARGET: "Target hit", STOP: "Stop hit", TIME: "6h exit", OPEN: "Open" }[t.result] || t.result}</td>
-                    <td className={`num font-mono font-semibold ${ink(t.net)}`}>{signedUsd(t.net)}</td>
-                  </tr>))}
-                  <tr><td /><td colSpan={9} className="font-semibold text-slate-100">Total</td><td className={`num font-mono font-bold ${ink(tr.reduce((a, t) => a + (t.net || 0), 0))}`}>{signedUsd(tr.reduce((a, t) => a + (t.net || 0), 0))}</td></tr>
-                </tbody>
-              </table>
-            </div> : <p className="text-[12.5px] text-slate-500">No trades taken in this period.</p>}
-          </div>
-        );
-      })()}
-      <p className="mt-2 text-[11.5px] leading-snug text-slate-500">{b.note} Full trade lists are on the <Link to="/journal" className="underline">Trade Journal</Link> and <Link to="/plan-a" className="underline">Plan A</Link> pages.</p>
+      {a && <p className="mt-3 rounded-md border border-[#1e2a4a] bg-[#0b132b]/60 px-3 py-2 text-[12.5px] text-slate-300" data-testid="switch-auto">
+        <b className="text-slate-100">Auto-Trade:</b> {a.mode === "PAPER" ? "paper mode" : a.mode === "LIVE" ? "LIVE mode" : "testnet mode"} · {a.status} · {a.day_type_only ? "takes Day-type switch trades only" : "not set to Day-type switch"} · today <span className={`font-mono ${ink(a.today)}`}>{signedUsd(a.today)}</span>
+        {a.open_trade && <> · in a trade: {a.open_trade.bot_dir} from {px(a.open_trade.entry)}, stop {px(a.open_trade.stop)}, target {px(a.open_trade.target)}</>}
+        {" · "}<Link to="/autotrade" className={open}>Open Auto-Trade</Link>
+      </p>}
+      <div className="mt-4" data-testid="switch-trades">
+        <h4 className="mb-1 text-[13px] font-semibold text-slate-100">The {tr.length} trade{tr.length === 1 ? "" : "s"} it took</h4>
+        {tr.length ? <div className="overflow-x-auto scroll-thin">
+          <table className="desk-table">
+            <thead><tr><th className="num">#</th><th>Day type</th><th>Trade taken</th><th>Entry time (IST)</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Exit time (IST)</th><th className="num">Exit price</th><th>Result</th><th className="num">Net result</th></tr></thead>
+            <tbody>{tr.map((t, i) => (
+              <tr key={t.signal_id}>
+                <td className="num font-mono text-slate-500">{i + 1}</td><td className="whitespace-nowrap">{t.day_type || "—"}</td>
+                <td className="whitespace-nowrap">{t.way} · <b className={t.direction === "LONG" ? "text-teal-300" : "text-red-300"}>{t.direction}</b></td>
+                <td className="whitespace-nowrap font-mono text-[12px]">{t.entry_time || "—"}</td><td className="num font-mono">{px(t.entry)}</td><td className="num font-mono">{px(t.stop)}</td><td className="num font-mono">{px(t.target)}</td>
+                <td className="whitespace-nowrap font-mono text-[12px]">{t.exit_time || "still open"}</td><td className="num font-mono">{px(t.exit_price)}</td>
+                <td className={`whitespace-nowrap font-semibold ${t.result === "TARGET" ? "text-teal-300" : t.result === "STOP" ? "text-red-300" : "text-amber-300"}`}>{{ TARGET: "Target hit", STOP: "Stop hit", TIME: "6h exit", OPEN: "Open" }[t.result] || t.result}</td>
+                <td className={`num font-mono font-semibold ${ink(t.net)}`}>{signedUsd(t.net)}</td>
+              </tr>))}
+              <tr><td /><td colSpan={9} className="font-semibold text-slate-100">Total</td><td className={`num font-mono font-bold ${ink(total)}`}>{signedUsd(total)}</td></tr>
+            </tbody>
+          </table>
+        </div> : <p className="text-[12.5px] text-slate-500">No trades taken in this period.</p>}
+      </div>
+      <p className="mt-3 text-[12px] text-slate-400" data-testid="switch-compare">For comparison only, not traded by Auto-Trade: {others.map((r, i) => <span key={r.key}>{i > 0 && " · "}<Link to={r.to} className="underline decoration-slate-600 underline-offset-2">{r.name}</Link> <span className={`font-mono ${ink(r.net)}`}>{signedUsd(r.net)}</span> on {r.taken ?? 0} trades</span>)}.</p>
+      <p className="mt-1 text-[11.5px] leading-snug text-slate-500">{b.note} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</p>
     </Card>
   );
 }
