@@ -49,6 +49,15 @@ class DeltaError(Exception):
         super().__init__(f"Delta {status}: {detail}")
 
 
+def tick_fits(tick):
+    """Prices are sent in 0.5 steps. They are valid when the exchange tick divides 0.5 exactly
+    (live BTCUSD tick 0.5, testnet tick 0.1)."""
+    if tick <= 0:
+        return False
+    n = TICK / tick
+    return abs(n - round(n)) < 1e-9
+
+
 def _px(x):
     return f"{round(x / TICK) * TICK:.1f}"
 
@@ -103,7 +112,7 @@ class DeltaBroker:
         contract size / tick are verified before anything is traded."""
         if not self._product:
             p = (await self._get(f"/v2/products/{SYMBOL}", auth=False))["result"]
-            if abs(float(p["contract_value"]) - CV) > 1e-12 or abs(float(p["tick_size"]) - TICK) > 1e-9:
+            if abs(float(p["contract_value"]) - CV) > 1e-12 or not tick_fits(float(p["tick_size"])):
                 raise RuntimeError(f"{SYMBOL} contract changed (value {p['contract_value']}, tick {p['tick_size']}) – auto-trade stopped")
             self._product = {"id": int(p["id"]), "symbol": p["symbol"]}
         return self._product

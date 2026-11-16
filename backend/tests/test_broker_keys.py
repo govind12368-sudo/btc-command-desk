@@ -128,3 +128,9 @@ def test_alerts_only_for_day_type_switch_trades(m, monkeypatch):
     r = run(al.notify(SIG))                                # unclear day: nothing is sent, the decision is logged
     assert r["result"].startswith("not sent") and r["signal_id"] == "SCALP-SHORT-1"
     assert run(m.core.db.alerts_log.find_one({}))["result"].startswith("not sent (day type is Unclear")
+
+
+def test_tick_check_accepts_live_and_testnet(m):
+    f = m.delta_broker.tick_fits
+    assert f(0.5) and f(0.1) and f(0.25) and f(0.05)          # live 0.5, testnet 0.1: 0.5-step prices are valid on both
+    assert not f(1.0) and not f(0.3) and not f(0) and not f(2.0)
