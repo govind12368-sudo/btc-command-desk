@@ -1382,7 +1382,7 @@
   "closest": [
    {
     "name": "Fade extreme funding (top or bottom 10% of the last 30 days)",
-    "text": "Positive in training (+0.33R on 63 trades) and validation (+0.37R on 30 trades), but the win rate was 38% to 47%, it trades about once a week, and the result is within what chance can produce."
+    "text": "Looked positive at first (+0.33R on 63 training trades, +0.37R on 30 validation trades, +0.12R on 49 test trades). A closer check on 16 Nov showed it does not hold up: Delta funding sits at its default 0.01% about 60% of the time, so most 'top 10%' signals were just funding returning to the default; taken one side at a time the result flips between periods (long side +0.39R, then -0.34R, then -0.13R); and with a strict definition of extreme the result over all 107 trades is +0.01R. Not an edge."
    },
    {
     "name": "Slow daily trend (daily close against its 50-day average)",
