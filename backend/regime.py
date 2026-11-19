@@ -38,7 +38,7 @@ RR, HOLD, MAX_PER_DAY, ATR_MIN, VOL_MIN = 1.5, 6 * 3600, 2, 0.6, 1.2
 NOTIONAL, MARGIN, LEVERAGE = 10000.0, 1000.0, 10
 FEES = {"taker": 0.0005, "maker": 0.0002, "gst": 0.18}
 DAY = {"RANGE": "Range", "TREND_UP": "Trend up", "TREND_DOWN": "Trend down", "MIXED": "Unclear", "NA": "Unclear"}
-FEAT_V = "regime-f1"
+FEAT_V = "regime-f2"
 STATE = {"computed_at": None, "error": None, "data": None}
 
 
@@ -87,7 +87,10 @@ def features(t0, d, bars):
     j4 = bisect.bisect_left(T, t0 - 4 * 3600)
     c4 = bars[j4]["c"] if j4 < len(bars) and T[j4] == t0 - 4 * 3600 else None
     c = bars[j]["c"]
-    return {"rsi": round(rsi, 2) if rsi is not None else None, "atr1h": round(atr, 2) if atr else None,
+    lo_i = bisect.bisect_left(T, t0 - 86400)
+    hi24, lo24 = max(b["h"] for b in bars[lo_i:j]), min(b["l"] for b in bars[lo_i:j])
+    return {"hi24": hi24, "lo24": lo24, "pos24": round((c - lo24) / (hi24 - lo24), 4) if hi24 > lo24 else None,
+            "hour_ist": int(((t0 + 300 + 19800) % 86400) // 3600),"rsi": round(rsi, 2) if rsi is not None else None, "atr1h": round(atr, 2) if atr else None,
             "stop_atr": round(d / atr, 3) if atr else None, "vr": round(m5.get("volume_ratio"), 3) if m5.get("volume_ratio") is not None else None,
             "t15": _trend(f15, 900), "t1h": _trend(f1h, 3600), "t4h": _trend(f4h, 14400),
             "close": c, "close_4h_ago": c4, "chg4h": round(c / c4 - 1, 5) if c4 else None, "candle_t": t0, "v": FEAT_V}

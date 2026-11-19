@@ -29,6 +29,7 @@ import alert_mode
 import channel_config
 import plan_a
 import regime
+import observer
 import autotrade
 import daytype
 import scanner
@@ -997,6 +998,15 @@ async def regime_journal_get(u=Depends(current_user)):
     return {**(st["data"] or {"name": regime.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
+@api.get("/observer")
+async def observer_get(u=Depends(current_user)):
+    """Strategy Observer: every page and journal compared, recent vs 26 months (read-only)."""
+    st = observer.STATE
+    if st["data"] is None and plan_a.STATE.get("rows"):
+        await observer.compute()
+    return {**(st["data"] or {}), "error": st["error"], "computed_at": st["computed_at"]}
+
+
 @api.get("/plan-a")
 async def plan_a_get(request: Request, u=Depends(current_user)):
     st = plan_a.STATE
@@ -1375,7 +1385,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 
