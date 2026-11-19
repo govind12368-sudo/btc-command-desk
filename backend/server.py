@@ -28,6 +28,7 @@ import insights
 import alert_mode
 import channel_config
 import plan_a
+import regime
 import autotrade
 import daytype
 import scanner
@@ -987,6 +988,15 @@ def _plan_a_token():
     return hmac.new(os.environ["JWT_SECRET"].encode(), b"plan-a-sheet-feed-v1", hashlib.sha256).hexdigest()[:40]
 
 
+@api.get("/regime-journal")
+async def regime_journal_get(u=Depends(current_user)):
+    """Regime Strategy paper journal + its reverse book (paper only; no orders are ever sent)."""
+    st = regime.STATE
+    if st["data"] is None and plan_a.STATE.get("rows"):
+        await regime.compute()
+    return {**(st["data"] or {"name": regime.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
+
+
 @api.get("/plan-a")
 async def plan_a_get(request: Request, u=Depends(current_user)):
     st = plan_a.STATE
@@ -1365,7 +1375,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

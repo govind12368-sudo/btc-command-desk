@@ -13,7 +13,7 @@ export const ADMIN_ONLY = new Set(["/auto-trade", "/settings", "/audit", "/upgra
 export const NAV = [
   ["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scalping", "Scalping Signal", Zap],
   ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/scanner", "BTC Scanner", Radar], ["/intel", "Market Intelligence", Telescope],
-  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/plan-a", "Plan A – Live", FlaskConical], ["/auto-trade", "Auto-Trade", Bot], ["/validation", "Trade Validation", ShieldCheck],
+  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/plan-a", "Plan A – Live", FlaskConical], ["/regime", "Regime Journal", BookOpen], ["/auto-trade", "Auto-Trade", Bot], ["/validation", "Trade Validation", ShieldCheck],
   ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope], ["/upgrades", "Upgrade Requests", Lightbulb],
 ];
 

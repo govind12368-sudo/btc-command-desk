@@ -23,6 +23,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import Audit from "@/pages/Audit";
 import Upgrades from "@/pages/Upgrades";
 import PlanA from "@/pages/PlanA";
+import RegimeJournal from "@/pages/RegimeJournal";
 import AutoTrade from "@/pages/AutoTrade";
 
 function Public() {
@@ -60,6 +61,7 @@ function Gate() {
         <Route path="/news" element={<News />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/plan-a" element={<PlanA />} />
+        <Route path="/regime" element={<RegimeJournal />} />
         <Route path="/auto-trade" element={isAdmin ? <AutoTrade /> : <Navigate to="/" replace />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/" replace />} />
