@@ -369,8 +369,9 @@ def conclusions(B, F, H, ex):
     if ex.get("worst"):
         w = ex["worst"][0]
         out.append(("Worst place to get in (26 months)", f"{w['leg']} when {w['factor']} is {w['bucket']}: {w['win']:.0%} targets, {w['avg_r']:+.2f}R after fees on {w['n']} trades."))
-    out.append(("What would help next", "1) Cut the cost per trade: with a 0.5% stop, fees take about 0.2R from every trade; a wider stop (about 1%) halves that, and limit (maker) entries cut the entry fee. "
-                "2) Keep recording every page's reading at each signal (started today) and let 50+ trades close before trusting any filter. "
+    out.append(("What would help next", "1) A cheaper or longer trade only loses less: every stop size loses about the round-trip fee (about $11 on $10,000) a trade, because before fees "
+                "the signals are a coin flip; limit entries and a 12h hold cut that to about $6-8. The fix has to be a signal with a real edge, not a different stop. "
+                "2) Keep recording every page's reading at each signal (started 19 Nov) and let 50+ trades close before trusting any filter. "
                 "3) Funding, open-interest change and liquidation data at the signal are not yet stored over 26 months; they are the best untested candidates."))
     return [{"title": a, "text": b} for a, b in out]
 
@@ -387,7 +388,8 @@ def whatif():
         c["verdict"] = ("Profitable after fees (95%)" if c["ci_lo"] > 0 else "Profitable after fees, not proven" if c["avg_r"] > 0 else
                         "Loses after fees (proven)" if c["ci_hi"] < 0 else "Break-even within the noise")
         c["live"] = c["stop_pct"] == 0.005 and c["entry_fee"] == "taker" and c["hold_h"] == 6
-    best = max(cells, key=lambda c: c["avg_r"]) if cells else None
+    # same $10,000 position in every cell: compare dollars per trade (a wider stop makes 1R bigger, so R alone flatters it)
+    best = max(cells, key=lambda c: c.get("usd_per_trade", -1e9)) if cells else None
     return {"period": [_ist(t, "%d %b %Y") for t in W["period"]], "signals": W["signals"], "stops": W["stops"], "holds": W["holds"],
             "cells": cells, "best": best, "baseline": W.get("baseline"), "any_profitable": any(c["ci_lo"] > 0 for c in cells),
             "any_positive": any(c["avg_r"] > 0 for c in cells)}
@@ -509,8 +511,11 @@ def today(board, WF, D, X):
                      + (f" About {need} more trades at this pace would prove it." if need else " Its average is not above zero, so more trades will not prove it."))
     if WF:
         b = WF["best"]
-        lines.append(f"Cost check: the best stop / fee / hold setting over 26 months is {b['book']} with a {b['stop_pct'] * 100:g}% stop, {b['entry_fee']} entry, {b['hold_h']}h hold: "
-                     f"{b['avg_r']:+.2f}R a trade after fees ({b['verdict'].lower()}). " + ("No setting makes these signals profitable after fees." if not WF["any_positive"] else ""))
+        base = (WF.get("baseline") or {}).get(b["book"]) or {}
+        lines.append(f"Cost check: the least-losing stop / fee / hold setting over 26 months is {b['book']} with a {b['stop_pct'] * 100:g}% stop, "
+                     f"{'limit' if b['entry_fee'] == 'maker' else 'market'} entry and {b['hold_h']}h hold: {b['usd_per_trade']:+.2f} $ a trade after fees"
+                     + (f" (today's setting: {base['usd_per_trade']:+.2f} $)" if base.get("usd_per_trade") is not None else "") + f", {b['verdict'].lower()}. "
+                     + ("No setting makes these signals profitable after fees: cheaper costs only lose less." if not WF["any_positive"] else ""))
     for d in worse:
         lines.append(f"Warning: {d['name']} is running worse than its history ({d['rolling_r']:+.2f}R over the last {d['window']} trades, usual range {d['band_lo']:+.2f} to {d['band_hi']:+.2f}R).")
     if X and X.get("compared"):

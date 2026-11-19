@@ -70,7 +70,7 @@ function WhatIf({ w }) {
               return (
                 <tr key={sp}>
                   <td className="font-mono">{(sp * 100).toFixed(sp < 0.01 ? 2 : 1)}%</td>
-                  {cols.map(([f, h]) => { const c = get(sp, f, h); return <td key={f + h} className={`num ${ink(c?.avg_r)} ${c?.live ? "outline outline-1 outline-amber-400" : ""}`} title={c?.verdict}>{c ? rr(c.avg_r) : "—"}</td>; })}
+                  {cols.map(([f, h]) => { const c = get(sp, f, h); return <td key={f + h} className={`num ${ink(c?.avg_r)} ${c?.live ? "outline outline-1 outline-amber-400" : ""}`} title={c?.verdict}>{c ? <>{c.usd_per_trade == null ? "" : `${c.usd_per_trade > 0 ? "+" : "−"}$${Math.abs(c.usd_per_trade).toFixed(2)}`}<div className="text-[10.5px] text-slate-500">{rr(c.avg_r)}</div></> : "—"}</td>; })}
                   <td className="num text-red-300">{b.fee_r == null ? "—" : `−${b.fee_r.toFixed(2)}R`}</td>
                   <td className={`num ${ink(b.avg_r_gross)}`}>{rr(b.avg_r_gross)}</td><td className="num">{pc(b.win)}</td>
                   <td className="num">{pc(b.noise_stops)}</td><td className="num">{pc(b.time_exits)}</td>
@@ -81,7 +81,7 @@ function WhatIf({ w }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-[11.5px] text-slate-400">Average R a trade after fees, {w.signals?.toLocaleString()} signals {w.period?.join(" – ")}. The outlined cell is today's live setting (0.5% stop, market entry, 6h). Detail columns are for market entry, 6h. Hover a cell for its verdict.</p>
+      <p className="mt-1.5 text-[11.5px] text-slate-400">Dollars a trade after fees (same $10,000 position everywhere), with R below, {w.signals?.toLocaleString()} signals {w.period?.join(" – ")}. The outlined cell is today's live setting (0.5% stop, market entry, 6h). Detail columns are for market entry, 6h. Hover a cell for its verdict.</p>
     </div>
   );
 }
@@ -193,7 +193,7 @@ export default function StrategyObserver() {
       )}
 
       {d.whatif && (
-        <Card title="What-if lab: stop size, entry fee and hold time (26 months)" sub={d.whatif.any_positive ? "Some settings are positive after fees: see the green cells." : "No setting makes these signals profitable after fees. A wider stop cuts the fee cost per R, so it loses less; it does not create an edge."} testid="observer-whatif">
+        <Card title="What-if lab: stop size, entry fee and hold time (26 months)" sub={d.whatif.any_positive ? "Some settings are positive after fees: see the green cells." : "No setting makes these signals profitable after fees. Compare dollars, not R: a wider stop makes 1R bigger, so R looks better while the dollars lost per trade stay close to the round-trip fee. Limit entries and a longer hold lose less; nothing here creates an edge."} testid="observer-whatif">
           <WhatIf w={d.whatif} />
         </Card>
       )}
