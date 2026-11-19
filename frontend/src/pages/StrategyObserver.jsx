@@ -10,7 +10,8 @@ const ink = (v) => (v == null ? "text-slate-400" : v > 0 ? "text-teal-300" : v <
 const VERDICT_TONE = (v = "") =>
   v.startsWith("Proven") ? "border-teal-500/50 text-teal-200 bg-teal-950/30" : v.startsWith("Above") ? "border-sky-500/50 text-sky-200 bg-sky-950/30"
     : v.startsWith("Losing") ? "border-red-500/50 text-red-200 bg-red-950/30" : v.startsWith("Too few") ? "border-slate-600 text-slate-300"
-      : v.startsWith("Helps") ? "border-teal-500/50 text-teal-200 bg-teal-950/30" : v.startsWith("Small") ? "border-amber-500/50 text-amber-200 bg-amber-950/20"
+      : v.startsWith("Helps pick direction (strong") ? "border-teal-500/50 text-teal-200 bg-teal-950/30" : v.startsWith("Helps") ? "border-amber-500/50 text-amber-200 bg-amber-950/20"
+        : v.startsWith("Changes") ? "border-sky-500/50 text-sky-200 bg-sky-950/30"
         : "border-slate-600 text-slate-300";
 const Badge = ({ v }) => <span className={`inline-block rounded border px-1.5 py-0.5 text-[11px] ${VERDICT_TONE(v)}`}>{v || "—"}</span>;
 
@@ -67,7 +68,7 @@ function Factor({ f }) {
     <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/50">
       <button className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left" onClick={() => setOpen(!open)}>
         <span className="text-sm text-slate-100">{f.name}</span>
-        <span className="flex items-center gap-2"><span className="font-mono text-[11px] text-slate-400">effect {f.zmax.toFixed(1)}σ</span><Badge v={f.verdict} /></span>
+        <span className="flex items-center gap-2"><span className="font-mono text-[11px] text-slate-400">direction {(f.z_direction ?? 0).toFixed(1)}σ · volatility {(f.z_volatility ?? 0).toFixed(1)}σ</span><Badge v={f.verdict} /></span>
       </button>
       {open && (
         <div className="overflow-x-auto scroll-thin border-t border-[#1e2a4a] px-2 pb-2">
@@ -81,7 +82,7 @@ function Factor({ f }) {
               ))}
             </tbody>
           </table>
-          <p className="mt-1 text-[11px] text-slate-500">Effect = how far the best or worst group's win rate sits from all other signals, in standard errors over 26 months (2σ ≈ could be luck, 3σ+ ≈ real). R columns are after fees.</p>
+          <p className="mt-1 text-[11px] text-slate-500">Direction = groups where follow and reverse move in opposite ways (the data says which side wins). Volatility = both move the same way (the data only says whether price travels far enough to reach 2R). In standard errors over 26 months: under 2σ ≈ could be luck, 3σ+ ≈ real. R columns are after fees.</p>
         </div>
       )}
     </div>

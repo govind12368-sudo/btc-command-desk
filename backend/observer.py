@@ -181,10 +181,15 @@ def factor_table(L, feats, H):
                 row[f"hist_{leg}"] = {**{k: h.get(k) for k in ("n", "wins", "win", "avg_r", "avg_r_gross")},
                                       "z": round(z_vs_rest(h.get("wins", 0), h.get("n", 0), o.get("wins", 0), o.get("n", 0)), 2) if h.get("n") else None}
             buckets.append(row)
-        zmax = max([abs(r["hist_follow"]["z"] or 0) for r in buckets] + [abs(r["hist_fade"]["z"] or 0) for r in buckets] + [0])
+        # direction effect: follow and reverse move in OPPOSITE ways (the data says which side wins);
+        # volatility effect: both move the SAME way (the data only says how often a 2R target is reached)
+        zd = max([abs((r["hist_follow"]["z"] or 0) - (r["hist_fade"]["z"] or 0)) / math.sqrt(2) for r in buckets] + [0])
+        zv = max([abs((r["hist_follow"]["z"] or 0) + (r["hist_fade"]["z"] or 0)) / math.sqrt(2) for r in buckets] + [0])
+        zmax = max(zd, zv)
         best = max([r[f"hist_{l}"]["avg_r"] for r in buckets for l in ("follow", "fade") if r[f"hist_{l}"].get("avg_r") is not None and (r[f"hist_{l}"].get("n") or 0) >= 150] or [None]) if buckets else None
-        verdict = ("Helps pick direction (strong evidence)" if zmax >= 3 else "Small effect (weak evidence)" if zmax >= 2 else "No measurable effect over 26 months")
-        out.append({"key": key, "name": name, "zmax": round(zmax, 2), "verdict": verdict, "best_hist_avg_r": best,
+        verdict = ("Helps pick direction (strong evidence)" if zd >= 3 else "Helps pick direction (weak evidence)" if zd >= 2 else
+                   "Changes how often targets are hit, not direction" if zv >= 3 else "No measurable effect over 26 months")
+        out.append({"key": key, "name": name, "zmax": round(zmax, 2), "z_direction": round(zd, 2), "z_volatility": round(zv, 2), "verdict": verdict, "best_hist_avg_r": best,
                     "beats_fees": best is not None and best > 0, "buckets": buckets})
     return sorted(out, key=lambda f: -f["zmax"])
 
@@ -325,8 +330,8 @@ def conclusions(B, F, H, ex):
     gross = [hb[k].get("avg_r_gross") for k in ("follow", "fade", "switch", "regime") if hb.get(k)]
     net = [hb[k].get("avg_r") for k in ("follow", "fade", "switch", "regime") if hb.get(k)]
     if gross and net:
-        out.append(("Main finding", f"Over 26 months, every way of trading these signals is close to 0R before fees ({min(gross):+.2f}R to {max(gross):+.2f}R) and loses after fees "
-                    f"({min(net):+.2f}R to {max(net):+.2f}R). Fees cost about {abs(sum(net) / len(net) - sum(gross) / len(gross)):.2f}R a trade because the stop is only 0.5%. "
+        out.append(("Main finding", f"Over 26 months, every way of trading these signals is close to 0R before fees ({min(gross):+.3f}R to {max(gross):+.3f}R a trade) and loses after fees "
+                    f"({min(net):+.3f}R to {max(net):+.3f}R). Fees cost about {abs(sum(net) / len(net) - sum(gross) / len(gross)):.2f}R a trade because the stop is only 0.5%. "
                     "The signal times entries but does not predict direction; costs decide the result."))
     rec = [(k, B[k]) for k in ("follow", "fade", "switch", "regime", "regime_rev") if B[k].get("n")]
     if rec:
@@ -337,20 +342,26 @@ def conclusions(B, F, H, ex):
         tail = (f". Over 26 months the same book made {hs.get('avg_r', 0):+.2f}R a trade after fees, so treat the recent run as likely luck until it holds for 50+ trades."
                 if hs and (hs.get("avg_r") or 0) < 0 else ".")
         out.append(("Highest recent win rate", head + tail))
-    strong = [x for x in F if x["zmax"] >= 3]
-    useless = [x for x in F if x["zmax"] < 2]
-    if strong:
-        tail = ". Even so, no bucket of any of them is profitable after fees over 26 months." if not any(x["beats_fees"] for x in strong) else "."
-        out.append(("Data that helps", "; ".join(f"{x['name']} (shifts the win rate by up to {x['zmax']:.1f} standard errors)" for x in strong[:4]) + tail))
+    dirn = [x for x in F if x["z_direction"] >= 2]
+    vol = [x for x in F if x["z_direction"] < 2 and x["z_volatility"] >= 3]
+    useless = [x for x in F if x["verdict"].startswith("No measurable")]
+    if dirn:
+        tail = ". Even so, no group of any of them is profitable after fees over 26 months." if not any(x["beats_fees"] for x in dirn) else "."
+        out.append(("Data that helps pick the side", "; ".join(f"{x['name']} ({x['z_direction']:.1f} standard errors)" for x in dirn[:4]) + tail))
+    else:
+        out.append(("Data that helps pick the side", "None of the tested data reliably tells follow from reverse over 26 months."))
+    if vol:
+        out.append(("Data that only changes how often targets are hit", "; ".join(x["name"] for x in vol)
+                    + ": it moves follow and reverse the same way (quiet markets reach the 2R target less often), so it says how far price will travel, not which way."))
     if useless:
         out.append(("Data that does not help pick trades", ", ".join(x["name"] for x in useless) + ": no measurable effect on winners over 26 months."))
     if ex.get("best"):
         b = ex["best"][0]
-        out.append(("Best place to get in (26 months)", f"{b['leg']} when {b['factor'].lower()} = {b['bucket']}: {b['win']:.0%} targets, {b['avg_r']:+.2f}R after fees "
+        out.append(("Best place to get in (26 months)", f"{b['leg']} when {b['factor']} is {b['bucket']}: {b['win']:.0%} targets, {b['avg_r']:+.2f}R after fees "
                     f"({b['avg_r_gross']:+.2f}R before) on {b['n']} trades. The best condition still {'loses' if b['avg_r'] < 0 else 'makes'} money after fees."))
     if ex.get("worst"):
         w = ex["worst"][0]
-        out.append(("Worst place to get in (26 months)", f"{w['leg']} when {w['factor'].lower()} = {w['bucket']}: {w['win']:.0%} targets, {w['avg_r']:+.2f}R after fees on {w['n']} trades."))
+        out.append(("Worst place to get in (26 months)", f"{w['leg']} when {w['factor']} is {w['bucket']}: {w['win']:.0%} targets, {w['avg_r']:+.2f}R after fees on {w['n']} trades."))
     out.append(("What would help next", "1) Cut the cost per trade: with a 0.5% stop, fees take about 0.2R from every trade; a wider stop (about 1%) halves that, and limit (maker) entries cut the entry fee. "
                 "2) Keep recording every page's reading at each signal (started today) and let 50+ trades close before trusting any filter. "
                 "3) Funding, open-interest change and liquidation data at the signal are not yet stored over 26 months; they are the best untested candidates."))
