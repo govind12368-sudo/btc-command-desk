@@ -29,7 +29,7 @@ def test_stats(ob):
     assert ob.z_vs_rest(30, 100, 50, 300) > 0 > ob.z_vs_rest(5, 100, 50, 300)
     t = [{"net": 90.0, "win": True, "r": 1.4}] * 30 + [{"net": -60.0, "win": False, "r": -1.0}] * 10
     s = ob.book_stats(t)
-    assert s["n"] == 40 and s["win"] == 0.75 and abs(s["breakeven"] - 0.4) < 1e-9 and s["verdict"] == "Proven edge (95%)" and s["pf"] == 4.5
+    assert s["n"] == 40 and s["win"] == 0.75 and abs(s["breakeven"] - 0.4) < 1e-9 and s["verdict"] == "Proven profitable (95%)" and s["r_lo"] > 0 and s["pf"] == 4.5
     s = ob.book_stats([{"net": 90.0, "win": True, "r": 1.4}] * 3 + [{"net": -60.0, "win": False, "r": -1.0}] * 2)
     assert s["verdict"] == "Too few trades to judge"
     s = ob.book_stats([{"net": 90.0, "win": True, "r": 1.4}] * 4 + [{"net": -60.0, "win": False, "r": -1.0}] * 36)
@@ -71,12 +71,15 @@ def test_compute_end_to_end(ob, monkeypatch):
     from core import db
     rows = _rows(ob)
     plan_a.STATE["rows"] = rows
-    regime.STATE["data"] = {"regime": {"rows": [{"status": "CLOSED", "net": 66.0, "r": 1.0, "result": "Target", "signal_id": "S1", "rule": "Trend follow"}]}, "reverse": {"rows": []}}
+    regime.STATE["data"] = {"regime": {"rows": [{"status": "CLOSED", "net": 66.0, "r": 1.0, "result": "Target", "signal_id": "S1", "rule": "Trend follow", "cap_t": 1_795_200_000}]}, "reverse": {"rows": []}}
     for r in rows:
         run(db.regime_feat.update_one({"_id": r["signal_id"]}, {"$set": {"v": regime.FEAT_V, "rsi": 25.0 if r["follow_result"] == "TARGET" else 50.0, "t15": "Down", "t1h": "Down",
                                                                          "t4h": "Down", "stop_atr": 0.7, "vr": 1.3, "pos24": 0.4, "chg4h": -0.004}}, upsert=True))
     run(db.validation_snapshots.insert_many([{"_id": f"v{i}", "model": "FIVE_PILLAR_CONFIRMED_V2", "outcome": "TARGET FIRST" if i < 3 else "STOP FIRST", "target_ratio": 2.0} for i in range(5)]))
-    run(db.autotrade_trades.insert_one({"_id": "a", "status": "CLOSED", "net_usd": -10.0, "exit_reason": "STOP", "mode": "TESTNET"}))
+    run(db.autotrade_trades.insert_one({"_id": "S4", "signal_id": "S4", "status": "CLOSED", "net_usd": -62.0, "exit_reason": "STOP", "mode": "TESTNET", "bot_dir": "LONG",
+                                        "plan": "PLAN_A", "trigger_entry": 80000.0, "entry": 80010.0, "stop": 79600.0, "contracts": 125, "fees": 12.0,
+                                        "fill_time": "2026-11-19T10:00:00Z"}))
+    run(db.autotrade_signals.insert_one({"_id": "S5", "status": "SKIPPED", "reason": "entry order did not fill in time"}))
     d = run(ob.compute())["data"]
     B = {b["key"]: b for b in d["board"]}
     assert B["follow"]["recent"]["n"] == 24 and B["follow"]["recent"]["wins"] == 8 and B["fade"]["recent"]["wins"] == 16
@@ -92,6 +95,18 @@ def test_compute_end_to_end(ob, monkeypatch):
     assert d["reasons"]["follow"][0]["reason"] == "Loss: went against at once; kept going against (wrong direction)"
     assert d["extremes"]["best"][0]["avg_r"] >= d["extremes"]["worst"][0]["avg_r"]
     assert run(db.observer_log.count_documents({})) == 1 and d["log"][0]["board"]
+    rs = [b["recent"].get("avg_r") for b in d["board"] if b["recent"].get("avg_r") is not None]
+    assert rs == sorted(rs, reverse=True)                                          # ranked by R after fees, not by win rate
+    X = d["execution"]
+    assert X["n"] == 1 and X["trades"][0]["slip_usd"] == 10.0 and abs(X["trades"][0]["slip_r"] - 0.025) < 1e-9 and X["missed"] == [{"signal_id": "S5", "reason": "entry order did not fill in time"}]
+    assert X["trades"][0]["paper_result"] == "TARGET" and X["trades"][0]["same_result"] is False and X["compared"] == 1
+    W = d["whatif"]
+    assert W["cells"] and any(c["live"] for c in W["cells"]) and W["best"]["avg_r"] == max(c["avg_r"] for c in W["cells"])
+    dr = {x["key"]: x for x in d["drift"]}
+    assert dr["follow"]["n"] == 24 and dr["follow"]["window"] == 24 and dr["follow"]["status"] != "Not enough trades yet" and dr["follow"]["points"][-1]["n"] == 24
+    reg = {r["key"]: r for r in d["register"]["rules"]}
+    assert reg["regime"]["forward"]["n"] == 1 and d["register"]["tests"] > 50 and d["register"]["expected_by_luck"] > 0
+    assert d["today"]["action"].startswith("No strategy is proven") and any("treated as luck" in x for x in d["today"]["lines"])
 
 
 def test_forward_snapshot_once(ob, monkeypatch):

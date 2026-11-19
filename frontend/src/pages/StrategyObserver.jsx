@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import { useFetch } from "@/hooks/useFetch";
 import { Card, PageHead, Note } from "@/components/desk/ui";
 import { ist, signedUsd } from "@/lib/fmt";
+import { LineChart, VIZ } from "@/components/desk/charts";
 
 const pc = (v, d = 0) => (v == null ? "—" : `${(v * 100).toFixed(d)}%`);
 const rr = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}R`);
 const ink = (v) => (v == null ? "text-slate-400" : v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-slate-300");
 const VERDICT_TONE = (v = "") =>
-  v.startsWith("Proven") ? "border-teal-500/50 text-teal-200 bg-teal-950/30" : v.startsWith("Above") ? "border-sky-500/50 text-sky-200 bg-sky-950/30"
+  v.startsWith("Proven") || v.startsWith("Profitable after fees (95") ? "border-teal-500/50 text-teal-200 bg-teal-950/30"
+    : v.startsWith("Above") || v.startsWith("Profitable") || v.startsWith("Better") ? "border-sky-500/50 text-sky-200 bg-sky-950/30"
+    : v.startsWith("Loses") || v.startsWith("Worse") ? "border-red-500/50 text-red-200 bg-red-950/30" : v.startsWith("Inside") ? "border-slate-500 text-slate-200"
     : v.startsWith("Losing") ? "border-red-500/50 text-red-200 bg-red-950/30" : v.startsWith("Too few") ? "border-slate-600 text-slate-300"
       : v.startsWith("Helps pick direction (strong") ? "border-teal-500/50 text-teal-200 bg-teal-950/30" : v.startsWith("Helps") ? "border-amber-500/50 text-amber-200 bg-amber-950/20"
         : v.startsWith("Changes") ? "border-sky-500/50 text-sky-200 bg-sky-950/30"
@@ -20,27 +23,79 @@ function Leaderboard({ board }) {
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table">
         <thead>
-          <tr><th>Strategy / journal</th><th className="num">Trades</th><th className="num">Win rate</th><th className="num">95% range</th><th className="num">Break-even</th>
-            <th className="num">Net after fees</th><th className="num">Avg R</th><th>Verdict (recent)</th>
-            <th className="num">26 mo trades</th><th className="num">26 mo targets</th><th className="num">26 mo after fees</th><th className="num">26 mo before fees</th></tr>
+          <tr><th>#</th><th>Strategy / journal</th><th className="num">Trades</th><th className="num">Profit per trade</th><th className="num">Likely range</th><th>Verdict</th>
+            <th className="num">Win rate</th><th className="num">Break-even</th><th className="num">Net after fees</th><th className="num">More trades to prove</th>
+            <th className="num">26 mo trades</th><th className="num">26 mo after fees</th><th className="num">26 mo before fees</th></tr>
         </thead>
         <tbody>
-          {board.map((b) => {
+          {board.map((b, i) => {
             const s = b.recent || {}; const h = b.history || {};
             return (
               <tr key={b.key}>
+                <td className="font-mono text-slate-500">{i + 1}</td>
                 <td><Link className="text-amber-300 hover:underline" to={b.to}>{b.name}</Link></td>
-                <td className="num">{s.n ?? 0}</td><td className="num font-semibold">{pc(s.win)}</td>
-                <td className="num text-slate-400">{s.win_lo == null ? "—" : `${pc(s.win_lo)}–${pc(s.win_hi)}`}</td>
-                <td className="num">{pc(s.breakeven)}</td><td className={`num ${ink(s.net)}`}>{s.n ? signedUsd(s.net) : "—"}</td><td className={`num ${ink(s.avg_r)}`}>{rr(s.avg_r)}</td>
+                <td className="num">{s.n ?? 0}</td><td className={`num font-semibold ${ink(s.avg_r)}`}>{rr(s.avg_r)}</td>
+                <td className="num text-slate-400">{s.r_lo == null ? "—" : `${rr(s.r_lo)} to ${rr(s.r_hi)}`}</td>
                 <td><Badge v={s.verdict} /></td>
-                <td className="num">{h.n?.toLocaleString() ?? "—"}</td><td className="num">{pc(h.win)}</td>
+                <td className="num">{pc(s.win)}</td><td className="num">{pc(s.breakeven)}</td><td className={`num ${ink(s.net)}`}>{s.n ? signedUsd(s.net) : "—"}</td>
+                <td className="num">{s.more_trades_to_prove == null ? "—" : s.more_trades_to_prove}</td>
+                <td className="num">{h.n?.toLocaleString() ?? "—"}</td>
                 <td className={`num ${ink(h.avg_r)}`}>{rr(h.avg_r)}</td><td className={`num ${ink(h.avg_r_gross)}`}>{rr(h.avg_r_gross)}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+const BOOKN = { follow: "Follow every signal", fade: "Plan A (reverse)", switch: "Day-type switch", regime: "Regime" };
+
+function WhatIf({ w }) {
+  const [book, setBook] = useState("switch");
+  const cells = (w.cells || []).filter((c) => c.book === book);
+  const cols = [["taker", 6], ["maker", 6], ["taker", 12], ["maker", 12]];
+  const get = (sp, fee, h) => cells.find((c) => c.stop_pct === sp && c.entry_fee === fee && c.hold_h === h);
+  const btn = (on) => `rounded px-2.5 py-1 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300"}`;
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-1.5">{Object.entries(BOOKN).map(([k, v]) => <button key={k} className={btn(book === k)} onClick={() => setBook(k)}>{v}</button>)}</div>
+      <div className="overflow-x-auto scroll-thin">
+        <table className="desk-table">
+          <thead><tr><th>Stop</th>{cols.map(([f, h]) => <th key={f + h} className="num">{f === "maker" ? "Limit entry" : "Market entry"} · {h}h</th>)}<th className="num">Fees per trade</th><th className="num">Before fees</th><th className="num">Targets</th><th className="num">Stopped, then price came back</th><th className="num">6h exits</th><th className="num">1st half / 2nd half</th></tr></thead>
+          <tbody>
+            {(w.stops || []).map((sp) => {
+              const b = get(sp, "taker", 6) || {};
+              return (
+                <tr key={sp}>
+                  <td className="font-mono">{(sp * 100).toFixed(sp < 0.01 ? 2 : 1)}%</td>
+                  {cols.map(([f, h]) => { const c = get(sp, f, h); return <td key={f + h} className={`num ${ink(c?.avg_r)} ${c?.live ? "outline outline-1 outline-amber-400" : ""}`} title={c?.verdict}>{c ? rr(c.avg_r) : "—"}</td>; })}
+                  <td className="num text-red-300">{b.fee_r == null ? "—" : `−${b.fee_r.toFixed(2)}R`}</td>
+                  <td className={`num ${ink(b.avg_r_gross)}`}>{rr(b.avg_r_gross)}</td><td className="num">{pc(b.win)}</td>
+                  <td className="num">{pc(b.noise_stops)}</td><td className="num">{pc(b.time_exits)}</td>
+                  <td className="num">{rr(b.first_half_r)} / {rr(b.second_half_r)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1.5 text-[11.5px] text-slate-400">Average R a trade after fees, {w.signals?.toLocaleString()} signals {w.period?.join(" – ")}. The outlined cell is today's live setting (0.5% stop, market entry, 6h). Detail columns are for market entry, 6h. Hover a cell for its verdict.</p>
+    </div>
+  );
+}
+
+function Drift({ d }) {
+  if (!d.points?.length) return null;
+  const band = (v) => d.points.map((p) => ({ t: p.t, v }));
+  const series = [{ name: "Last 30 trades, R", color: VIZ.brand, points: d.points }];
+  if (d.band_lo != null) series.push({ name: "History low", color: VIZ.neutral, points: band(d.band_lo) }, { name: "History high", color: VIZ.neutral, points: band(d.band_hi) });
+  return (
+    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/50 p-2.5">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-100">{d.name}</span><Badge v={d.status} /></div>
+      <div className="mb-1 text-[12px] text-slate-400">Last {d.window} trades: <b className={ink(d.rolling_r)}>{rr(d.rolling_r)}</b> a trade · history {rr(d.hist_r)} · usual range {rr(d.band_lo)} to {rr(d.band_hi)}</div>
+      <LineChart series={series} xFmt={(v) => v} yFmt={(v) => `${v.toFixed(2)}R`} height={130} testid={`drift-${d.key}`} />
     </div>
   );
 }
@@ -110,6 +165,14 @@ export default function StrategyObserver() {
       {d.error && <Note tone="red">Last update failed: {d.error}</Note>}
       {!d.board && !d.error && <Note>Working it out… the first run takes about two minutes after a restart.</Note>}
 
+      {d.today && (
+        <div className={`rounded-xl border px-4 py-3 ${d.today.tone === "green" ? "border-teal-500/60 bg-teal-950/30" : "border-amber-500/60 bg-amber-950/20"}`} data-testid="observer-today">
+          <div className="text-[12px] font-semibold text-slate-400">What to do today</div>
+          <div className={`text-base font-bold ${d.today.tone === "green" ? "text-teal-200" : "text-amber-200"}`}>{d.today.action}</div>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13px] text-slate-200">{d.today.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+        </div>
+      )}
+
       {d.conclusions && (
         <Card title="What the numbers say" sub="Written from the data on this page; it changes as trades close" testid="observer-conclusions">
           <div className="grid gap-2 lg:grid-cols-2">
@@ -124,8 +187,61 @@ export default function StrategyObserver() {
       )}
 
       {d.board && (
-        <Card title="Which strategy is working" sub="Sorted by recent win rate. Break-even = the win rate each book needs with its own average win and loss. '95% range' = where the true win rate probably lies; a book is only proven when the whole range sits above break-even." testid="observer-board">
+        <Card title="Which strategy is working" sub="Ranked by profit per trade after fees (in R, 1R = the stop distance), not by win rate, because the books use different targets. 'Likely range' = where the true average probably lies (95%); a book is only proven when the whole range is above zero." testid="observer-board">
           <Leaderboard board={d.board} />
+        </Card>
+      )}
+
+      {d.whatif && (
+        <Card title="What-if lab: stop size, entry fee and hold time (26 months)" sub={d.whatif.any_positive ? "Some settings are positive after fees: see the green cells." : "No setting makes these signals profitable after fees. A wider stop cuts the fee cost per R, so it loses less; it does not create an edge."} testid="observer-whatif">
+          <WhatIf w={d.whatif} />
+        </Card>
+      )}
+
+      {d.drift && (
+        <Card title="Is each strategy still behaving like its history?" sub="Average R over the last 30 trades against the range its 26-month history predicts. Outside the range in either direction is a warning." testid="observer-drift">
+          <div className="grid gap-3 lg:grid-cols-2">{d.drift.map((x) => <Drift key={x.key} d={x} />)}</div>
+        </Card>
+      )}
+
+      {d.register && (
+        <Card title="Register of every rule we try" sub="Each rule is judged only on trades after the day it was added. Results before that day helped build it, so they do not count." testid="observer-register">
+          <div className="overflow-x-auto scroll-thin">
+            <table className="desk-table">
+              <thead><tr><th>Rule</th><th>Added (IST)</th><th className="num">Before: trades / R</th><th className="num">Since added: trades</th><th className="num">Profit per trade</th><th className="num">Likely range</th><th>Verdict since added</th><th className="num">26 mo R</th></tr></thead>
+              <tbody>{d.register.rules.map((r) => (
+                <tr key={r.key}><td>{r.name}<div className="text-[11px] text-slate-500">{r.what}</div></td><td className="font-mono">{r.added}</td>
+                  <td className="num">{r.before.n ? `${r.before.n} / ${rr(r.before.avg_r)}` : "—"}</td><td className="num">{r.forward.n}</td>
+                  <td className={`num ${ink(r.forward.avg_r)}`}>{rr(r.forward.avg_r)}</td><td className="num text-slate-400">{r.forward.r_lo == null ? "—" : `${rr(r.forward.r_lo)} to ${rr(r.forward.r_hi)}`}</td>
+                  <td><Badge v={r.forward.verdict || "No trades yet"} /></td><td className={`num ${ink(r.history?.avg_r)}`}>{rr(r.history?.avg_r)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <div className="mt-3 text-sm font-semibold text-slate-200">Tested and rejected</div>
+          <ul className="mt-1 space-y-1 text-[12.5px] text-slate-300">{d.register.rejected.map((r) => <li key={r.name}><b>{r.name}</b> ({r.tested}): {r.result}</li>)}</ul>
+          <Note>Luck check: {d.register.tests} groups of data were tested on 26 months. By chance alone about {d.register.expected_by_luck} would look "significant" at 2σ; {d.register.observed_2sigma} did. {d.register.observed_2sigma <= d.register.expected_by_luck * 1.5 ? "That is close to what luck produces, so treat single good-looking groups with suspicion." : "That is more than luck produces, so some of the data does carry information (still not enough to beat fees)."}</Note>
+        </Card>
+      )}
+
+      {d.execution && (
+        <Card title="Execution quality: real Delta fills vs the paper journal" sub={`${d.execution.n} Auto-Trade trades (${d.execution.closed} closed). Slippage is measured against the planned entry; + means a worse price.`} testid="observer-execution">
+          <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {[["Avg slippage", rr(d.execution.avg_slip_r)], ["Avg delay vs paper fill", d.execution.avg_delay_s == null ? "—" : `${Math.round(d.execution.avg_delay_s)} s`],
+              ["Avg fees", d.execution.avg_fees_r == null ? "—" : `${d.execution.avg_fees_r.toFixed(2)}R`], ["Same result as paper", d.execution.compared ? `${d.execution.same_result} of ${d.execution.compared}` : "—"],
+              ["Real vs paper R", d.execution.compared ? `${rr(d.execution.real_r)} vs ${rr(d.execution.paper_r)}` : "—"], ["Missed fills (paper filled)", d.execution.missed.length]].map(([k, v]) => (
+              <div key={k} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2"><div className="text-[11.5px] text-slate-400">{k}</div><div className="font-mono text-base font-bold text-slate-100">{v}</div></div>
+            ))}
+          </div>
+          <div className="overflow-x-auto scroll-thin">
+            <table className="desk-table">
+              <thead><tr><th>Signal</th><th>Mode</th><th>Side</th><th className="num">Planned</th><th className="num">Filled</th><th className="num">Slippage</th><th className="num">Delay</th><th>Real exit</th><th>Paper exit</th><th className="num">Real R</th><th className="num">Paper R</th></tr></thead>
+              <tbody>{d.execution.trades.map((x) => (
+                <tr key={x.signal_id}><td className="font-mono text-[11px]">{x.signal_id}</td><td>{x.mode}</td><td>{x.side}</td><td className="num">{x.planned}</td><td className="num">{x.filled}</td>
+                  <td className={`num ${ink(-(x.slip_r || 0))}`}>{x.slip_usd == null ? "—" : `${x.slip_usd > 0 ? "+" : ""}${x.slip_usd} $`}</td><td className="num">{x.delay_s == null ? "—" : `${x.delay_s}s`}</td>
+                  <td>{x.exit || x.status}</td><td>{x.paper_result || "—"}</td><td className={`num ${ink(x.r)}`}>{rr(x.r)}</td><td className={`num ${ink(x.paper_r)}`}>{rr(x.paper_r)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
         </Card>
       )}
 

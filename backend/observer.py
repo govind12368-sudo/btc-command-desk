@@ -55,7 +55,7 @@ def z_vs_rest(w, n, W, N):
 
 
 def book_stats(trades):
-    """trades: dicts with net (USD), win (bool), r (R or None)."""
+    """trades: dicts with net (USD), win (bool), r (R after fees or None). Judged on average R after fees, not on win rate."""
     n = len(trades)
     if not n:
         return {"n": 0}
@@ -69,12 +69,18 @@ def book_stats(trades):
     eq = pk = dd = 0.0
     for t in trades:
         eq += t["net"]; pk = max(pk, eq); dd = min(dd, eq - pk)
-    win = len(wins) / n
-    verdict = ("Too few trades to judge" if n < MIN_N else "Proven edge (95%)" if be and lo > be else
-               "Above break-even, not proven yet" if be and win > be else "Losing (proven)" if be and hi < be else "No edge shown")
-    return {"n": n, "wins": len(wins), "win": win, "win_lo": lo, "win_hi": hi, "breakeven": be, "net": round(sum(t["net"] for t in trades), 2),
-            "avg_r": round(sum(rs) / len(rs), 3) if rs else None, "pf": round(gw / gl, 2) if gl > 0 else None, "max_dd": round(dd, 2),
-            "avg_win": aw, "avg_loss": al, "verdict": verdict}
+    m = sum(rs) / len(rs) if rs else None
+    sd = math.sqrt(sum((x - m) ** 2 for x in rs) / (len(rs) - 1)) if len(rs) > 1 else None
+    r_lo = m - 1.96 * sd / math.sqrt(len(rs)) if sd is not None else None
+    r_hi = m + 1.96 * sd / math.sqrt(len(rs)) if sd is not None else None
+    need = max(0, math.ceil((1.96 * sd / m) ** 2) - len(rs)) if m and m > 0 and sd else None
+    verdict = ("Too few trades to judge" if n < MIN_N else "Proven profitable (95%)" if r_lo is not None and r_lo > 0 else
+               "Profitable so far, not proven" if m is not None and m > 0 else "Losing (proven)" if r_hi is not None and r_hi < 0 else
+               "No edge shown" if m is not None else "No R data")
+    return {"n": n, "wins": len(wins), "win": len(wins) / n, "win_lo": lo, "win_hi": hi, "breakeven": be, "net": round(sum(t["net"] for t in trades), 2),
+            "avg_r": round(m, 3) if m is not None else None, "sd_r": round(sd, 3) if sd is not None else None,
+            "r_lo": round(r_lo, 3) if r_lo is not None else None, "r_hi": round(r_hi, 3) if r_hi is not None else None, "more_trades_to_prove": need,
+            "pf": round(gw / gl, 2) if gl > 0 else None, "max_dd": round(dd, 2), "avg_win": aw, "avg_loss": al, "verdict": verdict}
 
 
 # ------------------------------------------------------------------ the site's trades, per book
@@ -85,12 +91,12 @@ def legs(rows):
         if r.get("fill_status") != "FILLED":
             continue
         risk = abs(float(r["entry"]) - float(r["model_stop"])) * float(r.get("qty") or 0)
-        base = {"signal_id": r["signal_id"], "cap_t": r["cap_t"], "side": r["model_dir"], "day_type": r.get("day_type"), "playbook": r.get("playbook")}
+        base = {"signal_id": r["signal_id"], "cap_t": r["cap_t"], "entry": float(r["entry"]), "fill_t": r.get("fill_t"), "qty": r.get("qty"), "side": r["model_dir"], "day_type": r.get("day_type"), "playbook": r.get("playbook")}
         if r.get("follow_result") not in (None, "OPEN"):
-            base["follow"] = {"net": r["follow_net"], "win": r["follow_net"] > 0, "r": r["follow_net"] / risk if risk else None,
+            base["follow"] = {"t": r["cap_t"], "net": r["follow_net"], "win": r["follow_net"] > 0, "r": r["follow_net"] / risk if risk else None,
                               "res": r["follow_result"], "why": r.get("follow_why") or ""}
         if r.get("plan_result") not in (None, "OPEN"):
-            base["fade"] = {"net": r["net"], "win": r["net"] > 0, "r": r["net"] / risk if risk else None, "res": r["plan_result"], "why": r.get("plan_why") or ""}
+            base["fade"] = {"t": r["cap_t"], "net": r["net"], "win": r["net"] > 0, "r": r["net"] / risk if risk else None, "res": r["plan_result"], "why": r.get("plan_why") or ""}
         out.append(base)
     return out
 
@@ -108,7 +114,8 @@ def switch_trades(L, snaps):
 
 
 def regime_trades(rows):
-    return [{"net": r["net"], "win": r["net"] > 0, "r": r.get("r"), "res": r.get("result"), "signal_id": r["signal_id"], "rule": r.get("rule") or r.get("base_rule")}
+    return [{"t": r.get("cap_t", 0), "net": r["net"], "win": r["net"] > 0, "r": r.get("r"), "res": r.get("result"), "signal_id": r["signal_id"],
+             "rule": r.get("rule") or r.get("base_rule"), "period": r.get("period")}
             for r in rows if r.get("status") == "CLOSED"]
 
 
@@ -335,13 +342,13 @@ def conclusions(B, F, H, ex):
                     "The signal times entries but does not predict direction; costs decide the result."))
     rec = [(k, B[k]) for k in ("follow", "fade", "switch", "regime", "regime_rev") if B[k].get("n")]
     if rec:
-        k, s = max(rec, key=lambda kv: kv[1]["win"])
+        k, s = max(rec, key=lambda kv: kv[1].get("avg_r") if kv[1].get("avg_r") is not None else -9)
         name = {"follow": "Trade Journal (follow)", "fade": "Plan A", "switch": "Day-type switch", "regime": "Regime", "regime_rev": "Regime reverse"}[k]
         hs = hb.get(k) or {}
-        head = f"{name}: {s['wins']}/{s['n']} ({s['win']:.0%})" + (f", break-even {s['breakeven']:.0%}" if s.get("breakeven") else "")
+        head = (f"{name}: {s['avg_r']:+.2f}R a trade after fees on {s['n']} trades ({s['wins']} wins, {s['win']:.0%})" if s.get("avg_r") is not None else f"{name}: {s['wins']}/{s['n']}")
         tail = (f". Over 26 months the same book made {hs.get('avg_r', 0):+.2f}R a trade after fees, so treat the recent run as likely luck until it holds for 50+ trades."
                 if hs and (hs.get("avg_r") or 0) < 0 else ".")
-        out.append(("Highest recent win rate", head + tail))
+        out.append(("Best recent result (profit per trade)", head + tail))
     dirn = [x for x in F if x["z_direction"] >= 2]
     vol = [x for x in F if x["z_direction"] < 2 and x["z_volatility"] >= 3]
     useless = [x for x in F if x["verdict"].startswith("No measurable")]
@@ -368,6 +375,176 @@ def conclusions(B, F, H, ex):
     return [{"title": a, "text": b} for a, b in out]
 
 
+# ------------------------------------------------------------------ what-if lab (26 months, other stops / fees / hold)
+def whatif():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "observer_whatif.json")) as f:
+            W = json.load(f)
+    except Exception:
+        return None
+    cells = [c for c in W["cells"] if c.get("n")]
+    for c in cells:
+        c["verdict"] = ("Profitable after fees (95%)" if c["ci_lo"] > 0 else "Profitable after fees, not proven" if c["avg_r"] > 0 else
+                        "Loses after fees (proven)" if c["ci_hi"] < 0 else "Break-even within the noise")
+        c["live"] = c["stop_pct"] == 0.005 and c["entry_fee"] == "taker" and c["hold_h"] == 6
+    best = max(cells, key=lambda c: c["avg_r"]) if cells else None
+    return {"period": [_ist(t, "%d %b %Y") for t in W["period"]], "signals": W["signals"], "stops": W["stops"], "holds": W["holds"],
+            "cells": cells, "best": best, "baseline": W.get("baseline"), "any_profitable": any(c["ci_lo"] > 0 for c in cells),
+            "any_positive": any(c["avg_r"] > 0 for c in cells)}
+
+
+# ------------------------------------------------------------------ drift: is each book still behaving like its history?
+DRIFT_N = 30
+
+
+def drift(books, base):
+    out = []
+    for key, name, trades in books:
+        h = (base or {}).get(key) or {}
+        xs = sorted([t for t in trades if t.get("r") is not None], key=lambda t: t["t"])
+        pts = []
+        for i in range(len(xs)):
+            w = xs[max(0, i - DRIFT_N + 1):i + 1]
+            pts.append({"t": _ist(xs[i]["t"], "%d %b %H:%M"), "v": round(sum(t["r"] for t in w) / len(w), 3), "n": len(w)})
+        last = pts[-1] if pts else None
+        mu, sd = h.get("avg_r"), h.get("std_r")
+        k = min(DRIFT_N, len(xs))
+        lo = mu - 2 * sd / math.sqrt(k) if mu is not None and sd and k else None
+        hi = mu + 2 * sd / math.sqrt(k) if mu is not None and sd and k else None
+        status = ("Not enough trades yet" if k < 10 or lo is None else
+                  "Better than its history: check it is not luck" if last["v"] > hi else
+                  "Worse than its history: it may have stopped working" if last["v"] < lo else "Inside its usual range")
+        out.append({"key": key, "name": name, "n": len(xs), "window": k, "rolling_r": last["v"] if last else None, "hist_r": mu, "hist_sd": sd,
+                    "band_lo": round(lo, 3) if lo is not None else None, "band_hi": round(hi, 3) if hi is not None else None, "status": status, "points": pts[-120:]})
+    return out
+
+
+# ------------------------------------------------------------------ execution quality: Auto-Trade's real fills vs the paper journal
+async def execution(rows):
+    by = {r["signal_id"]: r for r in rows}
+    trades, missed = [], []
+    async for t in db.autotrade_trades.find({"status": {"$in": ["OPEN", "CLOSED"]}}):
+        if t.get("entry") is None or t.get("stop") is None or not t.get("bot_dir"):
+            continue
+        p = by.get(t.get("signal_id") or t["_id"])
+        d = abs(float(t.get("trigger_entry") or t["entry"]) - float(t["stop"])) or None
+        sg = 1 if t["bot_dir"] == "LONG" else -1
+        slip = (t["entry"] - float(t.get("trigger_entry") or t["entry"])) * sg          # + = paid more than the plan (worse)
+        x = {"signal_id": t["_id"], "mode": t.get("mode"), "plan": t.get("plan"), "side": t["bot_dir"], "planned": t.get("trigger_entry"), "filled": t["entry"],
+             "slip_usd": round(slip, 2), "slip_r": round(slip / d, 3) if d else None, "status": t["status"], "exit": t.get("exit_reason"),
+             "net": t.get("net_usd"), "r": (t["net_usd"] / (d * t["contracts"] * 0.001)) if t.get("net_usd") is not None and d and t.get("contracts") else None,
+             "fees_r": (t["fees"] / (d * t["contracts"] * 0.001)) if t.get("fees") is not None and d and t.get("contracts") else None}
+        try:
+            x["delay_s"] = int(datetime.fromisoformat(t["fill_time"].replace("Z", "+00:00")).timestamp() - (p or {}).get("fill_t", 0)) if p and p.get("fill_t") and t.get("fill_time") else None
+        except Exception:
+            x["delay_s"] = None
+        if p:
+            leg = "follow" if t.get("plan") == "FOLLOW" else "plan"
+            risk = abs(float(p["entry"]) - float(p["model_stop"])) * float(p.get("qty") or 0)
+            pn = p.get("follow_net") if leg == "follow" else p.get("net")
+            x["paper_result"] = p.get("follow_result") if leg == "follow" else p.get("plan_result")
+            x["paper_r"] = round(pn / risk, 3) if pn is not None and risk else None
+            x["same_result"] = (x["paper_result"] or "")[:4].upper() == (x["exit"] or "")[:4].upper() if x["exit"] and x["paper_result"] else None
+        trades.append(x)
+    async for a in db.autotrade_signals.find({"status": "SKIPPED", "reason": {"$regex": "did not fill"}}):
+        if (by.get(a["_id"]) or {}).get("fill_status") == "FILLED":
+            missed.append({"signal_id": a["_id"], "reason": a.get("reason")})
+    closed = [x for x in trades if x["status"] == "CLOSED"]
+    pair = [x for x in closed if x.get("paper_r") is not None and x.get("r") is not None]
+    avg = lambda v: round(sum(v) / len(v), 3) if v else None
+    return {"trades": trades[::-1][:40], "n": len(trades), "closed": len(closed), "missed": missed, "avg_slip_r": avg([x["slip_r"] for x in trades if x["slip_r"] is not None]),
+            "avg_delay_s": avg([x["delay_s"] for x in trades if x.get("delay_s") is not None]), "avg_fees_r": avg([x["fees_r"] for x in closed if x["fees_r"] is not None]),
+            "same_result": sum(1 for x in pair if x.get("same_result")), "compared": len(pair),
+            "real_r": avg([x["r"] for x in pair]), "paper_r": avg([x["paper_r"] for x in pair])}
+
+
+# ------------------------------------------------------------------ register of every rule we try (judged only on trades after it was added)
+REGISTER = [
+    {"key": "switch", "name": "Day-type switch", "added": "2026-11-13 00:00", "book": "switch", "what": "Range day → Plan A; trend day with the signal → follow; else no trade."},
+    {"key": "strong", "name": "Strong support only (Day-type switch)", "added": "2026-11-19 17:45", "book": "switch", "what": "Skip switch trades unless 4-5 of 5 support checks pass."},
+    {"key": "regime", "name": "Regime Strategy", "added": "2026-11-19 17:30", "book": "regime", "what": "Market-type setups, 1.5R target, max 2 trades a day."},
+    {"key": "auto", "name": "Auto-Trade on Delta testnet", "added": "2026-11-16 22:15", "book": "auto", "what": "Places the Day-type switch trades with real orders on testnet."},
+]
+REJECTED = [
+    {"name": "Breakdown-Follow + Upper-Range-Fade", "tested": "2026-11-19", "result": "26-month replay: 2,093 trades, 23.4% wins, −0.24R a trade after fees; lost in up, down and sideways markets. Not deployed."},
+    {"name": "Edge search: 50% wins, 2 trades a day", "tested": "2026-11-17", "result": "No setup reached 50% wins with a profit after fees on the 26-month history."},
+]
+
+
+def register(books, H, F):
+    out = []
+    for r in REGISTER:
+        ts = int(datetime.strptime(r["added"], "%Y-%m-%d %H:%M").replace(tzinfo=IST).timestamp())
+        tr = books.get(r["book"]) or []
+        fwd = [t for t in tr if t.get("t", 0) >= ts]
+        before = [t for t in tr if t.get("t", 0) < ts]
+        hb = ((H or {}).get("books") or {}).get(r["book"]) or {}
+        out.append({**r, "forward": book_stats(fwd), "before": book_stats(before), "history": {k: hb.get(k) for k in ("n", "win", "avg_r", "avg_r_gross")} if hb else None})
+    m = sum(1 for f in F for b in f["buckets"] for leg in ("follow", "fade") if b[f"hist_{leg}"].get("n"))
+    hits = sum(1 for f in F for b in f["buckets"] for leg in ("follow", "fade") if abs(b[f"hist_{leg}"].get("z") or 0) >= 2)
+    return {"rules": out, "rejected": REJECTED, "tests": m, "expected_by_luck": round(0.0455 * m, 1), "observed_2sigma": hits}
+
+
+# ------------------------------------------------------------------ the decision for today
+def today(board, WF, D, X):
+    rec_proven = [b for b in board if (b["recent"].get("verdict") or "").startswith("Proven profitable")]
+    hist_ok = lambda b: not b.get("history") or (b["history"].get("avg_r") or 0) >= 0
+    proven = [b for b in rec_proven if hist_ok(b)]
+    conflict = [b for b in rec_proven if not hist_ok(b)]
+    worse = [d for d in D if d["status"].startswith("Worse")]
+    cand = sorted([b for b in board if b["recent"].get("avg_r") is not None and b["recent"]["n"] >= 5], key=lambda b: -(b["recent"].get("r_lo") or -9))
+    lines = []
+    if proven:
+        b = proven[0]
+        action, tone = f"{b['name']} is proven on {b['recent']['n']} trades and did not lose over 26 months: it may go live at minimum size.", "green"
+    else:
+        action, tone = "No strategy is proven. Stay on testnet / paper; do not put real money on any book yet.", "amber"
+    for b in conflict:
+        lines.append(f"{b['name']} looks proven on its last {b['recent']['n']} trades ({b['recent']['avg_r']:+.2f}R a trade), but the same rules lost "
+                     f"{b['history']['avg_r']:+.2f}R a trade over 26 months ({b['history']['n']:,} trades). A short winning run against a long losing record is treated as luck.")
+    if cand:
+        c = cand[0]; s = c["recent"]
+        need = s.get("more_trades_to_prove")
+        lines.append(f"Closest candidate: {c['name']} at {s['avg_r']:+.2f}R a trade on {s['n']} trades (likely range {s['r_lo']:+.2f} to {s['r_hi']:+.2f}R)."
+                     + (f" About {need} more trades at this pace would prove it." if need else " Its average is not above zero, so more trades will not prove it."))
+    if WF:
+        b = WF["best"]
+        lines.append(f"Cost check: the best stop / fee / hold setting over 26 months is {b['book']} with a {b['stop_pct'] * 100:g}% stop, {b['entry_fee']} entry, {b['hold_h']}h hold: "
+                     f"{b['avg_r']:+.2f}R a trade after fees ({b['verdict'].lower()}). " + ("No setting makes these signals profitable after fees." if not WF["any_positive"] else ""))
+    for d in worse:
+        lines.append(f"Warning: {d['name']} is running worse than its history ({d['rolling_r']:+.2f}R over the last {d['window']} trades, usual range {d['band_lo']:+.2f} to {d['band_hi']:+.2f}R).")
+    if X and X.get("compared"):
+        lines.append(f"Execution: {X['same_result']} of {X['compared']} real testnet trades ended the same way as paper; average slippage {X['avg_slip_r'] or 0:+.2f}R.")
+    return {"action": action, "tone": tone, "lines": lines}
+
+
+async def status_alerts(board, D):
+    """One email + Telegram when a book becomes proven profitable, or starts running worse than its history."""
+    events = [(f"observer-proven-{b['key']}", f"{b['name']} is now PROVEN profitable on {b['recent']['n']} trades ({b['recent']['avg_r']:+.2f}R a trade).")
+              for b in board if (b["recent"].get("verdict") or "").startswith("Proven profitable")]
+    events += [(f"observer-worse-{d['key']}-{_ist(int(now_utc().timestamp()), '%Y-%m-%d')}", f"{d['name']} is running worse than its 26-month history: {d['rolling_r']:+.2f}R over the last {d['window']} trades.")
+               for d in D if d["status"].startswith("Worse")]
+    for key, text in events:
+        if await db.alerts_log.find_one({"_id": key}):
+            continue
+        res = []
+        try:
+            import alerts
+            from channel_config import CFG
+            if CFG.get("ALERT_EMAIL"):
+                await alerts.send_email(to=CFG.get("ALERT_EMAIL"), subject="Vantage BTC – Strategy Observer", html=f"<p>{text}</p><p>Open the Strategy Observer page for the detail.</p>")
+                res.append("email sent")
+        except Exception as e:
+            res.append(f"email failed: {str(e)[:80]}")
+        try:
+            import messaging
+            if messaging.telegram_configured():
+                await messaging.send_telegram("Vantage BTC – Strategy Observer: " + text); res.append("telegram sent")
+        except Exception as e:
+            res.append(f"telegram failed: {str(e)[:80]}")
+        await db.alerts_log.update_one({"_id": key}, {"$setOnInsert": {"at": iso(now_utc()), "channel": "observer", "text": text, "result": ", ".join(res) or "no channel configured"}}, upsert=True)
+
+
 # ------------------------------------------------------------------ main
 async def compute():
     H = history()
@@ -376,11 +553,19 @@ async def compute():
     snaps = await support.all_snaps()
     feats = {d["_id"]: d async for d in db.regime_feat.find({"v": regime.FEAT_V})}
     rg = (regime.STATE.get("data") or {})
-    auto = [{"net": t.get("net_usd") or 0, "win": (t.get("net_usd") or 0) > 0, "r": None, "res": t.get("exit_reason"), "mode": t.get("mode")}
-            async for t in db.autotrade_trades.find({"status": "CLOSED"})]
-    B = {"follow": book_stats([x["follow"] for x in L if "follow" in x]), "fade": book_stats([x["fade"] for x in L if "fade" in x]),
-         "switch": book_stats(switch_trades(L, snaps)), "regime": book_stats(regime_trades((rg.get("regime") or {}).get("rows") or [])),
-         "regime_rev": book_stats(regime_trades((rg.get("reverse") or {}).get("rows") or [])), "auto": book_stats(auto)}
+    auto = []
+    async for t in db.autotrade_trades.find({"status": "CLOSED"}):
+        d = abs(float(t.get("trigger_entry") or t.get("entry") or 0) - float(t.get("stop") or 0)) * (t.get("contracts") or 0) * 0.001
+        cap = t.get("fill_time") or t.get("captured_at")
+        try:
+            tt = int(datetime.fromisoformat(cap.replace("Z", "+00:00")).timestamp()) if cap else 0
+        except Exception:
+            tt = 0
+        auto.append({"t": tt, "net": t.get("net_usd") or 0, "win": (t.get("net_usd") or 0) > 0, "r": (t.get("net_usd") or 0) / d if d else None,
+                     "res": t.get("exit_reason"), "mode": t.get("mode")})
+    TR = {"follow": [x["follow"] for x in L if "follow" in x], "fade": [x["fade"] for x in L if "fade" in x], "switch": switch_trades(L, snaps),
+          "regime": regime_trades((rg.get("regime") or {}).get("rows") or []), "regime_rev": regime_trades((rg.get("reverse") or {}).get("rows") or []), "auto": auto}
+    B = {k: book_stats(v) for k, v in TR.items()}
     val = []
     async for g in db.validation_snapshots.aggregate([{"$match": {"outcome": {"$in": ["TARGET FIRST", "STOP FIRST"]}}},
                                                       {"$group": {"_id": "$model", "n": {"$sum": 1}, "wins": {"$sum": {"$cond": [{"$eq": ["$outcome", "TARGET FIRST"]}, 1, 0]}},
@@ -398,16 +583,26 @@ async def compute():
              "switch": ("Day-type switch (Strong support only from 19 Nov)", "/"), "regime": ("Regime Strategy (1.5R)", "/regime"),
              "regime_rev": ("Regime reverse (1.5R)", "/regime"), "auto": ("Auto-Trade – real fills (testnet)", "/auto-trade")}
     board = [{"key": k, "name": names[k][0], "to": names[k][1], "recent": B[k], "history": hb.get(k)} for k in names]
-    board.sort(key=lambda b: -(b["recent"].get("win") or 0))
+    board.sort(key=lambda b: (b["recent"].get("avg_r") is None, -(b["recent"].get("avg_r") or 0)))   # ranked by profit per trade (R after fees)
     rsn = {"follow": reasons([x["follow"] for x in L if "follow" in x]), "fade": reasons([x["fade"] for x in L if "fade" in x]),
            "switch": reasons(switch_trades(L, snaps))}
     first = min((x["cap_t"] for x in L), default=None)
+    WF = whatif()
+    base = (WF or {}).get("baseline") or {}
+    D = drift([(k, names[k][0], TR[k]) for k in ("follow", "fade", "switch", "regime")], base)
+    X = await execution(rows)
+    REG = register(TR, H, F)
+    TODAY = today(board, WF, D, X)
+    try:
+        await status_alerts(board, D)
+    except Exception as e:
+        log.warning(f"observer alerts failed: {e}")
     data = {"computed_at": iso(now_utc()), "recent_from": _ist(first) if first else None, "signals": len(rows), "closed_signals": len(L),
             "board": board, "factors": F, "extremes": ex, "reasons": rsn, "forward_pages": fwd, "support_checks": chk, "validation": val,
             "pages": page_cards(B, F, fwd, chk, val, H, swing_n), "conclusions": conclusions(B, F, H, ex),
             "history_period": [_ist(t, "%d %b %Y") for t in (H or {}).get("period", [])], "history_signals": (H or {}).get("signals"),
             "history_by_market": (H or {}).get("books_by_market"), "history_by_half": (H or {}).get("books_by_half"), "regime_rules_history": (H or {}).get("regime_by_rule"),
-            "recorded_snapshots": len(osnaps)}
+            "recorded_snapshots": len(osnaps), "whatif": WF, "drift": D, "execution": X, "register": REG, "today": TODAY}
     day = _ist(int(now_utc().timestamp()), "%Y-%m-%d")
     await db.observer_log.update_one({"_id": day}, {"$set": {"at": data["computed_at"], "board": [{"key": b["key"], "n": b["recent"].get("n"), "win": b["recent"].get("win"),
                                                                                                      "net": b["recent"].get("net")} for b in board]}}, upsert=True)
