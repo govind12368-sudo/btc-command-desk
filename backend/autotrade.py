@@ -26,6 +26,7 @@ from datetime import timedelta
 from pymongo.errors import DuplicateKeyError
 
 from core import db, now_utc, iso, parse_iso, ist_date, age_sec
+import support
 
 log = logging.getLogger("autotrade")
 CV, TICK = 0.001, 0.5  # BTC per contract, price tick
@@ -333,6 +334,12 @@ class Engine:
             else:
                 plan, day_label = choose_plan(cfg.get("direction_mode", 0), s["direction"])
                 doc.update(plan=plan, day_type=day_label)
+            if not doc.get("status") and plan in ("FOLLOW", "PLAN_A") and int(cfg.get("direction_mode", 0)) == 2 and support.gate_on(int(parse_iso(s["captured_at"]).timestamp())):
+                import daytype                                  # Strong-only gate (admin request, 19 Nov 2026)
+                sup = await support.level_for(sid, int(parse_iso(s["captured_at"]).timestamp()), s["direction"], {"playbook": plan, "score": (daytype.public() or {}).get("score")})
+                doc["support"] = support.gate_text(sup)
+                if not support.allows(sup):
+                    doc.update(status="SKIPPED", reason=f"skipped – {support.gate_text(sup)}: the Day-type switch takes Strong support (4-5/5) only")
             if doc.get("status"):
                 pass
             elif plan == "STAND_ASIDE":

@@ -217,6 +217,12 @@ async def switch_view(sig):
         plan = daytype.playbook(day, sig["direction"])
         if plan == "STAND_ASIDE":
             return None, f"day type is {day.get('label') or 'unclear'}: stand aside"
+        import support                                       # Strong-only gate (admin request, 19 Nov 2026)
+        cap = int(parse_iso(sig["captured_at"]).timestamp()) if sig.get("captured_at") else int(now_utc().timestamp())
+        if support.gate_on(cap):
+            sup = await support.level_for(sig.get("signal_id") or sig.get("_id"), cap, sig["direction"], {"playbook": plan, "score": day.get("score")})
+            if not support.allows(sup):
+                return None, f"{support.gate_text(sup)}: the Day-type switch takes Strong support only"
         cfg = await autotrade.settings()
         lv = (autotrade.levels(sig["direction"], float(sig["entry"]), float(sig["stop"]), cfg["rr"], cfg["stop_mult"]) if plan == "PLAN_A"
               else autotrade.follow_levels(sig["direction"], float(sig["entry"]), float(sig["stop"]), float(sig["target"])))

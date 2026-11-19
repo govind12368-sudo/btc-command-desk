@@ -175,10 +175,10 @@ def cards(st, scan, I, events):
     return out
 
 
-BOOKS = (("switch", "Day-type switch", "/autotrade", "Range day: Plan A. Trend day with the signal: follow. Otherwise no trade."),
+BOOKS = (("switch", "Day-type switch", "/autotrade", "Range day: Plan A. Trend day with the signal: follow. Otherwise no trade. From 19 Nov 17:45 IST only Strong support (4-5/5) is taken."),
          ("follow", "Follow the signal (1:2)", "/journal", "Each scalp signal traded in its own direction."),
          ("plan_a", "Plan A (reverse 1:2)", "/plan-a", "Each scalp signal traded the opposite way."))
-BOOK_KEYS = ("signals", "taken", "skipped", "stood_aside", "open", "target", "stop", "time", "win_rate", "net", "max_drawdown")
+BOOK_KEYS = ("signals", "taken", "skipped", "stood_aside", "low_support", "open", "target", "stop", "time", "win_rate", "net", "max_drawdown")
 
 
 def book_trades(rows, picks):

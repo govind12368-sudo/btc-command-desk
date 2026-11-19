@@ -36,7 +36,7 @@ export function BookPanel({ book, title, sub, testid }) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat label="Signals" value={b.signals ?? "—"} />
         <Stat label="Trades taken" value={b.taken ?? "—"} />
-        <Stat label={b.stood_aside ? "Skipped (busy / aside)" : "Skipped (busy)"} value={b.stood_aside ? `${b.skipped} / ${b.stood_aside}` : b.skipped ?? "—"} />
+        <Stat label={b.low_support ? "Skipped (busy / aside / support)" : b.stood_aside ? "Skipped (busy / aside)" : "Skipped (busy)"} value={b.low_support ? `${b.skipped} / ${b.stood_aside} / ${b.low_support}` : b.stood_aside ? `${b.skipped} / ${b.stood_aside}` : b.skipped ?? "—"} />
         <Stat label="Still open" value={b.open ?? "—"} tone="text-sky-300" />
         <Stat label="Target / Stop / 6h" value={`${b.target ?? 0} / ${b.stop ?? 0} / ${b.time ?? 0}`} />
         <Stat label="Win rate" value={b.win_rate == null ? "—" : `${Math.round(b.win_rate * 100)}%`} />

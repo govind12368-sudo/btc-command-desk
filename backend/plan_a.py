@@ -288,19 +288,20 @@ async def compute():
         "time": sum(1 for r in closed if r["plan_result"] == "TIME"),
         "win_rate": len(wins) / len(closed) if closed else None, "net": sum(r["net"] for r in taken), "max_drawdown": dd})
     since = int(datetime.fromisoformat(SINCE_IST).replace(tzinfo=IST).timestamp())
-    STATE["books"] = {"since_date": SINCE_IST, "all": {m: book(rows, m) for m in BOOKS}, "since": {m: book(rows, m, since) for m in BOOKS}}
+    snaps = await support.all_snaps()
+    STATE["books"] = {"since_date": SINCE_IST, "all": {m: book(rows, m, None, snaps) for m in BOOKS}, "since": {m: book(rows, m, since, snaps) for m in BOOKS}}
     return STATE
 
 
 BOOKS = ("follow", "plan_a", "switch")
 
 
-def book(rows, mode, since=None):
+def book(rows, mode, since=None, snaps=None):
     """One trade at a time, same fill rule, same 6-hour exit, same fees.
     follow = the signal's own direction / stop / target; plan_a = reverse 1:2;
     switch = day type at capture decides: RANGE → plan_a, TREND with the signal → follow, otherwise no trade."""
     busy, eq, peak, dd = None, 0.0, 0.0, 0.0
-    c = {"signals": 0, "filled": 0, "taken": 0, "skipped": 0, "stood_aside": 0, "open": 0, "target": 0, "stop": 0, "time": 0, "wins": 0, "net": 0.0}
+    c = {"signals": 0, "filled": 0, "taken": 0, "skipped": 0, "stood_aside": 0, "low_support": 0, "open": 0, "target": 0, "stop": 0, "time": 0, "wins": 0, "net": 0.0}
     curve, picks = [], {}
     for r in rows:
         if since and r["cap_t"] < since:
@@ -313,6 +314,10 @@ def book(rows, mode, since=None):
         if not pick:
             c["stood_aside"] += 1
             picks[r["signal_id"]] = "aside"
+            continue
+        if mode == "switch" and support.gate_on(r["cap_t"]) and not support.allows((snaps or {}).get(r["signal_id"])):
+            c["low_support"] += 1                              # Strong-only gate: Medium / Weak / unrecorded support is skipped
+            picks[r["signal_id"]] = "support"
             continue
         res, xt, xi, net = (r["follow_result"], r["follow_exit_t"], r["follow_exit_ist"], r["follow_net"]) if pick == "follow" else (r["plan_result"], r["plan_exit_t"], r["exit_ist"], r["net"])
         if busy is not None and (busy == -1 or busy > r["fill_t"]):

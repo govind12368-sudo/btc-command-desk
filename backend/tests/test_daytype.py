@@ -19,7 +19,7 @@ os.environ.setdefault("DB_NAME", "test_db")
 @pytest.fixture()
 def mods(monkeypatch):
     monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
-    for m in ("core", "autotrade", "daytype", "plan_a", "scanner"):
+    for m in ("core", "autotrade", "daytype", "plan_a", "scanner", "support"):
         sys.modules.pop(m, None)
     return {m: importlib.import_module(m) for m in ("core", "daytype", "autotrade", "plan_a", "scanner")}
 
@@ -182,3 +182,32 @@ def test_why_notes_and_final(mods):
     assert pa._final({"fill_status": "NOT FILLED"}, 0)
     row = {"fill_status": "FILLED", "plan_result": "STOP", "follow_result": "TARGET", "model_result": "TARGET", "fill_t": t0}
     assert not pa._final(row, t0 + 3600) and pa._final(row, t0 + 6 * 3600 + 120)
+
+
+def test_autotrade_takes_strong_support_only_after_19_nov(mods):
+    at, core, DT = mods["autotrade"], mods["core"], mods["daytype"]
+    import support
+    clock = [datetime(2026, 11, 20, 6, 0, tzinfo=timezone.utc)]
+
+    async def alert(*a):
+        return None
+
+    async def none(*a, **k):
+        return None
+    support.snapshot = none                                               # nothing can be worked out: treated as unclear
+
+    async def go():
+        eng = at.Engine(clock=lambda: clock[0], alert=alert)
+        await eng.tick(71900)
+        DT.STATE["now"] = {"type": "TREND_DOWN", "label": "Trend (down)", "score": 4}
+        for sid, lvl, n in (("SCALP-SHORT-11", "MEDIUM", 3), ("SCALP-SHORT-12", "WEAK", 2), ("SCALP-SHORT-13", "WEAK", 1), ("SCALP-SHORT-14", None, None), ("SCALP-SHORT-15", "STRONG", 4)):
+            if lvl:
+                await core.db.switch_support.insert_one({"_id": sid, "level": lvl, "passed": n, "of": 5})
+            await core.db.signals.insert_one({"_id": sid, "strategy": "scalp", "direction": "SHORT", "entry": 72000.0, "stop": 72360.0, "target": 71460.0,
+                                              "captured_at": core.iso(clock[0]), "valid_until": None})
+            await eng.tick(71900)
+        got = {x["_id"]: x async for x in core.db.autotrade_signals.find({})}
+        for sid, txt in (("SCALP-SHORT-11", "Medium 3/5"), ("SCALP-SHORT-12", "Weak 2/5"), ("SCALP-SHORT-13", "Weak 1/5"), ("SCALP-SHORT-14", "could not be recorded")):
+            assert got[sid]["status"] == "SKIPPED" and txt in got[sid]["reason"] and "Strong" in got[sid]["reason"]
+        assert got["SCALP-SHORT-15"]["status"] == "ARMED" and got["SCALP-SHORT-15"]["support"] == "support Strong 4/5"
+    run(go())

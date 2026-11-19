@@ -22,7 +22,7 @@ def m(monkeypatch):
     monkeypatch.delenv("BROKER_KEYS_SECRET", raising=False)
     for k in ("DELTA_TRADE_API_KEY", "DELTA_TRADE_API_SECRET", "DELTA_TESTNET_API_KEY", "DELTA_TESTNET_API_SECRET"):
         monkeypatch.delenv(k, raising=False)
-    for x in ("core", "broker_keys", "delta_broker", "autotrade", "daytype", "alerts", "alert_mode", "messaging"):
+    for x in ("core", "broker_keys", "delta_broker", "autotrade", "daytype", "alerts", "alert_mode", "messaging", "support"):
         sys.modules.pop(x, None)
     return type("M", (), {k: importlib.import_module(k) for k in ("core", "broker_keys", "delta_broker", "autotrade", "alerts")})
 
@@ -145,3 +145,27 @@ def test_wallet_balance_uses_the_funded_row(m):
     assert w([{"asset_symbol": "INR", "available_balance": "12000"}], 85) == 12000.0
     with pytest.raises(RuntimeError):
         w([{"asset_symbol": "BTC", "available_balance": "1"}], 85)
+
+
+def test_switch_alerts_need_strong_support_from_19_nov(m, monkeypatch):
+    import daytype
+    import support
+    al = m.alerts
+    monkeypatch.setattr(daytype, "public", lambda: {"type": "RANGE", "label": "Range", "score": 0})
+    late = {**SIG, "signal_id": "SCALP-SHORT-2", "captured_at": "2026-11-19T13:00:00Z"}    # after 17:45 IST on 19 Nov
+    db = m.core.db
+    run(db.switch_support.insert_one({"_id": "SCALP-SHORT-2", "level": "MEDIUM", "passed": 3, "of": 5}))
+    v, why = run(al.switch_view(late))
+    assert v is None and why.startswith("support Medium 3/5")
+    run(db.switch_support.update_one({"_id": "SCALP-SHORT-2"}, {"$set": {"level": "WEAK", "passed": 1}}))
+    assert run(al.switch_view(late))[0] is None
+    run(db.switch_support.update_one({"_id": "SCALP-SHORT-2"}, {"$set": {"level": "STRONG", "passed": 4}}))
+    v, why = run(al.switch_view(late))
+    assert why is None and v["direction"] == "LONG"
+    async def none(*a, **k):
+        return None
+    monkeypatch.setattr(support, "snapshot", none)                                        # support could not be worked out
+    v, why = run(al.switch_view({**late, "signal_id": "SCALP-SHORT-3"}))                  # nothing recorded: treated as unclear
+    assert v is None and "could not be recorded" in why
+    assert support.allows({"level": "STRONG"}) and not support.allows({"level": "MEDIUM"}) and not support.allows(None)
+    assert not support.gate_on(support.strong_only_ts() - 1) and support.gate_on(support.strong_only_ts())

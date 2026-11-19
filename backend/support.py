@@ -1,16 +1,20 @@
 """Support data for the Day-type switch: five yes/no checks, saved once at the moment a signal fires.
 
-Information only. Nothing here is read by the day-type rule, by Auto-Trade or by the paper books, so it cannot change
-which trades are taken or how they are scored. A snapshot is written only while the signal is fresh (never rebuilt with
-hindsight); older trades simply have no snapshot.
+A snapshot is written only while the signal is fresh (never rebuilt with hindsight); older trades simply have no snapshot.
+Strong-only gate (admin request, 19 Nov 2026): for signals captured from STRONG_ONLY_FROM on, the Day-type switch
+(Auto-Trade, alerts and the Journal's switch book) takes a trade only when support is STRONG (4 or 5 of 5 checks);
+MEDIUM, WEAK and no recorded support are skipped. Earlier signals are left exactly as they were.
 """
 import logging
+import os
+from datetime import datetime
 
-from core import db, now_utc, iso
+from core import db, now_utc, iso, IST
 
 log = logging.getLogger("support")
 FRESH_SEC = 600
 NEED = 30                                                 # recorded trades wanted before the split means anything
+STRONG_ONLY_FROM = os.environ.get("SWITCH_STRONG_ONLY_FROM", "2026-11-19 17:45")   # IST
 LEVELS = (("STRONG", "Strong (4 or 5 checks)"), ("MEDIUM", "Medium (3 checks)"), ("WEAK", "Weak (0 to 2 checks)"), ("NONE", "Not recorded (earlier trades)"))
 
 
@@ -119,7 +123,7 @@ def split(trades, snaps):
     out = [{**r, "win_rate": r["wins"] / r["closed"] if r["closed"] else None} for r in rows.values()]
     recorded = sum(r["trades"] for r in out if r["level"] != "NONE")
     return {"rows": out, "recorded": recorded, "need": NEED, "ready": recorded >= NEED,
-            "note": "Information only: support does not change which trades are taken. The split means little until about 30 recorded trades."}
+            "note": f"From {STRONG_ONLY_FROM} IST the Day-type switch takes Strong support only; Medium, Weak and unrecorded are skipped. The split means little until about 30 recorded trades."}
 
 
 # ------------------------------------------------------------------ lookups for the journal pages (read-only)
@@ -147,3 +151,30 @@ def follow_summary(rows, ids):
     closed = [r for r in rows or [] if r.get("signal_id") in ids and r.get("fill_status") == "FILLED" and r.get("follow_result") in ("TARGET", "STOP", "TIME")]
     wins = sum(1 for r in closed if (r.get("follow_net") or 0) > 0)
     return {"signals": len(ids), "trades": len(closed), "wins": wins, "win_rate": wins / len(closed) if closed else None, "net": sum(r.get("follow_net") or 0 for r in closed)}
+
+
+def strong_only_ts():
+    return int(datetime.strptime(STRONG_ONLY_FROM, "%Y-%m-%d %H:%M").replace(tzinfo=IST).timestamp())
+
+
+def gate_on(cap_ts):
+    return cap_ts >= strong_only_ts()
+
+
+def allows(doc):
+    """True only for STRONG support. MEDIUM, WEAK and no recorded support are all skipped."""
+    return bool(doc) and doc.get("level") == "STRONG"
+
+
+def gate_text(doc):
+    if not doc:
+        return "support could not be recorded (treated as unclear)"
+    return f"support {doc['level'].title()} {doc.get('passed')}/{doc.get('of') or 5}"
+
+
+async def level_for(sid, cap_ts, signal_dir, tag):
+    """The support saved for this signal, or the five checks worked out now (and saved) while it is fresh. None if unavailable."""
+    doc = await db.switch_support.find_one({"_id": sid})
+    if doc:
+        return doc
+    return await snapshot(sid, cap_ts, signal_dir, tag)

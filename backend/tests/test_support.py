@@ -108,3 +108,18 @@ def test_filter_lookups(sup):
     f = sup.follow_summary(rows, {"a", "d"})
     assert (f["signals"], f["trades"], f["wins"], f["win_rate"]) == (2, 2, 1, 0.5) and abs(f["net"] - 29.8) < 1e-9 and rows == before     # a viewing filter never alters a row
     assert sup.follow_summary(rows, set())["win_rate"] is None
+
+
+def test_switch_book_takes_strong_support_only_after_the_gate(sup):
+    import plan_a
+    g = sup.strong_only_ts()
+    def row(i, cap, pb):
+        return {"signal_id": f"s{i}", "cap_t": cap, "fill_status": "FILLED", "fill_t": cap + 60 + i, "playbook": pb, "captured_ist": "x",
+                "follow_result": "TARGET", "follow_exit_t": cap + 61 + i, "follow_exit_ist": "x", "follow_net": 90.0,
+                "plan_result": "STOP", "plan_exit_t": cap + 61 + i, "exit_ist": "x", "net": -60.0}
+    rows = [row(1, g - 7200, "FOLLOW"), row(2, g + 600, "FOLLOW"), row(3, g + 7200, "PLAN_A"), row(4, g + 9000, "FOLLOW"), row(5, g + 10800, "STAND_ASIDE")]
+    snaps = {"s1": {"level": "WEAK"}, "s2": {"level": "MEDIUM"}, "s3": {"level": "STRONG"}}
+    b = plan_a.book(rows, "switch", None, snaps)
+    assert b["picks"] == {"s1": "follow", "s2": "support", "s3": "plan_a", "s4": "support", "s5": "aside"}
+    assert b["taken"] == 2 and b["low_support"] == 2 and b["stood_aside"] == 1 and b["net"] == 30.0
+    assert plan_a.book(rows, "follow", None, snaps)["taken"] == 5                         # the other books are unchanged
