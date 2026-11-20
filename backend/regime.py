@@ -313,7 +313,97 @@ async def compute():
             "settings": {"target_r": RR, "stop_r": 1, "time_exit_h": 6, "max_per_day": MAX_PER_DAY, "atr_min": ATR_MIN, "vol_min": VOL_MIN,
                          "margin": MARGIN, "leverage": LEVERAGE, "notional": NOTIONAL, "fees": FEES}}
     STATE.update(computed_at=data["computed_at"], error=None, data=data)
+    try:
+        await notify(out, now)
+    except Exception as e:
+        log.warning(f"regime alerts failed: {e}")
     return STATE
+
+
+# ---------------------------------------------------------------- email alerts (admin request, 20 Nov 2026)
+ENTRY_WINDOW, EXIT_WINDOW = 1800, 3 * 3600        # only fresh events: no flood of old trades after a restart
+
+
+def _email(kind, x):
+    """(subject, html) for a Regime trade: kind = entry / exit / not_filled. Paper journal: no order is placed."""
+    from html import escape
+    from channel_config import CFG
+    from core import APP_NAME
+    name = CFG.get("EMAIL_FROM_NAME") or APP_NAME
+    app = CFG["FRONTEND_URL"].split(",")[0].rstrip("/")
+    f1 = lambda v: f"{v:,.1f}" if isinstance(v, (int, float)) else str(v)
+    side = x.get("trade_side") or x.get("side") or ""
+    if kind == "entry":
+        subject = f"{name}: Regime {side} — {x['rule']} ({x['market']})"
+        rows = [("Trade", f"{side} BTCUSD"), ("Setup", x["rule"]), ("Market type", f"{x['market']} (day type {x['day_type']})"),
+                ("Entry (USD)", f1(x["entry"])), ("Stop loss (USD)", f1(x.get("sl") or (x["entry"] + x["d"] if side == "SHORT" else x["entry"] - x["d"]))),
+                ("Take profit 1.5R (USD)", f1(x.get("tp") or (x["entry"] - RR * x["d"] if side == "SHORT" else x["entry"] + RR * x["d"]))),
+                ("Time exit", "6 hours after the fill"), ("Size", "$1,000 margin x 10x = $10,000"),
+                ("Status", "Filled at entry" if x.get("status") == "OPEN" else "Waiting for the entry price to fill"),
+                ("Why", x["reason"]), ("Scalp signal it came from", f"{x['signal_side']} · {x['signal_id']}"), ("Signal time (IST)", x["time_ist"])]
+    elif kind == "exit":
+        subject = f"{name}: Regime trade closed — {x['result']} {('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f}"
+        rows = [("Trade", f"{side} BTCUSD · {x['rule']}"), ("Result", x["result"]), ("Entry (USD)", f1(x["entry"])), ("Exit (USD)", f1(x["exit_price"])),
+                ("Net P&L after fees", f"{('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f} ({x['r']:+.2f}R)"), ("Filled (IST)", x.get("fill_ist", "")),
+                ("Closed (IST)", x.get("exit_ist", "")), ("Running total (Regime journal)", f"${x.get('running_total', 0):+,.2f}")]
+    else:
+        subject = f"{name}: Regime {x.get('rule_note', '')} not filled — no trade"
+        rows = [("Setup", x.get("rule_note", "")), ("Entry (USD)", f1(x["entry"])), ("Result", "The entry price was never reached, so no trade"), ("Signal time (IST)", x["time_ist"])]
+    tr = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(str(v))}</b></td></tr>" for k, v in rows)
+    link = f"{app}/regime"
+    html = (f"<table role='presentation' width='100%'><tr><td style='padding:24px;font-family:Arial,sans-serif;color:#111'>"
+            f"<h2 style='margin:0 0 12px'>{escape(name)} · Regime Journal</h2><table role='presentation'>{tr}</table>"
+            f"<p>Open the journal: <a href='{escape(link)}'>{escape(link)}</a></p>"
+            f"<p style='font-size:12px;color:#888'>Paper journal alert: no order was placed. Verify on the exchange before trading.</p></td></tr></table>")
+    return subject, html
+
+
+async def notify(rows, now):
+    """Email each fresh Regime event once: a new trade, its close, or a trade that never filled. Follows the site's alert switches."""
+    import alert_mode
+    import alerts
+    from channel_config import CFG
+    live_ts = _ts(LIVE_IST)
+    todo = []
+    for x in rows:
+        if x["cap_t"] < live_ts:
+            continue
+        sid = x["signal_id"]
+        if x.get("trade_side") and now - x["cap_t"] < ENTRY_WINDOW:
+            todo.append(("entry", f"regime-entry-{sid}", x))
+        if x.get("status") == "CLOSED" and now - x.get("exit_t", 0) < EXIT_WINDOW:
+            todo.append(("exit", f"regime-exit-{sid}", x))
+        if x.get("rule") == "Not filled" and x.get("rule_note") and now - x["cap_t"] < EXIT_WINDOW:
+            todo.append(("not_filled", f"regime-nofill-{sid}", x))
+    if not todo:
+        return []
+    mode = await alert_mode.get_mode()
+    sent = []
+    for kind, key, x in todo:
+        if await db.alerts_log.find_one({"_id": key}, {"_id": 1}):
+            continue
+        entry = {"_id": key, "at": iso(now_utc()), "signal_id": x["signal_id"], "channel": "email", "kind": f"regime-{kind}", "test": False}
+        to = CFG.get("ALERT_EMAIL")
+        if not mode["effective_armed"]:
+            entry["result"] = "not sent (" + ("kill switch on" if mode["kill_switch"] else "alert mode is OFF") + ")"
+        elif not mode["channels"].get("email"):
+            entry["result"] = "not sent (email channel switched off)"
+        elif not to:
+            entry["result"] = "not sent (ALERT_EMAIL not configured)"
+        else:
+            try:
+                subject, html = _email(kind, x)
+                entry["provider_id"] = await alerts.send_email(to=to, subject=subject, html=html)
+                entry["result"] = "sent"; entry["to"] = to
+            except Exception as e:
+                log.warning(f"regime email failed: {e}")
+                entry["result"] = f"failed: {str(e)[:160]}"
+        try:
+            await db.alerts_log.insert_one(entry)
+        except Exception:
+            continue                                       # another worker logged it first
+        sent.append(entry)
+    return sent
 
 
 async def loop():
