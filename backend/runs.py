@@ -1,5 +1,6 @@
 """Candle Runs: three PAPER strategies from the owner's backtest workbook (BTC_Backtest_3Y_All_Strategies.xlsx).
-Paper journal only: it never sends an order and sends no alerts (admin request 21 Nov 2026).
+Paper journal only: it never sends an order. Email alerts for new live positions and closes (admin request 21 Nov 2026, later
+the same day; before that it sent none). Auto-Trade reads the live positions from STATE (autotrade.py).
 Win #4 (big 1h bar, Up market) and Win #2 (4-candle run, Up market, 1:1) were removed on 21 Nov 2026: they failed the re-test.
 
 All five are re-tested in the strategy lab (research/WORKBOOK_TOP10.md): 4h or 1h candles built from Delta BTCUSD 5-minute
@@ -220,7 +221,7 @@ def split_positions(allrows):
                "gross": sum(p["gross"] for p in parts), "fees": sum(p["fees"] for p in parts), "net": sum(p["net"] for p in parts),
                "exit_ist": max((p.get("exit_ist") or "") for p in parts) if st == "CLOSED" else None,
                "reason": a["reason"] + (f" · {k} strategies signalled together: ONE $10,000 position split {k} ways, each part exits at its own target" if k > 1 else ""),
-               "parts": [{k_: p.get(k_) for k_ in ("strategy", "wb", "rr", "tp", "result", "status", "exit_ist", "exit_price", "mark", "size", "share", "gross", "fees", "net", "r", "full_net")}
+               "parts": [{k_: p.get(k_) for k_ in ("strategy", "wb", "rr", "tp", "result", "status", "exit_t", "exit_ist", "exit_price", "mark", "size", "share", "gross", "fees", "net", "r", "full_net")}
                          for p in parts]}
         out.append(pos)
     return out
@@ -292,7 +293,7 @@ def build(b5, live, now_t=None, hist=None):
     mnow = None
     if h4[0] and h4[2][-1] is not None:
         mnow = {"chg30": round(h4[2][-1], 4), "type": market_type(h4[2][-1]), "as_of_ist": _ist(h4[0][-1]["tc"])}
-    return {"name": NAME, "paper_only": True, "alerts": False, "live_start_ist": LIVE_IST, "replay_from_ist": REPLAY_IST, "live_price": live,
+    return {"name": NAME, "paper_only": True, "alerts": True, "live_start_ist": LIVE_IST, "replay_from_ist": REPLAY_IST, "live_price": live,
             "market_now": mnow, "strategies": per, "positions": positions[::-1],
             "totals": {"live": summary_pos([p for p in positions if p["period"] == "Live"]), "all": summary_pos([p for p in positions if p["period"] != "Backtest"]),
                        "full": summary_pos(positions)},
@@ -301,7 +302,7 @@ def build(b5, live, now_t=None, hist=None):
             "backtest": {"source": hdoc.get("source"), "from_ist": hdoc.get("from_ist"), "to_ist": hdoc.get("to_signal_before_ist"), "trades": sum(1 for r in allrows if r["period"] == "Backtest")},
             "last_candle_ist": _ist(b5[-1]["t"] + 300) if b5 else None,
             "settings": {"stop": "2 x ATR(14) of the strategy's timeframe", "entry": "next 5-minute open after the signal candle closes (market order, taker)",
-                         "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "shared_position": True, "alerts": "none (paper only)"}}
+                         "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "shared_position": True, "alerts": "email on each new live position and each part close (follows the site alert switches)"}}
 
 
 async def compute():
@@ -314,7 +315,93 @@ async def compute():
     data = build(b5, live)
     data["computed_at"] = iso(now_utc())
     STATE.update(computed_at=data["computed_at"], error=None, data=data)
+    try:
+        import alert_mode
+        if alert_mode.source_on("runs"):
+            await notify(data["positions"], int(time.time()))
+    except Exception as e:
+        log.warning(f"candle runs alerts failed: {e}")
     return STATE
+
+
+# ---------------------------------------------------------------- email alerts
+ENTRY_WINDOW, EXIT_WINDOW = 3600, 3 * 3600
+
+
+def _email(kind, p, part=None):
+    from html import escape
+    from channel_config import CFG
+    from core import APP_NAME
+    name = CFG.get("EMAIL_FROM_NAME") or APP_NAME
+    app = CFG["FRONTEND_URL"].split(",")[0].rstrip("/")
+    f1 = lambda v: f"{v:,.1f}" if isinstance(v, (int, float)) else str(v)
+    who = " + ".join(p["members"])
+    if kind == "entry":
+        subject = f"{name}: Candle Runs — {p['side']} BTCUSD at {f1(p['entry'])} ({who})"
+        rows = [("Trade", f"{p['side']} BTCUSD (Candle Runs paper position)"), ("Strategies", who + (" — one shared $10,000 position" if len(p["members"]) > 1 else "")),
+                ("Entry (USD)", f1(p["entry"])), ("Stop loss (USD)", f1(p["sl"])),
+                ("Take profit (USD)", " / ".join(f"{x['wb']} 1:{x['rr']:g} at {f1(x['tp'])}" for x in p["parts"])),
+                ("Time exit", f"7 days after entry ({p.get('time_exit_ist', '')} IST)"), ("Market type", f"{p['market']}" + (f" (BTC {p['chg30']:+.1%} over 30 days)" if p.get("chg30") is not None else "")),
+                ("Why", p["reason"]), ("Entry time (IST)", p["entry_ist"])]
+    else:
+        x = part
+        subject = f"{name}: Candle Runs closed — {x['wb']} {x['result']} {('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f}"
+        rows = [("Trade", f"{p['side']} BTCUSD (Candle Runs paper position)"), ("Part", f"{x['wb']} 1:{x['rr']:g} ({round(x['share'] * 100)}% of the position)"),
+                ("Result", x["result"]), ("Entry (USD)", f1(p["entry"])), ("Exit (USD)", f1(x["exit_price"])),
+                ("Net P&L after fees", f"{('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f}"), ("Entry (IST)", p["entry_ist"]), ("Closed (IST)", x.get("exit_ist", ""))]
+    tr = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#555'>{escape(k)}</td><td style='padding:4px 0'><b>{escape(str(v))}</b></td></tr>" for k, v in rows)
+    link = f"{app}/candle-runs"
+    html = (f"<table role='presentation' width='100%'><tr><td style='padding:24px;font-family:Arial,sans-serif;color:#111'>"
+            f"<h2 style='margin:0 0 12px'>{escape(name)} · Candle Runs</h2><table role='presentation'>{tr}</table>"
+            f"<p>Open the journal: <a href='{escape(link)}'>{escape(link)}</a></p>"
+            f"<p style='font-size:12px;color:#888'>Paper journal alert from the Candle Runs page. Verify on the exchange before trading.</p></td></tr></table>")
+    return subject, html
+
+
+async def notify(positions, now):
+    """Email each fresh live Candle Runs event once: a new position, and each part's close. Follows the site's alert switches."""
+    import alert_mode
+    import alerts
+    from channel_config import CFG
+    from core import db
+    todo = []
+    for p in positions:
+        if p.get("period") != "Live":
+            continue
+        if now - p["entry_t"] < ENTRY_WINDOW:
+            todo.append(("entry", f"runs-entry-{p['id']}", p, None))
+        for x in p["parts"]:
+            if x.get("status") == "CLOSED" and x.get("exit_t") and now - x["exit_t"] < EXIT_WINDOW:
+                todo.append(("exit", f"runs-exit-{p['id']}-{x['strategy']}", p, x))
+    if not todo:
+        return []
+    mode = await alert_mode.get_mode()
+    sent = []
+    for kind, key, p, x in todo:
+        if await db.alerts_log.find_one({"_id": key}, {"_id": 1}):
+            continue
+        entry = {"_id": key, "at": iso(now_utc()), "signal_id": p["id"], "channel": "email", "kind": f"runs-{kind}", "test": False}
+        to = CFG.get("ALERT_EMAIL")
+        if not mode["effective_armed"]:
+            entry["result"] = "not sent (" + ("kill switch on" if mode["kill_switch"] else "alert mode is OFF") + ")"
+        elif not mode["channels"].get("email"):
+            entry["result"] = "not sent (email channel switched off)"
+        elif not to:
+            entry["result"] = "not sent (ALERT_EMAIL not configured)"
+        else:
+            try:
+                subject, html = _email(kind, p, x)
+                entry["provider_id"] = await alerts.send_email(to=to, subject=subject, html=html)
+                entry["result"] = "sent"; entry["to"] = to
+            except Exception as e:
+                log.warning(f"candle runs email failed: {e}")
+                entry["result"] = f"failed: {str(e)[:160]}"
+        try:
+            await db.alerts_log.insert_one(entry)
+        except Exception:
+            continue
+        sent.append(entry)
+    return sent
 
 
 async def loop():

@@ -90,7 +90,8 @@ async def scheduler_loop():
     while True:
         try:
             now = now_utc().astimezone(IST)
-            if now.hour >= RECAP_HOUR_IST:
+            import alert_mode
+            if now.hour >= RECAP_HOUR_IST and alert_mode.source_on("daily_recap"):   # off since 21 Nov 2026
                 await send(f"daily-{now.strftime('%Y-%m-%d')}", scheduled=True)
         except Exception:
             log.exception("daily recap failed")

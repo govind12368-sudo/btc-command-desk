@@ -259,8 +259,10 @@ async def maybe_capture_signal(ev, q, plan, s=None):
            "fill_status": "WAITING FILL" if lv.get("entry_type") == "POST-ONLY LIMIT" else "FILLED"}
     res = await db.signals.update_one({"_id": sid}, {"$setOnInsert": doc}, upsert=True)
     if res.upserted_id:
-        import alerts
-        asyncio.create_task(alerts.notify(doc))
+        import alert_mode
+        if alert_mode.source_on("scalp"):         # off since 21 Nov 2026: only Flush Short and Candle Runs alert
+            import alerts
+            asyncio.create_task(alerts.notify(doc))
 
 
 async def update_signal_observations():

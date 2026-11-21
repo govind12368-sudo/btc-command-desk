@@ -42,7 +42,13 @@ RANGES = {"margin_inr": (1000, 5_000_000), "leverage": (1, 100), "daily_loss_usd
           "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1), "direction_mode": (0, 2)}
 _INTS = ("leverage", "max_contracts", "tp_limit", "direction_mode")
 DAY_TYPE_ONLY = True  # admin request, 16 Nov 2026: Auto-Trade takes Day-type switch trades only (direction_mode is held at 2)
-PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal"}
+PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal", "FLUSH": "Flush Short", "RUNS": "Candle Runs"}
+# Admin request, 21 Nov 2026: Auto-Trade takes ONLY Flush Short and Candle Runs trades (live positions from those two pages).
+# "scalp" = the old path (scalp signals through the Day-type switch); kept for its tests.
+SOURCE = "strategies"
+RUNS_ENTRY_WINDOW_MIN = 30     # a Candle Runs position is entered at market within 30 min of its entry candle
+RUNS_SLIP_FRAC = 0.2           # ... and only while price is within 20% of the stop distance of the page's entry (or the slippage setting, if larger)
+
 
 
 class NotPlaced(Exception):
@@ -313,7 +319,63 @@ class Engine:
                 await self._try_enter(st, cfg, broker, price, hi, lo, now)
 
     # ---- signals
+    def strategy_signals(self, cfg):
+        """Live trades of the Flush Short and Candle Runs pages, as auto-trade signals (read-only)."""
+        import flush
+        import runs
+        out = []
+        for x in ((flush.STATE.get("data") or {}).get("rows") or []):
+            if x.get("trade_side") != "SHORT" or x.get("period") != "Live" or x.get("entry") is None or not x.get("d"):
+                continue
+            e, d = float(x["entry"]), float(x["d"])
+            out.append({"_id": f"FLUSH-{x['signal_id']}", "plan": "FLUSH", "t": int(x["cap_t"]), "model_dir": "SHORT", "bot_dir": "SHORT",
+                        "entry": tick_round(e), "stop": tick_round(e + d), "target": tick_round(e - flush.RR * d), "d": d,
+                        "window_end_t": int(x["cap_t"]) + int(cfg["entry_window_min"] * 60), "time_exit_min": flush.HOLD / 60, "market_entry": False,
+                        "note": f"Flush Short: {x.get('reason', '')}"})
+        for p in ((runs.STATE.get("data") or {}).get("positions") or []):
+            if p.get("period") != "Live" or not p.get("parts"):
+                continue
+            best = max(p["parts"], key=lambda q: q["rr"])      # one bracket per position: the largest tested target among the strategies that signalled
+            out.append({"_id": f"RUNS-{p['id']}", "plan": "RUNS", "t": int(p["entry_t"]), "model_dir": p["side"], "bot_dir": p["side"],
+                        "entry": tick_round(float(p["entry"])), "stop": tick_round(float(p["sl"])), "target": tick_round(float(best["tp"])), "d": float(p["d"]),
+                        "window_end_t": int(p["entry_t"]) + RUNS_ENTRY_WINDOW_MIN * 60, "time_exit_min": 7 * 24 * 60, "market_entry": True,
+                        "slip_pts": max(cfg["slippage_pts"], RUNS_SLIP_FRAC * float(p["d"])),
+                        "note": f"Candle Runs: {' + '.join(p['members'])}, target = {best['wb']} 1:{best['rr']:g}"})
+        return out
+
+    async def _ingest_strategies(self, st, cfg, now):
+        since = parse_iso(st["since"])
+        floor_t = max(since, now - timedelta(hours=24)).timestamp() - 2
+        for c in self.strategy_signals(cfg):
+            sid = c["_id"]
+            if c["t"] < floor_t or await db.autotrade_signals.find_one({"_id": sid}, {"_id": 1}):
+                continue
+            cap = now.fromtimestamp(c["t"], now.tzinfo)
+            doc = {"_id": sid, "strategy": PLAN_NAME[c["plan"]], "plan": c["plan"], "model_dir": c["model_dir"], "captured_at": iso(cap), "seen_at": iso(now),
+                   "bot_dir": c["bot_dir"], "entry": c["entry"], "stop": c["stop"], "target": c["target"], "d": c["d"],
+                   "window_end": iso(now.fromtimestamp(c["window_end_t"], now.tzinfo)), "time_exit_min": c["time_exit_min"],
+                   "market_entry": c["market_entry"], "slip_pts": c.get("slip_pts"), "note": c["note"]}
+            open_t = await db.autotrade_trades.find_one({"status": {"$in": ["OPEN", "PENDING"]}}, {"_id": 1})
+            if open_t:
+                doc.update(status="SKIPPED", reason="skipped – trade open")
+            elif st.get("halt"):
+                doc.update(status="SKIPPED", reason=f"skipped – {st['halt']['reason']}")
+            elif st.get("paused"):
+                doc.update(status="SKIPPED", reason="skipped – paused")
+            elif now.timestamp() >= c["window_end_t"]:
+                doc.update(status="NOT FILLED", reason="entry window was already over when the trade was read")
+            else:
+                doc.update(status="ARMED", reason=("enter at market now (Candle Runs)" if c["market_entry"] else f"waiting for price to reach {c['entry']:.1f}"))
+            try:
+                await db.autotrade_signals.insert_one(doc)
+            except DuplicateKeyError:
+                continue
+            extra = f" – {doc['strategy']}: bot {doc['bot_dir']} at {doc['entry']:.1f}, stop {doc['stop']:.1f}, target {doc['target']:.1f} ({c['note']})" if doc["status"] == "ARMED" else ""
+            await self.event(doc["status"].lower().replace(" ", "_"), f"{sid}: {doc['status']} ({doc['reason']}){extra}", sid)
+
     async def _ingest(self, st, cfg, now):
+        if SOURCE == "strategies":
+            return await self._ingest_strategies(st, cfg, now)
         since = parse_iso(st["since"])
         floor = iso(max(since, now - timedelta(hours=24)) - timedelta(seconds=2))
         seen = {x["_id"] async for x in db.autotrade_signals.find({"captured_at": {"$gte": floor}}, {"_id": 1})}
@@ -366,14 +428,22 @@ class Engine:
         armed = [a async for a in db.autotrade_signals.find({"status": "ARMED"}).sort("captured_at", 1)]
         for a in armed:
             sid, up = a["_id"], a["model_dir"] == "SHORT"  # the signal's own limit fills when price comes UP to a SHORT entry / DOWN to a LONG entry
+            if SOURCE == "strategies" and a.get("plan") not in ("FLUSH", "RUNS"):
+                await self._mark(sid, "CANCELLED", "Auto-Trade now takes only Flush Short and Candle Runs trades", "cancelled")
+                continue
             if now >= parse_iso(a["window_end"]):
                 await self._mark(sid, "NOT FILLED", f"price did not reach {a['entry']:.1f} inside the entry window – nothing traded")
                 continue
-            if not ((hi >= a["entry"]) if up else (lo <= a["entry"])):
-                continue
-            beyond = (price - a["entry"]) if up else (a["entry"] - price)
-            if beyond > cfg["slippage_pts"]:
-                await self._mark(sid, "SKIPPED", f"SLIPPAGE – price {price:.1f} is {beyond:.1f} points beyond entry {a['entry']:.1f} (guard {cfg['slippage_pts']:.0f})")
+            if a.get("market_entry"):                     # Candle Runs: market entry, guarded against chasing the move
+                guard = a.get("slip_pts") or cfg["slippage_pts"]
+                beyond = (price - a["entry"]) if a["bot_dir"] == "LONG" else (a["entry"] - price)
+            else:
+                if not ((hi >= a["entry"]) if up else (lo <= a["entry"])):
+                    continue
+                guard = cfg["slippage_pts"]
+                beyond = (price - a["entry"]) if up else (a["entry"] - price)
+            if beyond > guard:
+                await self._mark(sid, "SKIPPED", f"SLIPPAGE – price {price:.1f} is {beyond:.1f} points beyond entry {a['entry']:.1f} (guard {guard:.0f})")
                 continue
             try:
                 avail = await broker.available_inr(cfg)
@@ -396,7 +466,8 @@ class Engine:
         coid = ("E-" + sid)[:32]
         trade = {"_id": sid, "signal_id": sid, "mode": st["mode"], "status": "PENDING", "model_dir": a["model_dir"], "bot_dir": a["bot_dir"],
                  "captured_at": a["captured_at"], "trigger_entry": a["entry"], "stop": a["stop"], "target": a["target"], "contracts": n,
-                 "coid": coid, "created_at": iso(now), "size_note": info["limited_by"], "plan": a.get("plan") or "PLAN_A", "day_type": a.get("day_type")}
+                 "coid": coid, "created_at": iso(now), "size_note": info["limited_by"], "plan": a.get("plan") or "PLAN_A", "day_type": a.get("day_type"),
+                 "time_exit_min": a.get("time_exit_min")}
         try:
             await db.autotrade_trades.insert_one(trade)  # written BEFORE the order: a crash can never cause a second entry
         except DuplicateKeyError:
@@ -459,7 +530,7 @@ class Engine:
         if ex:
             await self._finish(t, ex["reason"], ex["price"], ex["role"], st, cfg, broker, now)
             return
-        if now >= parse_iso(t["fill_time"]) + timedelta(minutes=cfg["time_exit_min"]):
+        if now >= parse_iso(t["fill_time"]) + timedelta(minutes=t.get("time_exit_min") or cfg["time_exit_min"]):
             await self._close(t, "TIME", st, cfg, broker, price, now)
             return
         daily = await self.realized(st["mode"], ist_date(now)) + self.unrealized(t, price)
@@ -616,7 +687,7 @@ async def status():
         balance_inr = None
     return {
         "mode": st["mode"], "status": label, "paused": bool(st.get("paused")), "halt": st.get("halt"), "price": price, "server_time": iso(now),
-        "settings": cfg, "ranges": RANGES,
+        "settings": cfg, "ranges": RANGES, "source": SOURCE,
         "today": {"day": ist_date(now), "realized": real, "unrealized": unreal, "total": real + unreal,
                   "loss_limit": cfg["daily_loss_usd"], "target": cfg["daily_target_usd"], "usd_inr": cfg["usd_inr"]},
         "paper_balance_inr": balance_inr, "open_trade": open_trade,

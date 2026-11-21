@@ -21,6 +21,13 @@ CHANNELS = ("email", "telegram", "sms", "call", "daily_recap")
 DEFAULT = {"armed": False, "channels": {c: True for c in CHANNELS}, "version": 0,
            "armed_at": None, "armed_by": None, "disarmed_at": None, "disarmed_by": None}
 CONFIRM_WORD = "ARM"
+# Admin request, 21 Nov 2026: only Flush Short and Candle Runs send alerts, plus Auto-Trade (which now trades only those two).
+# Scalp-signal alerts, the Regime journal, the Strategy Observer and the scheduled daily recap are switched off here.
+ALERT_SOURCES = {"flush", "runs", "autotrade"}
+
+
+def source_on(name):
+    return name in ALERT_SOURCES
 
 
 def kill_switch():

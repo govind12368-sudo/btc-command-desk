@@ -78,7 +78,7 @@ export default function CandleRuns() {
   const upOnly = strats.filter((s) => s.market === "Up");
   return (
     <div className="space-y-4" data-testid="runs-page">
-      <PageHead title={`Candle Runs – ${strats.length || 3} paper strategies`} sub={`Paper trades only: no real orders and no alerts. From your backtest workbook, re-tested. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`} />
+      <PageHead title={`Candle Runs – ${strats.length || 3} paper strategies`} sub={`Paper journal (no orders from this page). Email alerts for new live positions and closes; Auto-Trade takes these positions. From your backtest workbook, re-tested. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`} />
       {d.error && <Note tone="red">Last update failed: {d.error}. It retries every 2 minutes.</Note>}
       {!d.strategies && !d.error && <Note>Loading Delta candles and working out the journal… this takes about two minutes after a restart.</Note>}
       <div className="flex flex-wrap items-center gap-2">
@@ -151,7 +151,7 @@ export default function CandleRuns() {
           {!rows.length && <div className="p-4 text-center text-xs text-slate-500">{period === "live" ? "No live paper trades yet. Signals are checked at every 4h close (01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST). Switch to “Include replay” or “3-year journal” to see history." : "No trades in this period."}</div>}
         </div>
       </Card>
-      <Card title="Rules" sub="Fixed. Paper only: this page never sends an order and sends no alerts.">
+      <Card title="Rules" sub="Fixed. This page never sends an order; it emails new live positions and closes, and Auto-Trade reads its live positions.">
         <div className="space-y-3 text-xs text-slate-300">
           {strats.map((s) => (
             <div key={s.key} className="border-b border-[#1e2a4a]/60 pb-2">

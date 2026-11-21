@@ -182,7 +182,7 @@ export default function AutoTrade() {
 
   return (
     <div className="space-y-4" data-testid="autotrade-page">
-      <PageHead title="Auto-trade" sub={`Scalp signals only, one trade at a time, 6-hour exit. Direction: ${["Plan A (reverse 1:2) always", "follow the signal always", "Day-type switch only – range day → Plan A, trend day with the signal → follow, anything else → no trade"][d.settings.direction_mode] || ""}.`}
+      <PageHead title="Auto-trade" sub={d.source === "strategies" ? "Takes only Flush Short and Candle Runs trades (live positions from those pages), one trade at a time. Flush Short: SHORT at the signal entry, 1.25R target, 6-hour exit. Candle Runs: market entry within 30 minutes of the 4h signal, shared stop, target = the largest target of the strategies that signalled, 7-day exit." : `Scalp signals only, one trade at a time, 6-hour exit. Direction: ${["Plan A (reverse 1:2) always", "follow the signal always", "Day-type switch only – range day → Plan A, trend day with the signal → follow, anything else → no trade"][d.settings.direction_mode] || ""}.`}
         right={<span className="flex items-center gap-2"><Chip status={MODE_CHIP[d.mode]} label={`${MODE_NAME[d.mode].toUpperCase()} MODE`} testid="autotrade-mode" /><Chip status={STATUS_CHIP[d.status]} label={d.status.toUpperCase()} testid="autotrade-status" /></span>} />
 
       {d.mode === "PAPER" && <Note>Paper mode: trades are simulated from the live Delta price with the same rules, sizing and fees. No order is sent to the exchange.</Note>}

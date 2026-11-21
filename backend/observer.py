@@ -525,6 +525,9 @@ def today(board, WF, D, X):
 
 async def status_alerts(board, D):
     """One email + Telegram when a book becomes proven profitable, or starts running worse than its history."""
+    import alert_mode
+    if not alert_mode.source_on("observer"):          # off since 21 Nov 2026: only Flush Short and Candle Runs alert
+        return
     events = [(f"observer-proven-{b['key']}", f"{b['name']} is now PROVEN profitable on {b['recent']['n']} trades ({b['recent']['avg_r']:+.2f}R a trade).")
               for b in board if (b["recent"].get("verdict") or "").startswith("Proven profitable")]
     events += [(f"observer-worse-{d['key']}-{_ist(int(now_utc().timestamp()), '%Y-%m-%d')}", f"{d['name']} is running worse than its 26-month history: {d['rolling_r']:+.2f}R over the last {d['window']} trades.")

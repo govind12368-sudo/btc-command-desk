@@ -314,7 +314,9 @@ async def compute():
                          "margin": MARGIN, "leverage": LEVERAGE, "notional": NOTIONAL, "fees": FEES}}
     STATE.update(computed_at=data["computed_at"], error=None, data=data)
     try:
-        await notify(out, now)
+        import alert_mode
+        if alert_mode.source_on("regime"):            # off since 21 Nov 2026: only Flush Short and Candle Runs alert
+            await notify(out, now)
     except Exception as e:
         log.warning(f"regime alerts failed: {e}")
     return STATE

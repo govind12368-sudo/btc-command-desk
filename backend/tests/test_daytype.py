@@ -21,7 +21,9 @@ def mods(monkeypatch):
     monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
     for m in ("core", "autotrade", "daytype", "plan_a", "scanner", "support"):
         sys.modules.pop(m, None)
-    return {m: importlib.import_module(m) for m in ("core", "daytype", "autotrade", "plan_a", "scanner")}
+    mods = {m: importlib.import_module(m) for m in ("core", "daytype", "autotrade", "plan_a", "scanner")}
+    mods["autotrade"].SOURCE = "scalp"      # the Day-type switch path; Auto-Trade now takes Flush Short / Candle Runs (test_autotrade_sources.py)
+    return mods
 
 
 def run(c):
