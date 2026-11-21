@@ -52,7 +52,7 @@ def test_run_signals_and_market_filter(rn):
     sig = rn.signals(s4, bs, at, [0.0] * len(bs))
     assert [(t, side) for t, side, *_ in sig] == [(bs[4]["tc"], 1), (bs[8]["tc"], -1)]
     assert sig[0][2] == 4.0 and "4 green" in sig[0][3]
-    up = next(s for s in rn.STRATS if s["key"] == "win2")
+    up = {**s4, "key": "up", "market": "Up"}
     assert rn.signals(up, bs, at, [0.03] * len(bs)) == []                                    # Range market: stands aside
     assert len(rn.signals(up, bs, at, [0.06] * len(bs))) == 2
     s5 = next(s for s in rn.STRATS if s["key"] == "win1")
@@ -61,12 +61,16 @@ def test_run_signals_and_market_filter(rn):
 
 
 def test_big_bar(rn):
-    bb = next(s for s in rn.STRATS if s["key"] == "win4")
+    bb = {"key": "bb", "kind": "bigbar", "n": None, "market": "Up", "rr": 1.0, "hold_h": 72}
     bs = [{"t": T0 + 3600 * i, "o": 100, "h": 101, "l": 99, "c": 100.5, "tc": T0 + 3600 * (i + 1)} for i in range(3)]
     bs[2] = {**bs[2], "o": 100, "h": 108, "l": 99, "c": 107}                                 # range 9 > 3 x ATR 2
     sig = rn.signals(bb, bs, [2.0, 2.0, 2.5], [0.08] * 3)
     assert len(sig) == 1 and sig[0][1] == 1 and sig[0][2] == 5.0
     assert rn.signals(bb, bs, [2.0, 2.0, 2.5], [0.0] * 3) == []                               # not an Up market
+
+
+def test_only_three_strategies(rn):
+    assert [s["wb"] for s in rn.STRATS] == ["P&L #1", "P&L #5", "Win #1"]
 
 
 def test_simulate_exits_fees_and_one_at_a_time(rn):

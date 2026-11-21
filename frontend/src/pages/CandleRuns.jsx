@@ -65,24 +65,24 @@ export default function CandleRuns() {
   const upOnly = strats.filter((s) => s.market === "Up");
   return (
     <div className="space-y-4" data-testid="runs-page">
-      <PageHead title="Candle Runs – 5 paper strategies" sub={`Paper trades only: no real orders and no alerts. From your backtest workbook, re-tested. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`} />
+      <PageHead title={`Candle Runs – ${strats.length || 3} paper strategies`} sub={`Paper trades only: no real orders and no alerts. From your backtest workbook, re-tested. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`} />
       {d.error && <Note tone="red">Last update failed: {d.error}. It retries every 2 minutes.</Note>}
       {!d.strategies && !d.error && <Note>Loading Delta candles and working out the journal… this takes about two minutes after a restart.</Note>}
       <div className="flex flex-wrap items-center gap-2">
         <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live paper from {d.live_start_ist?.slice(5) || "start"}</button>
         <button className={btn(period === "all")} onClick={() => setPeriod("all")}>Include replay since {d.replay_from_ist?.slice(0, 10) || "1 Oct"}</button>
-        {only && <button className={btn(false)} onClick={() => setOnly(null)}>Show all 5 strategies</button>}
+        {only && <button className={btn(false)} onClick={() => setOnly(null)}>Show all strategies</button>}
       </div>
       {mk && (
         <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-4 py-3" data-testid="runs-market">
           <div className="text-[12px] text-slate-400">Market now (BTC over the last 30 days, at the {mk.as_of_ist} 4h close)</div>
           <div className="text-lg font-bold text-slate-50">{mk.type} market · {(mk.chg30 * 100).toFixed(1)}%</div>
           <div className="text-[12.5px] text-slate-300">
-            {mk.type === "Up" ? "All 5 strategies are active." : `3 strategies are active (the candle runs without a market filter). ${upOnly.map((s) => s.wb).join(" and ")} trade only in an Up market (BTC up more than 5% over 30 days), so they are standing aside.`}
+            {upOnly.length && mk.type !== "Up" ? `${upOnly.map((s) => s.wb).join(" and ")} trade only in an Up market, so they are standing aside.` : `All ${strats.length} strategies trade in every market type (up, range and down).`}
           </div>
         </div>
       )}
-      <div className="text-[12px] text-slate-400">{only ? `Showing ${strats.find((s) => s.key === only)?.name}` : "All 5 strategies together"} · {period === "live" ? "live paper trades only" : "replay + live"}</div>
+      <div className="text-[12px] text-slate-400">{only ? `Showing ${strats.find((s) => s.key === only)?.name}` : `All ${strats.length} strategies together`} · {period === "live" ? "live paper trades only" : "replay + live"}</div>
       <Totals s={tot} />
       <Card title="By strategy" sub="Click a row to see only that strategy's trades. Re-test = the independent check on Jan 2023 – Nov 2026 data." testid="runs-strategies">
         <div className="overflow-x-auto scroll-thin">

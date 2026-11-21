@@ -1,5 +1,6 @@
-"""Candle Runs: five PAPER strategies from the owner's backtest workbook (BTC_Backtest_3Y_All_Strategies.xlsx).
+"""Candle Runs: three PAPER strategies from the owner's backtest workbook (BTC_Backtest_3Y_All_Strategies.xlsx).
 Paper journal only: it never sends an order and sends no alerts (admin request 21 Nov 2026).
+Win #4 (big 1h bar, Up market) and Win #2 (4-candle run, Up market, 1:1) were removed on 21 Nov 2026: they failed the re-test.
 
 All five are re-tested in the strategy lab (research/WORKBOOK_TOP10.md): 4h or 1h candles built from Delta BTCUSD 5-minute
 candles, signal at a candle close, entry at the next 5-minute open (market order, taker fee), stop = 2 x ATR(14) of that
@@ -44,15 +45,6 @@ STRATS = [
     {"key": "win1", "rank": 3, "wb": "Win #1", "name": "5 candles in a row, follow · 1:1", "tf": "4h", "kind": "run", "n": 5, "market": None, "rr": 1.0, "hold_h": 168,
      "rule": _RUN.format(n=5, rr=1), "how": _WHY.format(n=5, h=20),
      "retest": {"verdict": "WEAK", "n": 209, "win": 0.603, "net": 5106, "per_trade": 24.43, "unseen_2023": 17.51}},
-    {"key": "win4", "rank": 4, "wb": "Win #4", "name": "Big 1h bar, follow (Up market) · 1:1", "tf": "1h", "kind": "bigbar", "n": None, "market": "Up", "rr": 1.0, "hold_h": 72,
-     "rule": ("Only when BTC is up more than 5% over 30 days. On a 1h candle whose high-to-low range is more than 3 x ATR(14) "
-              "(ATR of the candles before it), trade in the candle's direction at the next open. Stop = 2 x ATR(14), target = 1 x the stop "
-              "distance, close after 72 hours."),
-     "how": "A very large candle in a rising market is a burst of buying (or a flush) that tends to carry on a little. The edge is thin: about the size of the fee.",
-     "retest": {"verdict": "FAIL", "n": 279, "win": 0.588, "net": 3740, "per_trade": 13.41, "unseen_2023": 0.91}},
-    {"key": "win2", "rank": 5, "wb": "Win #2", "name": "4 candles in a row, follow (Up market) · 1:1", "tf": "4h", "kind": "run", "n": 4, "market": "Up", "rr": 1.0, "hold_h": 168,
-     "rule": "Only when BTC is up more than 5% over 30 days. " + _RUN.format(n=4, rr=1), "how": _WHY.format(n=4, h=16) + " With a 1:1 target it takes profit early.",
-     "retest": {"verdict": "FAIL", "n": 166, "win": 0.608, "net": 5672, "per_trade": 34.17, "unseen_2023": -9.64}},
 ]
 
 
