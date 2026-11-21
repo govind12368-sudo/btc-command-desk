@@ -30,6 +30,7 @@ import channel_config
 import plan_a
 import regime
 import flush
+import runs
 import observer
 import autotrade
 import daytype
@@ -1008,6 +1009,13 @@ async def flush_short_get(u=Depends(current_user)):
     return {**(st["data"] or {"name": flush.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
+@api.get("/candle-runs")
+async def candle_runs_get(u=Depends(current_user)):
+    """Candle Runs: 5 paper strategies from the owner's backtest workbook (paper only, no alerts, no orders)."""
+    st = runs.STATE
+    return {**(st["data"] or {"name": runs.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
+
+
 @api.get("/observer")
 async def observer_get(u=Depends(current_user)):
     """Strategy Observer: every page and journal compared, recent vs 26 months (read-only)."""
@@ -1395,7 +1403,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

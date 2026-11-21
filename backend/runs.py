@@ -1,0 +1,264 @@
+"""Candle Runs: five PAPER strategies from the owner's backtest workbook (BTC_Backtest_3Y_All_Strategies.xlsx).
+Paper journal only: it never sends an order and sends no alerts (admin request 21 Nov 2026).
+
+All five are re-tested in the strategy lab (research/WORKBOOK_TOP10.md): 4h or 1h candles built from Delta BTCUSD 5-minute
+candles, signal at a candle close, entry at the next 5-minute open (market order, taker fee), stop = 2 x ATR(14) of that
+timeframe from the entry, target = RR x the stop distance, time exit after 7 days (4h) or 72 hours (1h), stop first when
+one 5-minute candle touches both, one trade at a time per strategy, $10,000 position (floor(10000/entry, 3) BTC),
+Delta taker fee 0.05% each side + 18% GST.
+The workbook calls the run rules "... in a row, fade" with direction "Reverse": that trades WITH the run.
+"""
+import asyncio
+import logging
+import math
+import os
+import time
+from datetime import datetime, timedelta, timezone
+
+from core import now_utc, iso
+
+log = logging.getLogger("runs")
+NAME = "Candle Runs"
+LIVE_IST = os.environ.get("RUNS_LIVE_START", "2026-11-22 00:00")
+REPLAY_IST = os.environ.get("RUNS_REPLAY_FROM", "2026-10-01 00:00")
+STOP_ATR, ATR_N, BIG_BAR, NOTIONAL = 2.0, 14, 3.0, 10_000.0
+UP_MARKET = 0.05                                   # BTC 30-day change above +5% = Up market
+FEES = {"taker": 0.0005, "gst": 0.18}
+IST = timezone(timedelta(hours=5, minutes=30))
+TF = {"4h": 14400, "1h": 3600}
+STATE = {"computed_at": None, "error": None, "data": None, "bars5": []}
+
+_RUN = ("Check every 4h candle close (01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST). If the last {n} candles are all green "
+        "(close above open), BUY at the next open; if all {n} are red, SELL. Stop = 2 x ATR(14) from the entry. "
+        "Target = {rr} x the stop distance. If neither is hit, close after 7 days.")
+_WHY = ("Momentum: {n} same-colour 4h candles in a row ({h} hours of one-way buying or selling) usually means real pressure "
+        "that keeps going for days, so the trade goes WITH the run. The workbook names it 'fade', but its 'Reverse' setting "
+        "flips that: it follows the run.")
+STRATS = [
+    {"key": "pl1", "rank": 1, "wb": "P&L #1", "name": "4 candles in a row, follow · 1:3", "tf": "4h", "kind": "run", "n": 4, "market": None, "rr": 3.0, "hold_h": 168,
+     "rule": _RUN.format(n=4, rr=3), "how": _WHY.format(n=4, h=16),
+     "retest": {"verdict": "PASS", "n": 245, "win": 0.453, "net": 23730, "per_trade": 96.86, "unseen_2023": 104.17}},
+    {"key": "pl5", "rank": 2, "wb": "P&L #5", "name": "4 candles in a row, follow · 1:2", "tf": "4h", "kind": "run", "n": 4, "market": None, "rr": 2.0, "hold_h": 168,
+     "rule": _RUN.format(n=4, rr=2), "how": _WHY.format(n=4, h=16),
+     "retest": {"verdict": "PASS", "n": 285, "win": 0.491, "net": 21442, "per_trade": 75.23, "unseen_2023": 94.75}},
+    {"key": "win1", "rank": 3, "wb": "Win #1", "name": "5 candles in a row, follow · 1:1", "tf": "4h", "kind": "run", "n": 5, "market": None, "rr": 1.0, "hold_h": 168,
+     "rule": _RUN.format(n=5, rr=1), "how": _WHY.format(n=5, h=20),
+     "retest": {"verdict": "WEAK", "n": 209, "win": 0.603, "net": 5106, "per_trade": 24.43, "unseen_2023": 17.51}},
+    {"key": "win4", "rank": 4, "wb": "Win #4", "name": "Big 1h bar, follow (Up market) · 1:1", "tf": "1h", "kind": "bigbar", "n": None, "market": "Up", "rr": 1.0, "hold_h": 72,
+     "rule": ("Only when BTC is up more than 5% over 30 days. On a 1h candle whose high-to-low range is more than 3 x ATR(14) "
+              "(ATR of the candles before it), trade in the candle's direction at the next open. Stop = 2 x ATR(14), target = 1 x the stop "
+              "distance, close after 72 hours."),
+     "how": "A very large candle in a rising market is a burst of buying (or a flush) that tends to carry on a little. The edge is thin: about the size of the fee.",
+     "retest": {"verdict": "FAIL", "n": 279, "win": 0.588, "net": 3740, "per_trade": 13.41, "unseen_2023": 0.91}},
+    {"key": "win2", "rank": 5, "wb": "Win #2", "name": "4 candles in a row, follow (Up market) · 1:1", "tf": "4h", "kind": "run", "n": 4, "market": "Up", "rr": 1.0, "hold_h": 168,
+     "rule": "Only when BTC is up more than 5% over 30 days. " + _RUN.format(n=4, rr=1), "how": _WHY.format(n=4, h=16) + " With a 1:1 target it takes profit early.",
+     "retest": {"verdict": "FAIL", "n": 166, "win": 0.608, "net": 5672, "per_trade": 34.17, "unseen_2023": -9.64}},
+]
+
+
+def _ts(s):
+    return int(datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=IST).timestamp())
+
+
+def _ist(t):
+    return datetime.fromtimestamp(t, IST).strftime("%Y-%m-%d %H:%M")
+
+
+def market_type(chg30):
+    if chg30 is None:
+        return "Unknown"
+    return "Up" if chg30 > UP_MARKET else "Down" if chg30 < -UP_MARKET else "Range"
+
+
+def fee(price, q):
+    return price * q * FEES["taker"] * (1 + FEES["gst"])
+
+
+def bars(b5, tf, last_t=None):
+    """Candles of `tf` built from 5-minute candles (UTC-aligned). Only periods that have ended and hold at least 90% of
+    their 5-minute candles are kept."""
+    sec = TF[tf]
+    last_t = last_t if last_t is not None else (b5[-1]["t"] if b5 else 0)
+    out, cur = [], None
+    for c in b5:
+        k = c["t"] - c["t"] % sec
+        if cur is None or cur["t"] != k:
+            if cur:
+                out.append(cur)
+            cur = {"t": k, "o": c["o"], "h": c["h"], "l": c["l"], "c": c["c"], "n": 1}
+        else:
+            cur["h"] = max(cur["h"], c["h"]); cur["l"] = min(cur["l"], c["l"]); cur["c"] = c["c"]; cur["n"] += 1
+    if cur:
+        out.append(cur)
+    need = 0.9 * sec / 300
+    return [dict(b, tc=b["t"] + sec) for b in out if b["n"] >= need and b["t"] + sec <= last_t + 300]
+
+
+def atr(bs, n=ATR_N):
+    """Wilder ATR (same as the lab: ewm alpha 1/n, first value = first true range)."""
+    out, a, pc = [], None, None
+    for b in bs:
+        tr = b["h"] - b["l"] if pc is None else max(b["h"] - b["l"], abs(b["h"] - pc), abs(b["l"] - pc))
+        a = tr if a is None else a + (tr - a) / n
+        out.append(a); pc = b["c"]
+    return out
+
+
+def chg30(bs):
+    """BTC change over the 30 days before each candle close (None when that candle is missing)."""
+    by_tc = {b["tc"]: b["c"] for b in bs}
+    return [(b["c"] / by_tc[b["tc"] - 30 * 86400] - 1) if b["tc"] - 30 * 86400 in by_tc else None for b in bs]
+
+
+def signals(s, bs, at, ch):
+    """[(signal time = candle close, side, stop distance, reason, chg30)] for one strategy."""
+    out, sign, run = [], 0, 0
+    for i, b in enumerate(bs):
+        sg = (b["c"] > b["o"]) - (b["c"] < b["o"])
+        run = run + 1 if sg == sign else 1
+        sign = sg
+        mk = market_type(ch[i])
+        if s["market"] and mk != s["market"]:
+            continue
+        if s["kind"] == "run":
+            if sg == 0 or run < s["n"]:
+                continue
+            why = f"{run} {'green' if sg > 0 else 'red'} 4h candles in a row (needs {s['n']}): {'BUY' if sg > 0 else 'SELL'} with the run"
+        else:
+            if i == 0 or sg == 0 or not (b["h"] - b["l"] > BIG_BAR * at[i - 1]):
+                continue
+            why = (f"1h candle range {b['h'] - b['l']:,.0f} is {(b['h'] - b['l']) / at[i - 1]:.1f}x ATR (needs > 3x), "
+                   f"{'green' if sg > 0 else 'red'}: {'BUY' if sg > 0 else 'SELL'} with it")
+        if s["market"]:
+            why += f"; {mk} market (BTC {ch[i]:+.1%} over 30 days)"
+        out.append((b["tc"], sg, STOP_ATR * at[i], why, ch[i]))
+    return out
+
+
+def simulate(s, sigs, b5, start_t, live):
+    """One trade at a time. Entry at the first 5-minute open at/after the signal; stop first; time exit = last candle
+    that opens before entry + hold."""
+    T = [c["t"] for c in b5]
+    import bisect
+    rows, busy = [], -1
+    for t, side, d, why, ch in sigs:
+        if t < start_t or t < busy:
+            continue
+        j = bisect.bisect_left(T, t)
+        if j >= len(T):
+            break                                   # the entry candle has not closed yet
+        if T[j] - t > 900:
+            continue                                # data gap
+        e = b5[j]["o"]
+        q = math.floor(NOTIONAL / e * 1000) / 1000
+        sl, tp = e - side * d, e + side * s["rr"] * d
+        end_t = T[j] + s["hold_h"] * 3600
+        x = {"strategy": s["key"], "strategy_name": s["name"], "wb": s["wb"], "signal_t": t, "signal_ist": _ist(t), "entry_t": T[j], "entry_ist": _ist(T[j]),
+             "side": "LONG" if side > 0 else "SHORT", "entry": e, "sl": round(sl, 1), "tp": round(tp, 1), "d": round(d, 1), "size": q, "rr": s["rr"],
+             "chg30": None if ch is None else round(ch, 4), "market": market_type(ch), "reason": why, "time_exit_ist": _ist(end_t)}
+        hit, k = None, j
+        while k < len(T) and T[k] < end_t:
+            c = b5[k]
+            if (side > 0 and c["l"] <= sl) or (side < 0 and c["h"] >= sl):
+                hit = ("Stop", sl); break
+            if (side > 0 and c["h"] >= tp) or (side < 0 and c["l"] <= tp):
+                hit = ("Target", tp); break
+            k += 1
+        if hit is None and (k >= len(T)):
+            px = live or b5[-1]["c"]
+            gross = side * (px - e) * q; fees = fee(e, q) + fee(px, q)
+            x.update(status="OPEN", result="Open", mark=px, gross=gross, fees=fees, net=gross - fees)
+            rows.append(x)
+            break                                   # one trade at a time: nothing after an open trade
+        if hit is None:
+            k -= 1; hit = ("Time exit", b5[k]["c"])
+        res, xp = hit
+        gross = side * (xp - e) * q; fees = fee(e, q) + fee(xp, q)
+        busy = T[k] + 300
+        x.update(status="CLOSED", result=res, exit_t=busy, exit_ist=_ist(busy), exit_price=xp, gross=gross, fees=fees, net=gross - fees,
+                 r=(gross - fees) / (d * q), hold_h=round((busy - T[j]) / 3600, 1))
+        rows.append(x)
+    return rows
+
+
+def summary(rows):
+    cl = [r for r in rows if r["status"] == "CLOSED"]; op = [r for r in rows if r["status"] == "OPEN"]
+    wins = sum(1 for r in cl if r["net"] > 0)
+    net = sum(r["net"] for r in cl); open_pnl = sum(r["net"] for r in op)
+    return {"trades": len(rows), "closed": len(cl), "open": len(op), "wins": wins, "losses": len(cl) - wins,
+            "win_rate": wins / len(cl) if cl else None, "targets": sum(r["result"] == "Target" for r in cl),
+            "stops": sum(r["result"] == "Stop" for r in cl), "time_exits": sum(r["result"] == "Time exit" for r in cl),
+            "gross": round(sum(r["gross"] for r in cl), 2), "fees": round(sum(r["fees"] for r in cl), 2), "net": round(net, 2),
+            "open_pnl": round(open_pnl, 2), "cumulative": round(net + open_pnl, 2)}
+
+
+async def refresh():
+    import daytype
+    now = int(time.time()); now -= now % 300
+    have = STATE["bars5"]
+    floor = _ts(REPLAY_IST) - 32 * 86400
+    start = have[-1]["t"] - 600 if have else floor
+    new = await daytype._fetch(start, now)
+    m = {c["t"]: c for c in have}
+    for c in new:
+        if c["t"] + 300 <= now:
+            m[c["t"]] = {k: c[k] for k in ("t", "o", "h", "l", "c")}
+    STATE["bars5"] = [m[t] for t in sorted(m) if t >= floor]
+
+
+def build(b5, live, now_t=None):
+    replay_t, live_t = _ts(REPLAY_IST), _ts(LIVE_IST)
+    frames = {}
+    for tf in TF:
+        bs = bars(b5, tf)
+        frames[tf] = (bs, atr(bs), chg30(bs))
+    allrows, per = [], []
+    for s in STRATS:
+        bs, at, ch = frames[s["tf"]]
+        rows = simulate(s, signals(s, bs, at, ch), b5, replay_t, live)
+        for r in rows:
+            r["period"] = "Live" if r["signal_t"] >= live_t else "Replay"
+        run = 0.0
+        for r in rows:
+            run += r["net"]; r["strategy_running"] = round(run, 2)
+        allrows += rows
+        per.append({**{k: s[k] for k in ("key", "rank", "wb", "name", "tf", "kind", "n", "market", "rr", "hold_h", "rule", "how", "retest")},
+                    "live": summary([r for r in rows if r["period"] == "Live"]), "all": summary(rows)})
+    allrows.sort(key=lambda r: r["entry_t"])
+    run = 0.0
+    for r in allrows:
+        run += r["net"]; r["running_total"] = round(run, 2)
+    h4 = frames["4h"]
+    mnow = None
+    if h4[0] and h4[2][-1] is not None:
+        mnow = {"chg30": round(h4[2][-1], 4), "type": market_type(h4[2][-1]), "as_of_ist": _ist(h4[0][-1]["tc"])}
+    return {"name": NAME, "paper_only": True, "alerts": False, "live_start_ist": LIVE_IST, "replay_from_ist": REPLAY_IST, "live_price": live,
+            "market_now": mnow, "strategies": per, "rows": allrows[::-1],
+            "totals": {"live": summary([r for r in allrows if r["period"] == "Live"]), "all": summary(allrows)},
+            "last_candle_ist": _ist(b5[-1]["t"] + 300) if b5 else None,
+            "settings": {"stop": "2 x ATR(14) of the strategy's timeframe", "entry": "next 5-minute open after the signal candle closes (market order, taker)",
+                         "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "alerts": "none (paper only)"}}
+
+
+async def compute():
+    import plan_a
+    await refresh()
+    b5 = STATE["bars5"]
+    if not b5:
+        return STATE
+    live = plan_a.STATE.get("live_price") or b5[-1]["c"]
+    data = build(b5, live)
+    data["computed_at"] = iso(now_utc())
+    STATE.update(computed_at=data["computed_at"], error=None, data=data)
+    return STATE
+
+
+async def loop():
+    await asyncio.sleep(90)
+    while True:
+        try:
+            await compute()
+        except Exception as e:
+            STATE["error"] = str(e)[:200]
+            log.exception("candle runs compute failed")
+        await asyncio.sleep(120)
