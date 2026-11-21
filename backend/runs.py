@@ -189,6 +189,55 @@ def simulate(s, sigs, b5, start_t, live):
     return rows
 
 
+def split_positions(allrows):
+    """One $10,000 position per entry time: strategies that enter at the same 5-minute open on the same side share it equally
+    (same entry, same stop); each part keeps its own tested target and exits on its own. Rewrites each row's size and P&L to
+    its share and returns the positions (oldest first)."""
+    groups = {}
+    for r in allrows:
+        groups.setdefault((r["entry_t"], r["side"]), []).append(r)
+    out = []
+    for (et, side), parts in sorted(groups.items()):
+        k, sd = len(parts), (1 if side == "LONG" else -1)
+        parts.sort(key=lambda p: p["rr"])
+        for r in parts:
+            q = math.floor(NOTIONAL / k / r["entry"] * 1000) / 1000
+            px = r["exit_price"] if r["status"] == "CLOSED" else r["mark"]
+            r["full_net"] = round(r["net"], 2)
+            r["share"], r["size"] = round(1 / k, 4), q
+            r["gross"] = sd * (px - r["entry"]) * q
+            r["fees"] = fee(r["entry"], q) + fee(px, q)
+            r["net"] = r["gross"] - r["fees"]
+            if r["status"] == "CLOSED" and r.get("d"):
+                r["r"] = r["net"] / (r["d"] * q)
+            r["together"] = [p["wb"] for p in parts]
+        a = parts[0]
+        st = "OPEN" if any(p["status"] == "OPEN" for p in parts) else "CLOSED"
+        res = [p["result"] for p in parts]
+        pos = {"id": f"{et}-{side}", "entry_t": et, "entry_ist": a["entry_ist"], "signal_ist": a["signal_ist"], "side": side, "entry": a["entry"],
+               "sl": a["sl"], "d": a["d"], "period": a["period"], "market": a["market"], "chg30": a.get("chg30"), "time_exit_ist": a.get("time_exit_ist"),
+               "members": [p["wb"] for p in parts], "status": st, "result": res[0] if len(set(res)) == 1 else " / ".join(res),
+               "gross": sum(p["gross"] for p in parts), "fees": sum(p["fees"] for p in parts), "net": sum(p["net"] for p in parts),
+               "exit_ist": max((p.get("exit_ist") or "") for p in parts) if st == "CLOSED" else None,
+               "reason": a["reason"] + (f" · {k} strategies signalled together: ONE $10,000 position split {k} ways, each part exits at its own target" if k > 1 else ""),
+               "parts": [{k_: p.get(k_) for k_ in ("strategy", "wb", "rr", "tp", "result", "status", "exit_ist", "exit_price", "mark", "size", "share", "gross", "fees", "net", "r", "full_net")}
+                         for p in parts]}
+        out.append(pos)
+    return out
+
+
+def summary_pos(ps):
+    cl = [p for p in ps if p["status"] == "CLOSED"]; op = [p for p in ps if p["status"] == "OPEN"]
+    wins = sum(1 for p in cl if p["net"] > 0)
+    parts = [x for p in cl for x in p["parts"]]
+    net = sum(p["net"] for p in cl); open_pnl = sum(p["net"] for p in op)
+    return {"trades": len(ps), "closed": len(cl), "open": len(op), "wins": wins, "losses": len(cl) - wins, "win_rate": wins / len(cl) if cl else None,
+            "shared": sum(1 for p in ps if len(p["members"]) > 1),
+            "targets": sum(x["result"] == "Target" for x in parts), "stops": sum(x["result"] == "Stop" for x in parts), "time_exits": sum(x["result"] == "Time exit" for x in parts),
+            "gross": round(sum(p["gross"] for p in cl), 2), "fees": round(sum(p["fees"] for p in cl), 2), "net": round(net, 2),
+            "open_pnl": round(open_pnl, 2), "cumulative": round(net + open_pnl, 2)}
+
+
 def summary(rows):
     cl = [r for r in rows if r["status"] == "CLOSED"]; op = [r for r in rows if r["status"] == "OPEN"]
     wins = sum(1 for r in cl if r["net"] > 0)
@@ -233,20 +282,26 @@ def build(b5, live, now_t=None, hist=None):
         for r in rows:
             r["period"] = "Live" if r["signal_t"] >= live_t else "Replay"
         allrows += old + rows
-        per.append({**{k: s[k] for k in ("key", "rank", "wb", "name", "tf", "kind", "n", "market", "rr", "hold_h", "rule", "how", "retest")},
-                    "live": summary([r for r in rows if r["period"] == "Live"]), "all": summary(rows), "full": summary(old + rows)})
+        per.append({k: s[k] for k in ("key", "rank", "wb", "name", "tf", "kind", "n", "market", "rr", "hold_h", "rule", "how", "retest")})
     allrows.sort(key=lambda r: r["entry_t"])
+    positions = split_positions(allrows)
+    for p in per:
+        mine = [r for r in allrows if r["strategy"] == p["key"]]
+        p.update(live=summary([r for r in mine if r["period"] == "Live"]), all=summary([r for r in mine if r["period"] != "Backtest"]), full=summary(mine))
     h4 = frames["4h"]
     mnow = None
     if h4[0] and h4[2][-1] is not None:
         mnow = {"chg30": round(h4[2][-1], 4), "type": market_type(h4[2][-1]), "as_of_ist": _ist(h4[0][-1]["tc"])}
     return {"name": NAME, "paper_only": True, "alerts": False, "live_start_ist": LIVE_IST, "replay_from_ist": REPLAY_IST, "live_price": live,
-            "market_now": mnow, "strategies": per, "rows": allrows[::-1],
-            "totals": {"live": summary([r for r in allrows if r["period"] == "Live"]), "all": summary([r for r in allrows if r["period"] != "Backtest"]), "full": summary(allrows)},
+            "market_now": mnow, "strategies": per, "positions": positions[::-1],
+            "totals": {"live": summary_pos([p for p in positions if p["period"] == "Live"]), "all": summary_pos([p for p in positions if p["period"] != "Backtest"]),
+                       "full": summary_pos(positions)},
+            "position_rule": ("One $10,000 position per entry time. When two or more strategies enter at the same time (same side, entry and stop), "
+                              "they share that one position equally; each part keeps its own target and exits on its own. No double trade."),
             "backtest": {"source": hdoc.get("source"), "from_ist": hdoc.get("from_ist"), "to_ist": hdoc.get("to_signal_before_ist"), "trades": sum(1 for r in allrows if r["period"] == "Backtest")},
             "last_candle_ist": _ist(b5[-1]["t"] + 300) if b5 else None,
             "settings": {"stop": "2 x ATR(14) of the strategy's timeframe", "entry": "next 5-minute open after the signal candle closes (market order, taker)",
-                         "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "alerts": "none (paper only)"}}
+                         "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "shared_position": True, "alerts": "none (paper only)"}}
 
 
 async def compute():

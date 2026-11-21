@@ -105,6 +105,24 @@ def test_history_join(rn):
     b5 = [c5(rt - 40 * 86400 + 300 * k, 100.0, 100.5, 99.5, 100.0) for k in range(int(46 * 86400 / 300))]
     out = rn.build(b5, 100.0, hist=h)
     s5 = next(s for s in out["strategies"] if s["key"] == "pl5")
-    assert s5["full"]["trades"] == 1 and s5["full"]["net"] == 19.0 and s5["all"]["trades"] == 0
+    assert s5["full"]["trades"] == 1 and abs(s5["full"]["net"] - (2000 - (100 + 120) * 100 * 0.0005 * 1.18)) < 0.01 and s5["all"]["trades"] == 0
     assert out["totals"]["full"]["trades"] == 1 and out["backtest"]["trades"] == 1
-    assert out["rows"][-1]["period"] == "Backtest" and out["rows"][-1]["exit_ist"]
+    assert out["positions"][-1]["period"] == "Backtest" and out["positions"][-1]["exit_ist"]
+
+
+def test_split_positions(rn):
+    """Two strategies entering together share ONE $10,000 position; each part keeps its own target."""
+    base = {"entry_t": T0, "side": "SHORT", "entry": 80000.0, "sl": 80400.0, "d": 400.0, "period": "Replay", "market": "Down", "chg30": -0.1,
+            "signal_ist": "s", "entry_ist": "e", "time_exit_ist": "t", "reason": "run", "status": "CLOSED", "exit_ist": "x"}
+    a = dict(base, strategy="pl5", wb="P&L #5", rr=2.0, tp=79200.0, result="Target", exit_price=79200.0, net=1.0)
+    b = dict(base, strategy="pl1", wb="P&L #1", rr=3.0, tp=78800.0, result="Stop", exit_price=80400.0, net=1.0)
+    c = dict(base, strategy="win1", wb="Win #1", rr=1.0, tp=79600.0, result="Target", exit_price=79600.0, net=1.0, entry_t=T0 + 14400)
+    ps = rn.split_positions([a, b, c])
+    assert len(ps) == 2 and ps[0]["members"] == ["P&L #5", "P&L #1"] and ps[1]["members"] == ["Win #1"]
+    p0 = ps[0]
+    assert [x["size"] for x in p0["parts"]] == [0.062, 0.062] and [x["share"] for x in p0["parts"]] == [0.5, 0.5]
+    assert abs(p0["parts"][0]["gross"] - 800 * 0.062) < 1e-9 and abs(p0["parts"][1]["gross"] + 400 * 0.062) < 1e-9
+    assert abs(p0["net"] - (p0["parts"][0]["net"] + p0["parts"][1]["net"])) < 1e-9 and p0["result"] == "Target / Stop"
+    assert ps[1]["parts"][0]["size"] == 0.125
+    sm = rn.summary_pos(ps)
+    assert sm["trades"] == 2 and sm["shared"] == 1 and sm["closed"] == 2 and sm["targets"] == 2 and sm["stops"] == 1
