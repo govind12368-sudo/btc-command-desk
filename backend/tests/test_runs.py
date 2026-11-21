@@ -93,3 +93,18 @@ def test_simulate_exits_fees_and_one_at_a_time(rn):
     sm = rn.summary(rows + op)
     assert sm["trades"] == 3 and sm["closed"] == 2 and sm["open"] == 1 and sm["wins"] == 1 and sm["losses"] == 1
     assert abs(sm["gross"] - 100.0) < 0.01 and abs(sm["cumulative"] - (sm["net"] + sm["open_pnl"])) < 0.01
+
+
+def test_history_join(rn):
+    """3-year backtest rows come first; the replay starts only after the last backtest trade has closed."""
+    rn.REPLAY_IST = "2027-01-15 05:30"; rn.LIVE_IST = "2027-01-20 05:30"
+    rt = rn._ts(rn.REPLAY_IST)
+    h = {"rows": [{"strategy": "pl5", "signal_t": rt - 86400, "entry_t": rt - 86400, "side": "LONG", "entry": 100.0, "sl": 90.0, "tp": 120.0, "d": 10.0, "size": 1.0,
+                   "rr": 2.0, "chg30": 0.0, "market": "Range", "reason": "x", "exit_t": rt + 3 * 86400, "exit_price": 120.0, "result": "Target",
+                   "gross": 20.0, "fees": 1.0, "net": 19.0, "r": 1.9, "hold_h": 96.0}]}
+    b5 = [c5(rt - 40 * 86400 + 300 * k, 100.0, 100.5, 99.5, 100.0) for k in range(int(46 * 86400 / 300))]
+    out = rn.build(b5, 100.0, hist=h)
+    s5 = next(s for s in out["strategies"] if s["key"] == "pl5")
+    assert s5["full"]["trades"] == 1 and s5["full"]["net"] == 19.0 and s5["all"]["trades"] == 0
+    assert out["totals"]["full"]["trades"] == 1 and out["backtest"]["trades"] == 1
+    assert out["rows"][-1]["period"] == "Backtest" and out["rows"][-1]["exit_ist"]

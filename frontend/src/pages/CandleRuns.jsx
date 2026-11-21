@@ -39,7 +39,7 @@ function Detail({ r }) {
     ["Stop distance (2 x ATR)", `$${n(r.d, 1)}`], ["Risk : reward", `1:${r.rr}`], ["Size", `${r.size} BTC ($10,000)`],
     ["Time exit at", r.time_exit_ist], ["Exit", r.exit_ist ? `${r.exit_ist} at ${n(r.exit_price, 1)}` : r.mark ? `open, marked at ${n(r.mark, 1)}` : "—"],
     ["Gross / fees", `${signedUsd(r.gross)} / ${signedUsd(-r.fees)}`], ["Result in R", r.r == null ? "—" : `${r.r > 0 ? "+" : ""}${r.r.toFixed(2)}R`],
-    ["Held", r.hold_h == null ? "—" : `${r.hold_h} h`], ["Strategy running total", signedUsd(r.strategy_running)]];
+    ["Held", r.hold_h == null ? "—" : `${r.hold_h} h`], ["Data", r.period === "Backtest" ? "Binance 5m (3-year backtest)" : "Delta 5m"]];
   return (
     <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
       {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-[#1e2a4a]/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
@@ -55,8 +55,12 @@ export default function CandleRuns() {
   const [open, setOpen] = useState(null);
   const d = data || {};
   const strats = d.strategies || [];
-  const rowsP = (d.rows || []).filter((r) => period === "all" || r.period === "Live");
-  const rows = only ? rowsP.filter((r) => r.strategy === only) : rowsP;
+  const inPeriod = (r) => period === "full" || (period === "all" ? r.period !== "Backtest" : r.period === "Live");
+  const rowsP = (d.rows || []).filter(inPeriod);
+  const rows0 = only ? rowsP.filter((r) => r.strategy === only) : rowsP;
+  let run = 0;
+  const running = new Map([...rows0].sort((a, b) => a.entry_t - b.entry_t).map((r) => [r, (run += r.net)]));
+  const rows = rows0;
   const tot = only ? strats.find((s) => s.key === only)?.[period] : d.totals?.[period];
   let eq = 0;
   const curve = [...rows].reverse().filter((r) => r.status === "CLOSED").map((r) => ({ t: r.exit_ist, v: (eq += r.net) }));
@@ -71,6 +75,7 @@ export default function CandleRuns() {
       <div className="flex flex-wrap items-center gap-2">
         <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live paper from {d.live_start_ist?.slice(5) || "start"}</button>
         <button className={btn(period === "all")} onClick={() => setPeriod("all")}>Include replay since {d.replay_from_ist?.slice(0, 10) || "1 Oct"}</button>
+        <button className={btn(period === "full")} onClick={() => setPeriod("full")}>3-year journal since {d.backtest?.from_ist || "2023-01-02"}</button>
         {only && <button className={btn(false)} onClick={() => setOnly(null)}>Show all strategies</button>}
       </div>
       {mk && (
@@ -82,7 +87,8 @@ export default function CandleRuns() {
           </div>
         </div>
       )}
-      <div className="text-[12px] text-slate-400">{only ? `Showing ${strats.find((s) => s.key === only)?.name}` : `All ${strats.length} strategies together`} · {period === "live" ? "live paper trades only" : "replay + live"}</div>
+      <div className="text-[12px] text-slate-400">{only ? `Showing ${strats.find((s) => s.key === only)?.name}` : `All ${strats.length} strategies together`} · {period === "live" ? "live paper trades only" : period === "all" ? "replay + live" : `3-year backtest (${d.backtest?.trades ?? 0} trades to ${d.backtest?.to_ist?.slice(0, 10) || "30 Sep 2026"}) + replay + live`}</div>
+      {period === "full" && <Note>3-year rows are a backtest, not live trades: the site's own Candle Runs code run on {d.backtest?.source?.split(",")[0] || "Binance BTCUSDT 5-minute candles"} from {d.backtest?.from_ist || "2 Jan 2023"} to signals before {d.backtest?.to_ist || "1 Oct 2026"}. From then on the page uses Delta candles (replay), and from {d.live_start_ist} the live paper trades.</Note>}
       <Totals s={tot} />
       <Card title="By strategy" sub="Click a row to see only that strategy's trades. Re-test = the independent check on Jan 2023 – Nov 2026 data." testid="runs-strategies">
         <div className="overflow-x-auto scroll-thin">
@@ -111,18 +117,18 @@ export default function CandleRuns() {
           <table className="desk-table">
             <thead><tr><th>Date</th><th>Time</th><th>Strategy</th><th>Side</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th className="num">Exit</th><th className="num">Gross</th><th className="num">Net P&L</th><th className="num">Running</th></tr></thead>
             <tbody>
-              {rows.map((r) => { const id = `${r.strategy}-${r.entry_t}`; return (
+              {rows.map((r) => { const id = `${r.strategy}-${r.entry_t}-${r.period}`; return (
                 <React.Fragment key={id}>
                   <tr className="cursor-pointer" onClick={() => setOpen(open === id ? null : id)}>
                     <td className="font-mono">{r.entry_ist.slice(0, 10)}</td><td className="font-mono">{r.entry_ist.slice(11, 16)}</td>
-                    <td>{r.wb}<div className="text-[11px] text-slate-500">{r.period === "Replay" ? "replay" : "live paper"} · {r.market} market</div></td>
+                    <td>{r.wb}<div className="text-[11px] text-slate-500">{r.period === "Backtest" ? "3-yr backtest" : r.period === "Replay" ? "replay" : "live paper"} · {r.market} market</div></td>
                     <td className={r.side === "LONG" ? "text-teal-300" : "text-red-300"}>{r.side}</td>
                     <td className="num">{n(r.entry, 1)}</td><td className="num">{n(r.sl, 1)}</td><td className="num">{n(r.tp, 1)}</td>
                     <td className={RESULT_TONE[r.result] || "text-slate-400"}>{r.result}</td>
                     <td className="num">{r.exit_price != null ? n(r.exit_price, 1) : r.mark != null ? n(r.mark, 1) : "—"}</td>
                     <td className={`num ${pnlTone(r.gross)}`}>{signedUsd(r.gross)}</td>
                     <td className={`num font-semibold ${pnlTone(r.net)}`}>{signedUsd(r.net)}</td>
-                    <td className={`num ${pnlTone(only ? r.strategy_running : r.running_total)}`}>{signedUsd(only ? r.strategy_running : r.running_total)}</td>
+                    <td className={`num ${pnlTone(running.get(r))}`}>{signedUsd(running.get(r))}</td>
                   </tr>
                   {open === id && <tr><td colSpan={12} className="bg-[#0f172a] text-xs"><Detail r={r} /></td></tr>}
                 </React.Fragment>); })}

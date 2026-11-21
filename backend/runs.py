@@ -28,6 +28,22 @@ FEES = {"taker": 0.0005, "gst": 0.18}
 IST = timezone(timedelta(hours=5, minutes=30))
 TF = {"4h": 14400, "1h": 3600}
 STATE = {"computed_at": None, "error": None, "data": None, "bars5": []}
+HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "candle_runs_history.json")
+_HIST = {}
+
+
+def history():
+    """3-year backtest rows (closed trades with a signal before the replay start), made by this same code on Binance
+    BTCUSDT 5-minute candles in the strategy lab (research/export_runs_history.py). Loaded once."""
+    if "doc" not in _HIST:
+        try:
+            import json
+            with open(HISTORY_FILE) as f:
+                _HIST["doc"] = json.load(f)
+        except Exception as e:
+            log.warning(f"candle runs history not loaded: {e}")
+            _HIST["doc"] = {"rows": []}
+    return _HIST["doc"]
 
 _RUN = ("Check every 4h candle close (01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST). If the last {n} candles are all green "
         "(close above open), BUY at the next open; if all {n} are red, SELL. Stop = 2 x ATR(14) from the entry. "
@@ -198,8 +214,10 @@ async def refresh():
     STATE["bars5"] = [m[t] for t in sorted(m) if t >= floor]
 
 
-def build(b5, live, now_t=None):
+def build(b5, live, now_t=None, hist=None):
     replay_t, live_t = _ts(REPLAY_IST), _ts(LIVE_IST)
+    hdoc = history() if hist is None else hist
+    names = {s["key"]: s for s in STRATS}
     frames = {}
     for tf in TF:
         bs = bars(b5, tf)
@@ -207,26 +225,25 @@ def build(b5, live, now_t=None):
     allrows, per = [], []
     for s in STRATS:
         bs, at, ch = frames[s["tf"]]
-        rows = simulate(s, signals(s, bs, at, ch), b5, replay_t, live)
+        old = sorted([dict(r, strategy_name=s["name"], wb=s["wb"], status="CLOSED", period="Backtest", signal_ist=_ist(r["signal_t"]), entry_ist=_ist(r["entry_t"]),
+                           exit_ist=_ist(r["exit_t"]), time_exit_ist=_ist(r["entry_t"] + s["hold_h"] * 3600))
+                      for r in hdoc.get("rows", []) if r.get("strategy") == s["key"] and r["signal_t"] < replay_t], key=lambda r: r["entry_t"])
+        start = max([replay_t] + [r["exit_t"] for r in old])      # one trade at a time across the backtest -> replay join
+        rows = simulate(s, signals(s, bs, at, ch), b5, start, live)
         for r in rows:
             r["period"] = "Live" if r["signal_t"] >= live_t else "Replay"
-        run = 0.0
-        for r in rows:
-            run += r["net"]; r["strategy_running"] = round(run, 2)
-        allrows += rows
+        allrows += old + rows
         per.append({**{k: s[k] for k in ("key", "rank", "wb", "name", "tf", "kind", "n", "market", "rr", "hold_h", "rule", "how", "retest")},
-                    "live": summary([r for r in rows if r["period"] == "Live"]), "all": summary(rows)})
+                    "live": summary([r for r in rows if r["period"] == "Live"]), "all": summary(rows), "full": summary(old + rows)})
     allrows.sort(key=lambda r: r["entry_t"])
-    run = 0.0
-    for r in allrows:
-        run += r["net"]; r["running_total"] = round(run, 2)
     h4 = frames["4h"]
     mnow = None
     if h4[0] and h4[2][-1] is not None:
         mnow = {"chg30": round(h4[2][-1], 4), "type": market_type(h4[2][-1]), "as_of_ist": _ist(h4[0][-1]["tc"])}
     return {"name": NAME, "paper_only": True, "alerts": False, "live_start_ist": LIVE_IST, "replay_from_ist": REPLAY_IST, "live_price": live,
             "market_now": mnow, "strategies": per, "rows": allrows[::-1],
-            "totals": {"live": summary([r for r in allrows if r["period"] == "Live"]), "all": summary(allrows)},
+            "totals": {"live": summary([r for r in allrows if r["period"] == "Live"]), "all": summary([r for r in allrows if r["period"] != "Backtest"]), "full": summary(allrows)},
+            "backtest": {"source": hdoc.get("source"), "from_ist": hdoc.get("from_ist"), "to_ist": hdoc.get("to_signal_before_ist"), "trades": sum(1 for r in allrows if r["period"] == "Backtest")},
             "last_candle_ist": _ist(b5[-1]["t"] + 300) if b5 else None,
             "settings": {"stop": "2 x ATR(14) of the strategy's timeframe", "entry": "next 5-minute open after the signal candle closes (market order, taker)",
                          "fees": "0.05% taker each side + 18% GST", "notional": NOTIONAL, "one_trade_at_a_time": True, "alerts": "none (paper only)"}}
