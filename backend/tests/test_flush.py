@@ -1,4 +1,4 @@
-"""Flush Short v2 paper journal: the five rules, 1.25R exits with maker entry, totals, emails once."""
+"""Flush Short v3 paper journal: the six rules, 1.25R exits with maker entry, totals, emails once."""
 import asyncio
 import importlib
 import os
@@ -28,14 +28,19 @@ GOOD = {"rsi": 25.0, "stop_atr": 0.7, "t15": "Down", "t1h": "Down", "t4h": "Down
 
 def test_rules(fl):
     day = fl.regime._ts("2026-11-22 10:00")
-    assert fl.decide("SHORT", day, GOOD)[0] is True
-    assert fl.decide("LONG", day, GOOD) == (False, "LONG signal (Flush Short takes SHORT signals only)")
-    assert "not below 30" in fl.decide("SHORT", day, {**GOOD, "rsi": 30.0})[1]
-    assert "night window" in fl.decide("SHORT", fl.regime._ts("2026-11-22 05:59"), GOOD)[1]
-    assert fl.decide("SHORT", fl.regime._ts("2026-11-22 06:00"), GOOD)[0] is True
-    assert "hourly ATR" in fl.decide("SHORT", day, {**GOOD, "stop_atr": 0.59})[1]
-    assert "not all Down" in fl.decide("SHORT", day, {**GOOD, "t4h": "Mixed"})[1]
-    assert fl.decide("SHORT", day, None)[0] is False
+    D = -0.12
+    assert fl.decide("SHORT", day, GOOD, D)[0] is True
+    assert fl.decide("LONG", day, GOOD, D) == (False, "LONG signal (Flush Short takes SHORT signals only)")
+    assert "not below 30" in fl.decide("SHORT", day, {**GOOD, "rsi": 30.0}, D)[1]
+    assert "night window" in fl.decide("SHORT", fl.regime._ts("2026-11-22 05:59"), GOOD, D)[1]
+    assert fl.decide("SHORT", fl.regime._ts("2026-11-22 06:00"), GOOD, D)[0] is True
+    assert "hourly ATR" in fl.decide("SHORT", day, {**GOOD, "stop_atr": 0.59}, D)[1]
+    assert "not all Down" in fl.decide("SHORT", day, {**GOOD, "t4h": "Mixed"}, D)[1]
+    assert fl.decide("SHORT", day, None, D)[0] is False
+    ok, why = fl.decide("SHORT", day, GOOD, -0.03)                      # range market: no trade
+    assert ok is False and "Range market (BTC -3.0% over 30 days" in why
+    assert "Up market" in fl.decide("SHORT", day, GOOD, 0.08)[1] and "not available" in fl.decide("SHORT", day, GOOD, None)[1]
+    assert [fl.market_type(x) for x in (-0.051, -0.05, 0.0, 0.05, 0.051, None)] == ["Down", "Range", "Range", "Range", "Up", "Unknown"]
 
 
 def _m(t, o, h, l, c):
@@ -61,7 +66,7 @@ def test_compute_and_emails(fl, monkeypatch):
     from core import db
     monkeypatch.setenv("ALERT_EMAIL", "me@example.com"); monkeypatch.setenv("FRONTEND_URL", "https://desk.example.com")
     e = 80000.0
-    base = fl.regime._ts("2026-11-22 10:00")
+    base = fl.regime._ts("2026-11-23 10:00")
     rows, b1 = [], []
     specs = [("SHORT", GOOD, "FILLED"), ("SHORT", {**GOOD, "rsi": 40.0}, "FILLED"), ("LONG", GOOD, "FILLED"), ("SHORT", GOOD, "NOT FILLED")]
     for k, (side, f, fs) in enumerate(specs):
@@ -72,12 +77,16 @@ def test_compute_and_emails(fl, monkeypatch):
             r["fill_t"] = cap - cap % 60 + 60
             b1 += [_m(r["fill_t"], e, e + 5, e - 5, e), _m(r["fill_t"] + 60, e, e + 5, e - 520, e - 505)]
         rows.append(r)
-        run(db.regime_feat.update_one({"_id": r["signal_id"]}, {"$set": {**f, "v": fl.regime.FEAT_V}}, upsert=True))
+        run(db.regime_feat.update_one({"_id": r["signal_id"]}, {"$set": {**f, "close": e, "v": fl.regime.FEAT_V}}, upsert=True))
     plan_a.STATE["rows"] = rows; plan_a.STATE["live_price"] = None
 
     async def c1(a, b):
         return sorted(b1, key=lambda x: x["t"])
     monkeypatch.setattr(plan_a, "candles", c1)
+
+    async def close_at(t):
+        return 90000.0                                                     # 30 days ago: BTC was higher -> Down market
+    monkeypatch.setattr(fl, "_close_at", close_at)
     sent = []
 
     async def fake_send(to, subject, html):
@@ -94,7 +103,8 @@ def test_compute_and_emails(fl, monkeypatch):
     rs = d["rows"][::-1]
     assert [x["rule"] for x in rs] == ["Flush short", "No trade", "No trade", "Not filled"]
     assert rs[0]["result"] == "Target" and rs[0]["running_total"] == round(rs[0]["net"], 2) and d["all"]["trades"] == 1 and d["all"]["win_rate"] == 1
-    assert d["paper_only"] and d["evidence"]["all"]["n"] == 67 and d["live"]["trades"] == 1
+    assert d["paper_only"] and d["evidence"]["all"]["n"] == 45 and d["live"]["trades"] == 1
+    assert rs[0]["market"] == "Down" and abs(rs[0]["chg30"] - (80000 / 90000 - 1)) < 1e-4 and run(db.flush_feat.count_documents({})) == 4
     assert any("Flush Short closed — Target" in s for s in sent) and any("not filled" in s for s in sent)
     n = len(sent)
     run(fl.compute())

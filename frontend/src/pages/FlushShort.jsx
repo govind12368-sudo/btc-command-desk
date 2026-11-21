@@ -33,7 +33,7 @@ function Totals({ s }) {
 }
 
 function Detail({ r }) {
-  const kv = [["Signal", `${r.signal_id} (${r.signal_side})`], ["Day type", r.day_type], ["RSI 15m", n(r.rsi, 1)],
+  const kv = [["Signal", `${r.signal_id} (${r.signal_side})`], ["Market (30 days)", r.chg30 == null ? "—" : `${r.market} · ${(r.chg30 * 100).toFixed(1)}%`], ["Day type", r.day_type], ["RSI 15m", n(r.rsi, 1)],
     ["Stop ÷ hourly ATR", r.stop_atr == null ? "—" : `${n(r.stop_atr, 2)}x`], ["Trends 15m / 1h / 4h", `${r.t15 || "—"} / ${r.t1h || "—"} / ${r.t4h || "—"}`],
     ["1R (stop distance)", `$${n(r.d, 1)}`], ["Size", r.size ? `${r.size} BTC ($10,000)` : "—"], ["Filled", r.fill_ist || "—"],
     ["Exit", r.exit_ist ? `${r.exit_ist} at ${n(r.exit_price, 1)}` : r.mark ? `open, marked at ${n(r.mark, 1)}` : "—"],
@@ -63,18 +63,26 @@ export default function FlushShort() {
   const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
   return (
     <div className="space-y-4" data-testid="flush-page">
-      <PageHead title="Flush Short v2 – Journal" sub={`Paper trades only (no real orders). Takes a SHORT breakdown signal only when all five rules agree. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}`} />
+      <PageHead title="Flush Short v3 – Journal" sub={`Paper trades only (no real orders). Takes a SHORT breakdown signal only in a down market, when all six rules agree. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}`} />
       {d.error && <Note tone="red">Last update failed: {d.error}. It retries every 2 minutes.</Note>}
       {!d.rows && !d.error && <Note>Working out the journal… this takes a couple of minutes after a restart.</Note>}
       <div className="flex flex-wrap items-center gap-2">
         <button className={btn(period === "all")} onClick={() => setPeriod("all")}>All since 3 Nov</button>
         <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live from {d.live_start_ist?.slice(5) || "start"}</button>
       </div>
+      {d.market_now && (
+        <div className={`rounded-lg border px-4 py-3 ${d.market_now.active ? "border-red-500/50 bg-red-950/20" : "border-slate-600 bg-[#0f172a]/60"}`} data-testid="flush-market">
+          <div className="text-[12px] text-slate-400">Market now (BTC over the last 30 days)</div>
+          <div className="text-lg font-bold text-slate-50">{d.market_now.type} market · {(d.market_now.chg30 * 100).toFixed(1)}%</div>
+          <div className="text-[12.5px] text-slate-300">{d.market_now.active ? "Flush Short is ACTIVE: it will take qualifying SHORT breakdown signals." : "Flush Short is STANDING ASIDE: it only trades when BTC is down more than 5% over 30 days. In up and range markets no tested rule beat luck."}</div>
+        </div>
+      )}
       <Totals s={s} />
       {ev && (
         <Note>
           26-month replay ({ev.period}): {ev.all.n} trades, {pctTxt(ev.all.win)} wins, {signedUsd(ev.all.usd)} a trade after fees.
-          First half {pctTxt(ev.first_half.win)} / {signedUsd(ev.first_half.usd)}, second half {pctTxt(ev.second_half.win)} / {signedUsd(ev.second_half.usd)}. {ev.note}
+          First half {pctTxt(ev.first_half.win)} / {signedUsd(ev.first_half.usd)}, second half {pctTxt(ev.second_half.win)} / {signedUsd(ev.second_half.usd)}.
+          {ev.by_market && ` Same rules by market: ${Object.entries(ev.by_market).map(([k, v]) => `${k} ${v.n} trades, ${pctTxt(v.win)}, ${signedUsd(v.usd)}`).join(" · ")}.`} {ev.note}
         </Note>
       )}
       {curve.length > 1 && (
@@ -95,7 +103,7 @@ export default function FlushShort() {
                   <React.Fragment key={r.signal_id}>
                     <tr className={`cursor-pointer ${traded ? "" : "opacity-60"}`} onClick={() => setOpen(open === r.signal_id ? null : r.signal_id)}>
                       <td className="font-mono">{r.time_ist.slice(0, 10)}</td><td className="font-mono">{r.time_ist.slice(11, 16)}</td>
-                      <td>{r.rule}<div className="text-[11px] text-slate-500">{r.day_type}{r.period === "Before live" ? " · before live" : ""}</div></td>
+                      <td>{r.rule}<div className="text-[11px] text-slate-500">{r.market ? `${r.market} market` : "market ?"}{r.chg30 != null ? ` (${(r.chg30 * 100).toFixed(1)}%)` : ""}{r.period === "Before live" ? " · before live" : ""}</div></td>
                       <td className={r.trade_side ? "text-red-300" : "text-slate-500"}>{r.trade_side || "—"}</td>
                       <td className="num">{n(r.entry, 1)}</td><td className="num">{r.sl ? n(r.sl, 1) : "—"}</td><td className="num">{r.tp ? n(r.tp, 2) : "—"}</td>
                       <td className={RESULT_TONE[r.result] || "text-slate-400"}>{r.result || (r.rule === "Not filled" ? "Not filled" : "Skipped")}</td>
@@ -109,7 +117,7 @@ export default function FlushShort() {
               })}
             </tbody>
           </table>
-          {!rows.length && <div className="p-4 text-center text-xs text-slate-500">No Flush Short trades yet. It is rare by design: about one trade every 9 days.</div>}
+          {!rows.length && <div className="p-4 text-center text-xs text-slate-500">No Flush Short trades yet. It is rare by design: about 1–2 trades a month, and only while BTC is in a down market.</div>}
         </div>
       </Card>
       {d.daily?.length > 0 && (
@@ -127,7 +135,8 @@ export default function FlushShort() {
       )}
       <Card title="Rules" sub="Fixed. Paper only: this page never sends an order.">
         <div className="space-y-1.5 text-xs text-slate-300">
-          <p><b>Take a scalp signal only when all five hold</b> at the signal candle's close: 1) the signal is SHORT; 2) RSI 15m is below 30; 3) it is not between 00:00 and 06:00 IST; 4) the stop is at least 0.6× the hourly ATR; 5) the 15m, 1h and 4h trends are all down.</p>
+          <p><b>Take a scalp signal only when all six hold</b> at the signal candle's close: 1) the signal is SHORT; 2) RSI 15m is below 30; 3) it is not between 00:00 and 06:00 IST; 4) the stop is at least 0.6× the hourly ATR; 5) the 15m, 1h and 4h trends are all down; 6) BTC is in a down market: more than 5% lower than 30 days ago.</p>
+          <p><b>Up and range markets:</b> Flush Short stands aside. Over 26 months no rule built on the site's signals beat luck in those markets (10,656 rules tried; luck alone produces as many "winners" as the search found).</p>
           <p><b>Trade:</b> SHORT at the signal entry with a post-only limit order (maker fee), stop 1R = the signal's stop distance, take profit 1.25R, close after 6 hours. $10,000 position. Fees: 0.02% maker in and at target, 0.05% taker at stop or 6-hour exit, +18% GST. A minute touching both stop and target counts as the stop.</p>
           <p><b>Alerts:</b> an email when a trade is taken, when it closes, and when an entry never fills (follows the site's alert switches).</p>
         </div>

@@ -1,4 +1,4 @@
-"""Flush Short v2: PAPER journal only. It never sends an order to any exchange.
+"""Flush Short v3: PAPER journal only. It never sends an order to any exchange.
 
 Rules (fixed, admin request 21 Nov 2026; chosen from the 26-month replay, see FLUSH_EVIDENCE):
   take a scalp signal only when ALL hold, measured at the signal candle's close:
@@ -7,6 +7,8 @@ Rules (fixed, admin request 21 Nov 2026; chosen from the 26-month replay, see FL
     3. not between 00:00 and 06:00 IST            (night follows lost the most)
     4. stop >= 0.6 x hourly ATR                   (stop outside normal noise)
     5. 15m, 1h and 4h trends all Down             (the breakdown goes with every timeframe)
+    6. BTC is in a DOWN market: down more than 5% over the last 30 days (v3, 21 Nov 2026: in range markets the same
+       rules lost; in down markets they passed a luck test on unseen history)
   trade: SHORT at the signal entry with the site's own fill rule (post-only limit, maker fee),
          stop 1R = the signal's stop distance, target 1.25R (maker), close after 6 hours (taker);
          a minute touching both stop and target counts as the stop; $10,000 position (floor(10000/entry, 3) BTC);
@@ -23,22 +25,35 @@ import plan_a
 import regime
 
 log = logging.getLogger("flush")
-NAME = "Flush Short v2"
-LIVE_IST = os.environ.get("FLUSH_LIVE_START", "2026-11-21 16:30")
+NAME = "Flush Short v3"
+LIVE_IST = os.environ.get("FLUSH_LIVE_START", "2026-11-21 17:30")
 RSI_MAX, ATR_MIN, RR, HOLD, NOTIONAL = 30.0, 0.6, 1.25, 6 * 3600, 10_000.0
+DOWN_MARKET = -0.05                              # BTC 30-day change must be below this
+FEAT_V = "flush-f1"
 FEES = {"taker": 0.0005, "maker": 0.0002, "gst": 0.18}
 STATE = {"computed_at": None, "error": None, "data": None}
 FLUSH_EVIDENCE = {
     "period": "21 Oct 2024 – 13 Nov 2026 (26-month replay of the Vantage scalp signals, Delta BTCUSD 5m candles)",
-    "all": {"n": 67, "win": 0.61, "usd": 12.91}, "first_half": {"n": 31, "win": 0.55, "usd": 5.82}, "second_half": {"n": 36, "win": 0.67, "usd": 19.01},
-    "note": "40 variants were tested on this history, so some luck is possible; about one trade every 9 days. Not proven until it holds on fresh paper trades.",
+    "all": {"n": 45, "win": 0.71, "usd": 24.14}, "first_half": {"n": 16, "win": 0.56, "usd": 6.96}, "second_half": {"n": 29, "win": 0.79, "usd": 33.63},
+    "by_market": {"Down": {"n": 45, "win": 0.71, "usd": 24.14}, "Range": {"n": 18, "win": 0.39, "usd": -12.26}, "Up": {"n": 4, "win": 0.50, "usd": -0.24}},
+    "note": ("Down markets only. Luck test: random down-market SHORT trades win 49% and lose $2.15 a trade; the chance of luck matching the "
+             "second half (23 of 29) is about 0.035% (about 1.4% after allowing for the 40 variants tried). About 1-2 trades a month, "
+             "only while BTC is falling. Not proven until it holds on fresh paper trades."),
 }
 
 
-def decide(side, cap_t, f):
-    """(take?, reason). All five rules must hold."""
+def market_type(chg30):
+    if chg30 is None:
+        return "Unknown"
+    return "Down" if chg30 < DOWN_MARKET else "Up" if chg30 > -DOWN_MARKET else "Range"
+
+
+def decide(side, cap_t, f, chg30=None):
+    """(take?, reason). All six rules must hold."""
     if not f or f.get("rsi") is None or f.get("stop_atr") is None or f.get("t4h") is None:
         return False, "Market data for this signal is not available"
+    if chg30 is None:
+        return False, "BTC 30-day change not available for this signal"
     hour = int(regime._ist(cap_t, "%H"))
     why = []
     if side != "SHORT":
@@ -52,9 +67,13 @@ def decide(side, cap_t, f):
     tr = (f.get("t15"), f.get("t1h"), f.get("t4h"))
     if tr != ("Down", "Down", "Down"):
         why.append(f"trends 15m/1h/4h are {'/'.join(x or '-' for x in tr)}, not all Down")
+    mt = market_type(chg30)
+    if mt != "Down":
+        why.append(f"{mt} market (BTC {chg30:+.1%} over 30 days; Flush Short trades only when it is below -5%)")
     if why:
         return False, "; ".join(why)
-    return True, f"SHORT signal, RSI {f['rsi']:.1f} < 30, {hour:02d}:xx IST, stop {f['stop_atr']:.2f}x hourly ATR, 15m/1h/4h all Down: breakdown"
+    return True, (f"SHORT signal, RSI {f['rsi']:.1f} < 30, {hour:02d}:xx IST, stop {f['stop_atr']:.2f}x hourly ATR, 15m/1h/4h all Down, "
+                  f"Down market (BTC {chg30:+.1%} over 30 days): breakdown")
 
 
 def fee(price, q, kind):
@@ -92,6 +111,43 @@ def simulate(e, d, fill_t, bars, live):
     return out
 
 
+async def _close_at(t):
+    """Close of the 5m candle that opens at t (or the nearest one just before), from Delta."""
+    import daytype
+    have = [b for b in (daytype.STATE.get("bars") or []) if t - 900 <= b["t"] <= t]
+    if not have:
+        try:
+            have = [b for b in await daytype._fetch(t - 1800, t + 300) if b["t"] <= t]
+        except Exception as e:
+            log.warning(f"30-day price fetch failed: {e}")
+            return None
+    return have[-1]["c"] if have else None
+
+
+async def chg30_for(sid, t0, close):
+    """BTC change over the 30 days before the signal candle; frozen once known."""
+    doc = await db.flush_feat.find_one({"_id": sid})
+    if doc and doc.get("v") == FEAT_V:
+        return doc.get("chg30")
+    if not close:
+        return None
+    c30 = await _close_at(t0 - 30 * 86400)
+    if not c30:
+        return None
+    chg = round(close / c30 - 1, 5)
+    await db.flush_feat.update_one({"_id": sid}, {"$set": {"chg30": chg, "close30": c30, "v": FEAT_V}}, upsert=True)
+    return chg
+
+
+async def market_now(live):
+    now = int(now_utc().timestamp()); now -= now % 300
+    c30 = await _close_at(now - 30 * 86400)
+    if not live or not c30:
+        return None
+    chg = live / c30 - 1
+    return {"chg30": round(chg, 5), "type": market_type(chg), "active": market_type(chg) == "Down"}
+
+
 async def compute():
     rows = sorted([r for r in (plan_a.STATE.get("rows") or []) if r.get("cap_t")], key=lambda x: x["cap_t"])
     if not rows:
@@ -108,9 +164,11 @@ async def compute():
         if f and f.get("missing"):
             f = None
         e = float(r["entry"]); d = abs(e - float(r["model_stop"]))
-        take, why = decide(r["model_dir"], r["cap_t"], f)
+        chg30 = await chg30_for(r["signal_id"], regime.signal_candle(r), (f or {}).get("close")) if f else None
+        take, why = decide(r["model_dir"], r["cap_t"], f, chg30)
         x = {"signal_id": r["signal_id"], "time_ist": r["captured_ist"], "cap_t": r["cap_t"], "period": "Live" if r["cap_t"] >= live_ts else "Before live",
              "signal_side": r["model_dir"], "day_type": regime.DAY.get(r.get("day_type") or "NA", "Unclear"), "entry": e, "d": d,
+             "chg30": chg30, "market": market_type(chg30),
              **{k: (f or {}).get(k) for k in ("rsi", "stop_atr", "t15", "t1h", "t4h", "vr", "chg4h")}, "reason": why,
              "rule": "Flush short" if take else "No trade"}
         if take:
@@ -143,11 +201,15 @@ async def compute():
         v["win_rate"] = v["targets"] / c if c else None
         v["net"] = round(v["net"], 2); cum += v["net"]; v["cumulative"] = round(cum, 2)
     lv = [t for t in trades if t["period"] == "Live"]
-    data = {"name": NAME, "paper_only": True, "live_start_ist": LIVE_IST, "computed_at": iso(now_utc()), "live_price": live,
+    try:
+        mnow = await market_now(live)
+    except Exception:
+        mnow = None
+    data = {"name": NAME, "paper_only": True, "live_start_ist": LIVE_IST, "computed_at": iso(now_utc()), "live_price": live, "market_now": mnow,
             "rows": out[::-1], "all": regime.summary(trades), "live": regime.summary(lv), "daily": [d for d in days if d["trades"]][::-1],
             "signals_checked": len(out), "evidence": FLUSH_EVIDENCE,
             "settings": {"rsi_max": RSI_MAX, "atr_min": ATR_MIN, "target_r": RR, "stop_r": 1, "time_exit_h": 6, "night_skip": "00:00-06:00 IST",
-                         "trends": "15m, 1h, 4h all Down", "notional": NOTIONAL, "fees": FEES, "entry": "post-only limit at the signal entry (maker)"}}
+                         "trends": "15m, 1h, 4h all Down", "market": "BTC down more than 5% over 30 days", "notional": NOTIONAL, "fees": FEES, "entry": "post-only limit at the signal entry (maker)"}}
     STATE.update(computed_at=data["computed_at"], error=None, data=data)
     try:
         await notify(out, now)
@@ -168,14 +230,14 @@ def _email(kind, x):
     app = CFG["FRONTEND_URL"].split(",")[0].rstrip("/")
     f1 = lambda v: f"{v:,.1f}" if isinstance(v, (int, float)) else str(v)
     if kind == "entry":
-        subject = f"{name}: Flush Short — SHORT BTCUSD at {f1(x['entry'])}"
-        rows = [("Trade", "SHORT BTCUSD (Flush Short v2)"), ("Entry (USD)", f1(x["entry"])), ("Stop loss (USD)", f1(x["entry"] + x["d"])),
+        subject = f"{name}: Flush Short — SHORT BTCUSD at {f1(x['entry'])} ({x.get('market', '?')} market)"
+        rows = [("Trade", "SHORT BTCUSD (Flush Short v3)"), ("Market type", f"{x.get('market', '?')} (BTC {x['chg30']:+.1%} over 30 days)" if x.get("chg30") is not None else "?"), ("Entry (USD)", f1(x["entry"])), ("Stop loss (USD)", f1(x["entry"] + x["d"])),
                 ("Take profit 1.25R (USD)", f1(x["entry"] - RR * x["d"])), ("Time exit", "6 hours after the fill"), ("Size", "$10,000 position"),
                 ("Status", "Filled at entry" if x.get("status") == "OPEN" else "Waiting for the entry price to fill"),
                 ("Why", x["reason"]), ("Scalp signal", x["signal_id"]), ("Signal time (IST)", x["time_ist"])]
     elif kind == "exit":
         subject = f"{name}: Flush Short closed — {x['result']} {('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f}"
-        rows = [("Trade", "SHORT BTCUSD (Flush Short v2)"), ("Result", x["result"]), ("Entry (USD)", f1(x["entry"])), ("Exit (USD)", f1(x["exit_price"])),
+        rows = [("Trade", "SHORT BTCUSD (Flush Short v3)"), ("Market type at entry", x.get("market", "?")), ("Result", x["result"]), ("Entry (USD)", f1(x["entry"])), ("Exit (USD)", f1(x["exit_price"])),
                 ("Net P&L after fees", f"{('+' if x['net'] >= 0 else '−')}${abs(x['net']):,.2f} ({x['r']:+.2f}R)"), ("Filled (IST)", x.get("fill_ist", "")),
                 ("Closed (IST)", x.get("exit_ist", "")), ("Running total (Flush Short journal)", f"${x.get('running_total', 0):+,.2f}")]
     else:
