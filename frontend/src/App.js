@@ -24,6 +24,7 @@ import Audit from "@/pages/Audit";
 import Upgrades from "@/pages/Upgrades";
 import PlanA from "@/pages/PlanA";
 import RegimeJournal from "@/pages/RegimeJournal";
+import FlushShort from "@/pages/FlushShort";
 import StrategyObserver from "@/pages/StrategyObserver";
 import AutoTrade from "@/pages/AutoTrade";
 
@@ -63,6 +64,7 @@ function Gate() {
         <Route path="/journal" element={<Journal />} />
         <Route path="/plan-a" element={<PlanA />} />
         <Route path="/regime" element={<RegimeJournal />} />
+        <Route path="/flush-short" element={<FlushShort />} />
         <Route path="/observer" element={<StrategyObserver />} />
         <Route path="/auto-trade" element={isAdmin ? <AutoTrade /> : <Navigate to="/" replace />} />
         <Route path="/validation" element={<Validation />} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical, Bot } from "lucide-react";
+import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical, Bot, TrendingDown } from "lucide-react";
 import { DevCredit, SiteFooter } from "@/components/brand/Branding";
 import Logo from "@/components/brand/Logo";
 import { APP_NAME, APP_SHORT, APP_TAGLINE } from "@/config/brand";
@@ -13,7 +13,7 @@ export const ADMIN_ONLY = new Set(["/auto-trade", "/settings", "/audit", "/upgra
 export const NAV = [
   ["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scalping", "Scalping Signal", Zap],
   ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/scanner", "BTC Scanner", Radar], ["/intel", "Market Intelligence", Telescope],
-  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/plan-a", "Plan A – Live", FlaskConical], ["/regime", "Regime Journal", BookOpen], ["/observer", "Strategy Observer", Telescope], ["/auto-trade", "Auto-Trade", Bot], ["/validation", "Trade Validation", ShieldCheck],
+  ["/news", "News & Events", Newspaper], ["/journal", "Trade Journal", BookOpen], ["/plan-a", "Plan A – Live", FlaskConical], ["/regime", "Regime Journal", BookOpen], ["/flush-short", "Flush Short", TrendingDown], ["/observer", "Strategy Observer", Telescope], ["/auto-trade", "Auto-Trade", Bot], ["/validation", "Trade Validation", ShieldCheck],
   ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope], ["/upgrades", "Upgrade Requests", Lightbulb],
 ];
 
