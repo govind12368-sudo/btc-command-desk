@@ -329,7 +329,7 @@ export default function EliteEdge() {
         {strategies.map((s) => (
           <div key={s.key} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2 text-[12px]">
             <div className="font-semibold text-slate-100">{s.priority}. {s.wb} <span className="font-normal text-slate-400">· {s.name}</span></div>
-            <div className="text-slate-400">{s.tf} · 1:{s.rr} · time exit {hold(s.hold_h)}</div>
+            <div className="text-slate-400">checked at each {s.tf} close · stop 2 x ATR(14) · time exit {hold(s.hold_h)}</div>
             <div className="text-slate-300">{s.rule}</div>
           </div>
         ))}
