@@ -572,8 +572,8 @@ class Engine:
                 if not env_keys(mode):
                     raise ValueError(f"The {mode} API key is not in the server environment (ELITE_DELTA{'_TESTNET' if mode == 'TESTNET' else ''}_API_KEY / _SECRET)")
                 at = await autotrade.get_state()
-                if at.get("mode") != "PAPER":
-                    raise ValueError(f"Auto-Trade is in {at.get('mode')}. Elite can use real orders only while Auto-Trade is in PAPER.")
+                if at.get("mode") == mode:                # one bot per Delta account: never both on the same account
+                    raise ValueError(f"Auto-Trade is in {mode} on the same Delta account. Put Auto-Trade in Paper first.")
                 if mode == "LIVE" and not st.get("testnet_ok"):
                     raise ValueError("Complete one Elite TESTNET trade (entry, stop/target confirmed, exit) before LIVE")
                 cfg = await self.cfg()

@@ -230,13 +230,16 @@ def test_real_money_switch_guards(env, monkeypatch):
         with pytest.raises(ValueError, match="server environment"):
             await eng.set_mode("TESTNET", "TESTNET", "owner@x")
         monkeypatch.setenv("ELITE_DELTA_TESTNET_API_KEY", "k"); monkeypatch.setenv("ELITE_DELTA_TESTNET_API_SECRET", "s")
-        await env.db.autotrade.insert_one({"_id": "state", "mode": "LIVE"})
-        with pytest.raises(ValueError, match="Auto-Trade is in LIVE"):
+        await env.db.autotrade.insert_one({"_id": "state", "mode": "TESTNET"})
+        with pytest.raises(ValueError, match="Auto-Trade is in TESTNET"):
             await eng.set_mode("TESTNET", "TESTNET", "owner@x")
-        await env.db.autotrade.update_one({"_id": "state"}, {"$set": {"mode": "PAPER"}})
-        await eng.set_mode("TESTNET", "TESTNET", "owner@x")
+        await env.db.autotrade.update_one({"_id": "state"}, {"$set": {"mode": "LIVE"}})
+        await eng.set_mode("TESTNET", "TESTNET", "owner@x")                   # Auto-Trade LIVE is a different account from the testnet
         assert (await el.get_state())["mode"] == "TESTNET" and calls and calls[0]["leverage"] == 10
         monkeypatch.setenv("ELITE_DELTA_API_KEY", "k"); monkeypatch.setenv("ELITE_DELTA_API_SECRET", "s")
+        with pytest.raises(ValueError, match="Auto-Trade is in LIVE"):            # Elite can be Live only while Auto-Trade is not Live
+            await eng.set_mode("LIVE", "LIVE", "owner@x")
+        await env.db.autotrade.update_one({"_id": "state"}, {"$set": {"mode": "PAPER"}})
         with pytest.raises(ValueError, match="TESTNET trade"):
             await eng.set_mode("LIVE", "LIVE", "owner@x")
         # Auto-Trade cannot leave PAPER while Elite uses the Delta account

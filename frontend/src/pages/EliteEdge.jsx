@@ -181,7 +181,7 @@ function RealMoney({ lv, act, busy }) {
         <li>Testnet key in the server environment (ELITE_DELTA_TESTNET_API_KEY / _SECRET, or DELTA_TESTNET_API_KEY / _SECRET): {yes(rm.testnet_key)}</li>
         <li>Live key in the server environment (ELITE_DELTA_API_KEY / _SECRET, or DELTA_TRADE_API_KEY / _SECRET): {yes(rm.live_key)}</li>
         <li>One completed Elite Testnet trade (needed before Live): {yes(rm.testnet_trade_done)}</li>
-        <li>Auto-Trade is in Paper (both use the same Delta account): {yes(rm.autotrade_mode === "PAPER")} <span className="text-slate-500">(Auto-Trade is in {rm.autotrade_mode || "—"})</span></li>
+        <li>Auto-Trade is not in the same mode (both bots use the same Delta account): Auto-Trade is in {rm.autotrade_mode || "—"}{rm.autotrade_mode === "LIVE" ? <span className="text-amber-300"> – Elite cannot go Live until Auto-Trade leaves Live</span> : ""}</li>
       </ul>
       <p className="mt-2 text-[11.5px] text-slate-400">Keys pasted on the Auto-Trade page are never used here. Each switch checks the key from this server, that the account is flat, that 10x leverage is set and that the margin for one trade (about $1,000) is there.</p>
     </Card>

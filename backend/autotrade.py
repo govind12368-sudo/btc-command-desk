@@ -650,8 +650,8 @@ class Engine:
                 raise ValueError("Close the open trade (or wait for armed signals to finish) before changing mode")
             if mode != "PAPER":
                 el = await db.elite_state.find_one({"_id": "state"}, {"mode": 1})
-                if el and el.get("mode", "PAPER") != "PAPER":
-                    raise ValueError(f"Elite 4 Edge is in {el['mode']} on the same Delta account. Put Elite back in PAPER first.")
+                if el and el.get("mode") == mode:         # one bot per Delta account (Elite 4 Edge uses the same account)
+                    raise ValueError(f"Elite 4 Edge is in {mode} on the same Delta account. Put Elite back in Paper first.")
                 if not delta_broker.keys(mode):
                     raise ValueError(f"The {mode} API key is not saved yet. Paste it in the 'Delta Exchange connection' card on this page.")
                 if mode == "LIVE":
