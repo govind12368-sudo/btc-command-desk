@@ -109,7 +109,7 @@ def test_flush_short_waits_for_entry_and_exits_after_6_hours(env):
 
 def test_only_flush_and_runs_alert(env):
     import alert_mode
-    assert alert_mode.ALERT_SOURCES == {"flush", "runs", "autotrade"}
+    assert alert_mode.ALERT_SOURCES == {"flush", "runs", "autotrade", "elite"}   # Elite 4 Edge emails added 23 Nov 2026
     assert not alert_mode.source_on("scalp") and not alert_mode.source_on("regime") and not alert_mode.source_on("observer")
     assert not alert_mode.source_on("daily_recap")
 

@@ -32,6 +32,7 @@ import regime
 import flush
 import runs
 import trio
+import elite
 import observer
 import autotrade
 import daytype
@@ -1024,6 +1025,57 @@ async def delta_top3_get(u=Depends(current_user)):
     return {**(st["data"] or {"name": trio.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
+# ---------------- Elite 4 Edge (one trade at a time; paper by default, real orders only when an admin switches it on) ----------------
+class EliteControlIn(BaseModel):
+    action: Literal["stop_all", "resume"]
+
+
+class EliteModeIn(BaseModel):
+    mode: Literal["PAPER", "TESTNET", "LIVE"]
+    confirm: Optional[str] = Field(default=None, max_length=10)
+
+
+@api.get("/elite")
+async def elite_get(u=Depends(current_user)):
+    out = await elite.dashboard()
+    out["is_admin"] = u["role"] == "admin"
+    if u["role"] != "admin":
+        out["live"].pop("real_money", None)
+    return out
+
+
+@api.get("/elite/live")
+async def elite_live_get(u=Depends(current_user)):
+    out = await elite.dashboard(journals=False)
+    if u["role"] != "admin":
+        out["live"].pop("real_money", None)
+    return out
+
+
+@api.post("/elite/control")
+async def elite_control(body: EliteControlIn, request: Request, u=Depends(admin_user)):
+    try:
+        await {"stop_all": elite.ENGINE.stop_all, "resume": elite.ENGINE.resume}[body.action](u["email"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        raise HTTPException(409, f"{body.action} failed: {str(e)[:200]}")
+    await SEC.log_event("elite_" + body.action, request, u["email"])
+    return await elite.dashboard()
+
+
+@api.post("/elite/mode")
+async def elite_mode(body: EliteModeIn, request: Request, u=Depends(admin_user)):
+    try:
+        await elite.ENGINE.set_mode(body.mode, body.confirm, u["email"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:  # Delta pre-flight failed (key, IP whitelist, leverage …) – mode is unchanged
+        raise HTTPException(409, f"{body.mode} check failed, mode not changed: {str(e)[:200]}")
+    await SEC.log_event("elite_mode", request, u["email"], detail=body.mode)
+    return await elite.dashboard()
+
+
 @api.get("/observer")
 async def observer_get(u=Depends(current_user)):
     """Strategy Observer: every page and journal compared, recent vs 26 months (read-only)."""
@@ -1411,7 +1463,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 
