@@ -1,4 +1,4 @@
-# Put Vantage BTC online with Hetzner (no commands to type)
+# Put My BTC Partner online with Hetzner (no commands to type)
 
 Time: about 20 minutes. Cost: Hetzner's smallest server with 4 GB RAM (a few euros a month) plus
 the small charge for a public IPv4 address. Hetzner shows the exact monthly price before you click *Create*.

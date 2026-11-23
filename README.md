@@ -1,4 +1,4 @@
-# Vantage BTC
+# My BTC Partner
 
 Live Bitcoin decision desk + installable mobile app (PWA). It watches Delta Exchange India BTCUSD
 24/7 on your own server, runs the Scalping / Swing checks (F26–F37), the Five Pillars, the confirmed

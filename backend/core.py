@@ -6,7 +6,12 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 IST = ZoneInfo("Asia/Kolkata")
 # Brand name shown in emails, alerts, exports and the API title. Change it with the APP_NAME env variable.
-APP_NAME = os.environ.get("APP_NAME", "Vantage BTC").strip() or "Vantage BTC"
+# The site was renamed from "Vantage BTC" on 23 Nov 2026 (owner). Servers installed before that still have the old name in
+# their .env, so the old value is treated as "not set" and the new name is used.
+DEFAULT_APP_NAME, LEGACY_APP_NAMES = "My BTC Partner", {"vantage btc"}
+APP_NAME = os.environ.get("APP_NAME", "").strip()
+if not APP_NAME or APP_NAME.lower() in LEGACY_APP_NAMES:
+    APP_NAME = DEFAULT_APP_NAME
 APP_SLUG = "".join(c if c.isalnum() else "-" for c in APP_NAME.lower()).strip("-")
 client = AsyncIOMotorClient(os.environ["MONGO_URL"])
 db = client[os.environ["DB_NAME"]]

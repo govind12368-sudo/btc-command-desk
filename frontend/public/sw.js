@@ -35,7 +35,7 @@ self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : "" }; }
   e.waitUntil(Promise.all([
-    self.registration.showNotification(d.title || "Vantage BTC", {
+    self.registration.showNotification(d.title || "My BTC Partner", {
       body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || undefined, data: { url: d.url || "/" },
     }),
     // If the app is open, tell it so it can play the chosen loud alert sound.

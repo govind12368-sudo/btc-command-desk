@@ -4,7 +4,7 @@ WORKDIR /src
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile --network-timeout 600000
 COPY frontend/ .
-ARG REACT_APP_NAME="Vantage BTC"
+ARG REACT_APP_NAME="My BTC Partner"
 ENV REACT_APP_NAME=$REACT_APP_NAME GENERATE_SOURCEMAP=false CI=false
 RUN yarn build
 

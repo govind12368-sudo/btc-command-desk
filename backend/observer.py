@@ -14,7 +14,7 @@ import math
 import os
 from datetime import datetime, timezone
 
-from core import db, now_utc, iso, IST
+from core import db, now_utc, iso, IST, APP_NAME
 import plan_a
 import regime
 import support
@@ -540,14 +540,14 @@ async def status_alerts(board, D):
             import alerts
             from channel_config import CFG
             if CFG.get("ALERT_EMAIL"):
-                await alerts.send_email(to=CFG.get("ALERT_EMAIL"), subject="Vantage BTC – Strategy Observer", html=f"<p>{text}</p><p>Open the Strategy Observer page for the detail.</p>")
+                await alerts.send_email(to=CFG.get("ALERT_EMAIL"), subject=f"{APP_NAME} – Strategy Observer", html=f"<p>{text}</p><p>Open the Strategy Observer page for the detail.</p>")
                 res.append("email sent")
         except Exception as e:
             res.append(f"email failed: {str(e)[:80]}")
         try:
             import messaging
             if messaging.telegram_configured():
-                await messaging.send_telegram("Vantage BTC – Strategy Observer: " + text); res.append("telegram sent")
+                await messaging.send_telegram(f"{APP_NAME} – Strategy Observer: " + text); res.append("telegram sent")
         except Exception as e:
             res.append(f"telegram failed: {str(e)[:80]}")
         await db.alerts_log.update_one({"_id": key}, {"$setOnInsert": {"at": iso(now_utc()), "channel": "observer", "text": text, "result": ", ".join(res) or "no channel configured"}}, upsert=True)

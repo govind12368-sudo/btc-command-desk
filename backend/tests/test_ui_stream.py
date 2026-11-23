@@ -118,3 +118,20 @@ def test_new_admin_endpoints_reject_viewers_and_socket_needs_sign_in():
             ws.send_text('{"token": "not-a-token"}')
             ws.receive_text()
     assert e.value.code == 4401
+
+
+def test_site_name_is_the_new_one_and_old_server_settings_do_not_bring_the_old_name_back(monkeypatch):
+    def name(env):
+        if env is None:
+            monkeypatch.delenv("APP_NAME", raising=False)
+        else:
+            monkeypatch.setenv("APP_NAME", env)
+        sys.modules.pop("core", None)
+        c = importlib.import_module("core")
+        return c.APP_NAME, c.APP_SLUG
+    monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
+    assert name(None) == ("My BTC Partner", "my-btc-partner")
+    assert name("Vantage BTC")[0] == "My BTC Partner"           # a server installed before the rename
+    assert name("  ")[0] == "My BTC Partner"
+    assert name("Some Other Desk")[0] == "Some Other Desk"      # an owner's own choice still wins
+    sys.modules.pop("core", None)

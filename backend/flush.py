@@ -33,7 +33,7 @@ FEAT_V = "flush-f1"
 FEES = {"taker": 0.0005, "maker": 0.0002, "gst": 0.18}
 STATE = {"computed_at": None, "error": None, "data": None}
 FLUSH_EVIDENCE = {
-    "period": "21 Oct 2024 – 13 Nov 2026 (26-month replay of the Vantage scalp signals, Delta BTCUSD 5m candles)",
+    "period": "21 Oct 2024 – 13 Nov 2026 (26-month replay of this site's scalp signals, Delta BTCUSD 5m candles)",
     "all": {"n": 45, "win": 0.71, "usd": 24.14}, "first_half": {"n": 16, "win": 0.56, "usd": 6.96}, "second_half": {"n": 29, "win": 0.79, "usd": 33.63},
     "by_market": {"Down": {"n": 45, "win": 0.71, "usd": 24.14}, "Range": {"n": 18, "win": 0.39, "usd": -12.26}, "Up": {"n": 4, "win": 0.50, "usd": -0.24}},
     "note": ("Down markets only. Luck test: random down-market SHORT trades win 49% and lose $2.15 a trade; the chance of luck matching the "

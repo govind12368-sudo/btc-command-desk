@@ -85,5 +85,5 @@ def test_push_title(monkeypatch):
     monkeypatch.setattr(mm, "AsyncIOMotorClient", lambda *a, **k: AsyncMongoMockClient())
     sys.modules.pop("autotrade", None)
     at = importlib.import_module("autotrade")
-    assert at._push_title("[PAPER] Vantage BTC auto-trade: Exit – TARGET") == "Paper · Exit – TARGET"
-    assert at._push_title("[LIVE] Vantage BTC auto-trade: Daily loss limit hit") == "Daily loss limit hit"
+    assert at._push_title("[PAPER] My BTC Partner auto-trade: Exit – TARGET") == "Paper · Exit – TARGET"
+    assert at._push_title("[LIVE] My BTC Partner auto-trade: Daily loss limit hit") == "Daily loss limit hit"

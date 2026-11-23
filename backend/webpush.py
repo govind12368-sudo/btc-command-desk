@@ -1,4 +1,4 @@
-"""Phone pop-up notifications (Web Push) for the installed Vantage BTC app.
+"""Phone pop-up notifications (Web Push) for the installed app.
 
 The server signs each message with its own VAPID key and hands it to the phone maker's push service
 (Apple for iPhone, Google for Android/Chrome), which wakes the phone even when the app is closed.

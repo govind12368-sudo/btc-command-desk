@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* Vantage terminal tokens (RGB channels so Tailwind opacity modifiers work: bg-panel/60) */
+    /* Terminal tokens (RGB channels so Tailwind opacity modifiers work: bg-panel/60) */
     --c-base: 8 10 13;        /* app background */
     --c-chrome: 11 14 18;     /* top bar + sidebar */
     --c-panel: 17 21 27;      /* panels / cards */

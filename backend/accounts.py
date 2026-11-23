@@ -21,7 +21,7 @@ log = logging.getLogger("accounts")
 router = APIRouter(prefix="/api")
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$")
 USER_RE = re.compile(r"^[a-zA-Z0-9_.]{3,24}$")
-RESERVED = {"admin", "administrator", "root", "support", "system", "btcdesk", "vantage", "moderator"}
+RESERVED = {"admin", "administrator", "root", "support", "system", "btcdesk", "vantage", "mybtcpartner", "btcpartner", "moderator"}
 GENERIC_FORGOT = "If an account exists for that address, a reset link has been sent. It expires in 30 minutes and works once."
 
 

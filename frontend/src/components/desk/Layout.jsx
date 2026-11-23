@@ -6,7 +6,7 @@ import {
   PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Eye, EyeOff, Lock, Globe, PieChart } from "lucide-react";
 import { SiteFooter } from "@/components/brand/Branding";
 import Logo from "@/components/brand/Logo";
-import { APP_SHORT } from "@/config/brand";
+import { APP_NAME, APP_SHORT } from "@/config/brand";
 import { useDesk } from "@/context/DeskContext";
 import { usePulse } from "@/lib/live";
 import { Chip } from "./ui";
@@ -16,6 +16,13 @@ import { toast } from "sonner";
 export const ADMIN_ONLY = new Set(["/auto-trade", "/settings", "/audit", "/upgrades", "/account", "/users", "/server", "/data-health"]);
 
 // Menu, grouped the way a trading desk works: look at the market, read signals, run strategies, trade, run the system.
+// Site name with "BTC" in the brand gold (the plain name if it has no "BTC" in it).
+function Brand() {
+  const i = APP_NAME.indexOf("BTC");
+  if (i < 0) return <>{APP_NAME}</>;
+  return <>{APP_NAME.slice(0, i)}<span className="text-amber-400">BTC</span>{APP_NAME.slice(i + 3)}</>;
+}
+
 export const NAV_GROUPS = [
   ["Market", [["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scanner", "BTC Scanner", Radar], ["/intel", "Market Intelligence", Telescope], ["/news", "News & Events", Newspaper]]],
   ["Signals", [["/scalping", "Scalping Signal", Zap], ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/validation", "Trade Validation", ShieldCheck]]],
@@ -233,7 +240,7 @@ export default function Layout() {
       <aside className="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-line bg-chrome lg:flex" style={{ width: W }}>
         <div className={`flex h-[44px] items-center border-b border-line ${rail ? "justify-center" : "gap-2 px-3"}`}>
           <Logo size={24} />
-          {!rail && <div className="leading-none"><div className="text-[13.5px] font-bold tracking-tight text-slate-50">Vantage <span className="text-amber-400">BTC</span></div><div className="mt-0.5 font-mono text-[9.5px] text-slate-500">decision desk</div></div>}
+          {!rail && <div className="leading-none"><div className="whitespace-nowrap text-[13.5px] font-bold tracking-tight text-slate-50"><Brand /></div><div className="mt-0.5 font-mono text-[9.5px] text-slate-500">decision desk</div></div>}
         </div>
         <div className="flex-1 overflow-y-auto scroll-thin"><NavList rail={rail} /></div>
         <div className={`flex items-center border-t border-line ${rail ? "flex-col gap-1 py-2" : "justify-between px-2 py-1.5"}`}>
@@ -245,7 +252,7 @@ export default function Layout() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside data-testid="mobile-drawer" className="absolute inset-y-0 left-0 w-[260px] overflow-y-auto border-r border-line bg-chrome">
-            <div className="flex h-[44px] items-center justify-between border-b border-line px-3"><div className="flex items-center gap-2"><Logo size={22} /><span className="text-[13.5px] font-bold">Vantage <span className="text-amber-400">BTC</span></span></div><button data-testid="close-drawer" onClick={() => setOpen(false)}><X size={18} /></button></div>
+            <div className="flex h-[44px] items-center justify-between border-b border-line px-3"><div className="flex items-center gap-2"><Logo size={22} /><span className="whitespace-nowrap text-[13.5px] font-bold"><Brand /></span></div><button data-testid="close-drawer" onClick={() => setOpen(false)}><X size={18} /></button></div>
             <NavList onNav={() => setOpen(false)} />
             <button onClick={() => { setOpen(false); setEditing(true); }} className="mx-2 mb-3 flex items-center gap-1.5 rounded-sm px-2 py-1 text-[12px] text-slate-400 hover:bg-raised"><SlidersHorizontal size={14} /> Customize menu</button>
           </aside>
@@ -253,12 +260,12 @@ export default function Layout() {
       )}
       <header className="fixed right-0 top-0 z-40 flex h-[44px] items-center justify-between border-b border-line bg-chrome/95 backdrop-blur" style={{ left: 0 }} id="topbar">
         <style>{`@media (min-width:1024px){#topbar{left:${W}px !important}}`}</style>
-        <div className="flex h-full min-w-0 items-center">
+        <div className="flex h-full min-w-0 items-center overflow-hidden">
           <button className="px-3 lg:hidden" data-testid="open-drawer" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={18} /></button>
-          <div className="flex items-center gap-1.5 pr-2 lg:hidden"><Logo size={20} /><span className="whitespace-nowrap text-[13px] font-bold">{APP_SHORT}</span></div>
+          <div className="flex items-center gap-1.5 pr-2 lg:hidden"><Logo size={20} /><span className="hidden whitespace-nowrap text-[13px] font-bold sm:inline">{APP_SHORT}</span></div>
           <Ticker />
         </div>
-        <div className="flex items-center gap-2 pr-3">
+        <div className="flex shrink-0 items-center gap-2 pr-3">
           {user?.role === "admin" && state && (
             <Link to="/settings" data-testid="header-alert-mode" title="Alert mode (Settings → Signal alerts)"
               className={`hidden items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-[10px] font-semibold md:inline-flex ${state.alert_mode_armed ? "border-teal-500/45 text-teal-300" : "border-amber-500/40 text-amber-300"}`}>

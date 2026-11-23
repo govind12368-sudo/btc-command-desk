@@ -25,7 +25,7 @@ from datetime import timedelta
 
 from pymongo.errors import DuplicateKeyError
 
-from core import db, now_utc, iso, parse_iso, ist_date, age_sec
+from core import db, now_utc, iso, parse_iso, ist_date, age_sec, APP_NAME
 import support
 
 log = logging.getLogger("autotrade")
@@ -179,7 +179,7 @@ async def _deliver(subject, text):
 
 
 def _push_title(subject):
-    """'[PAPER] Vantage BTC auto-trade: Exit – TARGET' → 'Paper · Exit – TARGET' (short, for a phone banner)."""
+    """'[PAPER] My BTC Partner auto-trade: Exit – TARGET' → 'Paper · Exit – TARGET' (short, for a phone banner)."""
     mode, _, rest = subject.partition("] ")
     what = rest.split(": ", 1)[-1]
     mode = mode.strip("[").title()
@@ -194,7 +194,7 @@ async def send_alert(mode, title, text):
             import alert_mode
             if not (await alert_mode.get_mode()).get("effective_armed"):
                 return
-        t = asyncio.create_task(_deliver(f"[{mode}] Vantage BTC auto-trade: {title}", text))
+        t = asyncio.create_task(_deliver(f"[{mode}] {APP_NAME} auto-trade: {title}", text))
         _BG.add(t)
         t.add_done_callback(_BG.discard)
     except Exception as e:  # alerts must never break the engine

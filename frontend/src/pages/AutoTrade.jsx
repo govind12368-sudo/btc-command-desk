@@ -169,7 +169,7 @@ export default function AutoTrade() {
       const r = await api.get("/autotrade/journal.csv", { responseType: "blob" });
       const u = URL.createObjectURL(r.data);
       const a = document.createElement("a");
-      a.href = u; a.download = "vantage-autotrade-journal.csv"; a.click();
+      a.href = u; a.download = "my-btc-partner-autotrade-journal.csv"; a.click();
       URL.revokeObjectURL(u);
     } catch (e) { toast.error(errText(e)); }
   };

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vantage BTC — one-command server setup (Ubuntu 22.04 / 24.04, x86 or ARM, e.g. Oracle Cloud Always Free).
+# My BTC Partner — one-command server setup (Ubuntu 22.04 / 24.04, x86 or ARM, e.g. Oracle Cloud Always Free).
 #
 #   sudo apt-get update && sudo apt-get install -y git
 #   sudo git clone https://github.com/govind12368-sudo/btc-command-desk.git /opt/vantage

@@ -4,6 +4,10 @@ import { api, errText } from "@/lib/api";
 import { Card } from "@/components/desk/ui";
 import { Btn } from "@/components/desk/forms";
 import { ist } from "@/lib/fmt";
+import { APP_NAME, APP_OLD_NAME } from "@/config/brand";
+
+// An app added to the home screen before the rename keeps its old name there until it is removed and added again.
+const IOS_NAME = `${APP_NAME} (or ${APP_OLD_NAME} if you added the app before the rename)`;
 
 const keyBytes = (b64) => {
   const s = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
@@ -38,7 +42,7 @@ export function PushCard() {
     try {
       const p = await Notification.requestPermission(); // must be the first step after the tap (iPhone rule)
       setPerm(p);
-      if (p !== "granted") { toast.error("Notifications were not allowed. Turn them on in iPhone Settings → Notifications → Vantage BTC."); return; }
+      if (p !== "granted") { toast.error(`Notifications were not allowed. Turn them on in iPhone Settings → Notifications → ${IOS_NAME}.`); return; }
       const reg = await navigator.serviceWorker.ready;
       const { data } = await api.get("/push/key");
       const s = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(data.public_key) }));
@@ -63,11 +67,11 @@ export function PushCard() {
 
   let body;
   if (isIOS() && !isStandalone()) {
-    body = <p className="text-[13px] text-slate-300">On iPhone, notifications only work in the installed app. In Safari tap <b>Share → Add to Home Screen</b>, open <b>Vantage BTC</b> from the home screen, sign in and come back to this card.</p>;
+    body = <p className="text-[13px] text-slate-300">On iPhone, notifications only work in the installed app. In Safari tap <b>Share → Add to Home Screen</b>, open <b>{APP_NAME}</b> from the home screen, sign in and come back to this card.</p>;
   } else if (!supported()) {
     body = <p className="text-[13px] text-slate-300">This browser can't show notifications. On iPhone you need iOS 16.4 or newer and the home-screen app.</p>;
   } else if (perm === "denied") {
-    body = <p className="text-[13px] text-slate-300">Notifications are blocked for this app. Turn them on in <b>iPhone Settings → Notifications → Vantage BTC</b>, then reopen the app.</p>;
+    body = <p className="text-[13px] text-slate-300">Notifications are blocked for this app. Turn them on in <b>iPhone Settings → Notifications → {IOS_NAME}</b>, then reopen the app.</p>;
   } else if (sub) {
     body = (
       <div className="flex flex-wrap items-center gap-2">

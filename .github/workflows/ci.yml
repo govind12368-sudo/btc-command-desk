@@ -47,7 +47,7 @@ jobs:
           done
           sudo docker compose ps
           curl -skf --retry 10 --retry-delay 3 --retry-all-errors https://localhost/api/health
-          curl -skf https://localhost/ | grep -q "<title>Vantage BTC</title>"
+          curl -skf https://localhost/ | grep -q "<title>My BTC Partner</title>"
           curl -skI https://localhost/ | grep -i "content-security-policy"
           code=$(curl -sk -o /dev/null -w '%{http_code}' -X POST https://localhost/api/auth/login -H 'Content-Type: application/json' -H 'Origin: https://localhost' -d '{"email":"admin@example.org","password":"Ci-Strong-Passw0rd!x"}')
           echo "login: $code"; [ "$code" = 200 ]

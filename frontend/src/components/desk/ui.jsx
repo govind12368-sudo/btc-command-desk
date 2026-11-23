@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
 
-/* Vantage terminal UI kit.
+/* Terminal UI kit.
    Numbers first, words on demand: long sub-titles, page descriptions and info notes fold behind an ⓘ / "More" toggle.
    Green/red only for P&L and direction, gold for brand and selection, graphite for everything else. */
 

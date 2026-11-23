@@ -19,7 +19,7 @@ module.exports = {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        // ---- Vantage terminal palette (graphite + brand gold; green/red only for P&L and direction) ----
+        // ---- Terminal palette (graphite + brand gold; green/red only for P&L and direction) ----
         base: 'rgb(var(--c-base) / <alpha-value>)',
         chrome: 'rgb(var(--c-chrome) / <alpha-value>)',
         panel: 'rgb(var(--c-panel) / <alpha-value>)',

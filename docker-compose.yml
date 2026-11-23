@@ -1,4 +1,4 @@
-# Vantage BTC — whole stack on one small server. Start: docker compose up -d --build
+# My BTC Partner — whole stack on one small server. Start: docker compose up -d --build
 # Nothing here costs money; every image is open source. Only ports 80/443 are public.
 name: vantage-btc
 
@@ -32,7 +32,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      args: { REACT_APP_NAME: "${APP_NAME:-Vantage BTC}" }
+      args: { REACT_APP_NAME: "${APP_NAME:-My BTC Partner}" }
     restart: unless-stopped
     env_file: .env
     ports: ["80:80", "443:443", "443:443/udp"]

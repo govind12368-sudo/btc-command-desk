@@ -1258,7 +1258,7 @@ async def push_unsubscribe(body: PushEndpointIn, u=Depends(current_user)):
 
 @api.post("/push/test")
 async def push_test(u=Depends(admin_user)):
-    r = await webpush.send("Vantage BTC test", "Notifications are working on this device. You'll get trade entries, exits and daily limits here.", "/auto-trade", "test", user_id=u["id"])
+    r = await webpush.send(f"{APP_NAME} test", "Notifications are working on this device. You'll get trade entries, exits and daily limits here.", "/auto-trade", "test", user_id=u["id"])
     if not r["devices"]:
         raise HTTPException(409, "No device is registered yet. Turn notifications on first.")
     return r
@@ -1448,7 +1448,7 @@ async def autotrade_keys_delete(mode: str, request: Request, u=Depends(admin_use
 @api.get("/autotrade/journal.csv")
 async def autotrade_journal(u=Depends(admin_user)):
     return Response(await autotrade.journal_csv(), media_type="text/csv",
-                    headers={"Content-Disposition": 'attachment; filename="vantage-autotrade-journal.csv"', "Cache-Control": "no-store"})
+                    headers={"Content-Disposition": f'attachment; filename="{APP_SLUG}-autotrade-journal.csv"', "Cache-Control": "no-store"})
 
 
 @api.get("/alerts/channels")

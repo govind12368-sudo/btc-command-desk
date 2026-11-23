@@ -1,5 +1,5 @@
 #cloud-config
-# Vantage BTC — paste this whole file into Hetzner "Cloud config" when you create the server.
+# My BTC Partner — paste this whole file into Hetzner "Cloud config" when you create the server.
 # Change ONLY the two lines under "CHANGE THESE". The site installs itself in about 10 minutes.
 #
 # Password rules: at least 10 characters with a lowercase letter, an uppercase letter, a number

@@ -299,7 +299,7 @@ async def notify(sig, test=False):
     entry["call"] = await _call(sig, test, entry["signal_id"]) if channels.get("call") else "skipped (call channel switched off)"
     import webpush
     if test:
-        pr = await webpush.send("Vantage BTC test", "Test signal alert.", "/journal", "test")
+        pr = await webpush.send(f"{APP_NAME} test", "Test signal alert.", "/journal", "test")
     else:
         title = f"Day-type switch: {sig['direction']}" if sig.get("switch_plan") else f"Signal: {sig['strategy'].upper()} {sig['direction']}"
         body = (f"{sig['switch_plan']} ({sig['switch_day']}). Entry {sig['entry']}, stop {sig['stop']}, target {sig['target']}." if sig.get("switch_plan")
