@@ -4,7 +4,7 @@ import { api, errText } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
 import { Card, Note } from "@/components/desk/ui";
 import { Field, Input, Btn } from "@/components/desk/forms";
-import { ist } from "@/lib/fmt";
+import { ist, ago } from "@/lib/fmt";
 
 const INFO = {
   TESTNET: { title: "Testnet key (practice exchange, fake money)", site: "testnet.delta.exchange", step: "Needed first: Live unlocks only after one complete Testnet trade." },
@@ -25,6 +25,12 @@ function KeyBox({ mode, s, ip, reload, busy, setBusy }) {
     } catch (e) { toast.error(errText(e)); }
     setBusy(false);
   };
+  const [checking, setChecking] = useState(false);
+  const checkNow = async () => {
+    setChecking(true);
+    try { await api.post(`/autotrade/keys/${mode}/check`); reload(); } catch (e) { toast.error(errText(e)); }
+    setChecking(false);
+  };
   const remove = async () => {
     setBusy(true);
     try { await api.delete(`/autotrade/keys/${mode}`); toast.success("Key removed from the server."); setSure(false); reload(); } catch (e) { toast.error(errText(e)); }
@@ -36,10 +42,21 @@ function KeyBox({ mode, s, ip, reload, busy, setBusy }) {
       <h4 className="text-[13px] font-semibold text-slate-100">{i.title}</h4>
       <p className="mt-1 text-[12.5px]" data-testid={`delta-key-${mode}-status`}>
         {s?.from_env ? <b className="text-teal-300">Set in the server file (.env). It takes priority over a pasted key.</b>
-          : s?.saved ? <b className="text-teal-300">Connected · key ending {s.last4} · checked {ist(s.saved_at)}{s.checked_balance_inr != null ? ` · balance seen ₹${Math.round(s.checked_balance_inr).toLocaleString("en-IN")}` : ""}</b>
+          : s?.saved ? <b className={s.check_error ? "text-amber-300" : "text-teal-300"}>{s.check_error ? "Saved, but the last check failed" : "Connected"} · key ending {s.last4} · saved {ist(s.saved_at)}</b>
             : s?.broken ? <b className="text-red-300">The saved key can no longer be read (the server secret changed). Paste it again.</b>
               : <b className="text-amber-300">Not connected</b>}
       </p>
+      {s?.active && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-sm border border-line bg-panel px-2.5 py-1.5" data-testid={`delta-key-${mode}-balance`}>
+          <div className="min-w-0">
+            <div className="font-mono text-[10.5px] text-slate-500">Free balance on Delta</div>
+            <div className="font-mono text-[15px] font-semibold text-slate-50">{s.checked_balance_inr != null ? `₹${Math.round(s.checked_balance_inr).toLocaleString("en-IN")}` : "—"}</div>
+            <div className="font-mono text-[10.5px] text-slate-500" title={ist(s.checked_at)}>checked {ago(s.checked_at)} · auto every {Math.round((s.check_every_sec || 600) / 60)} min{s.check_error && s.balance_at ? ` · balance from ${ist(s.balance_at)}` : ""}</div>
+          </div>
+          <Btn tone="ghost" disabled={checking} onClick={checkNow} data-testid={`delta-key-${mode}-check`}>{checking ? "Checking…" : "Check now"}</Btn>
+          {s.check_error && <div className="w-full text-[12px] text-red-300" data-testid={`delta-key-${mode}-error`}>{s.check_error}</div>}
+        </div>
+      )}
       <p className="mt-1 text-[11.5px] text-slate-400">{i.step}</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <Field label="API key"><Input type="password" autoComplete="off" spellCheck={false} value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste the API key" data-testid={`delta-key-${mode}-key`} /></Field>
@@ -58,7 +75,7 @@ function KeyBox({ mode, s, ip, reload, busy, setBusy }) {
 
 /** Admin pastes the Delta API key here. It is checked with Delta from this server, stored encrypted, and never shown again. */
 export default function DeltaKeys() {
-  const { data, reload } = useFetch("/autotrade/keys", 0);
+  const { data, reload } = useFetch("/autotrade/keys", 60000, { topic: null });
   const [busy, setBusy] = useState(false);
   if (!data) return null;
   return (

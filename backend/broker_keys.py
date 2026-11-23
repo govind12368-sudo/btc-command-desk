@@ -5,7 +5,10 @@
 * No route ever returns a key or a secret: only "saved", the last 4 characters and when it was saved.
 * A key is checked against Delta before it is stored, and it cannot be changed while the bot is trading in that mode.
 * Keys in the server's .env file (DELTA_TRADE_API_KEY …) still work and take priority.
+* Every connected key is re-checked every 10 minutes (and on "Check now"): a read-only balance call, no order, no key change.
+  The result is kept in db.broker_checks, so the page shows the current free balance and any new error (e.g. IP whitelist removed).
 """
+import asyncio
 import base64
 import hashlib
 import logging
@@ -17,6 +20,7 @@ from core import db, now_utc, iso
 
 log = logging.getLogger("broker_keys")
 MODES = ("LIVE", "TESTNET")
+CHECK_EVERY = 600                                          # seconds between automatic balance re-checks
 CACHE = {}                                                 # mode -> (key, secret), decrypted, in memory only
 BROKEN = set()                                             # modes whose stored key can no longer be decrypted
 
@@ -61,10 +65,45 @@ async def status():
     out = {"server_ip": server_ip()}
     for mode in MODES:
         d = await db.broker_keys.find_one({"_id": mode}, {"key": 0, "secret": 0}) or {}
+        c = await db.broker_checks.find_one({"_id": mode}) or {}
         env = bool(delta_broker.env_keys(mode))
         out[mode] = {"saved": bool(d) and mode not in BROKEN, "broken": mode in BROKEN, "last4": d.get("last4"), "saved_at": d.get("saved_at"),
-                     "checked_balance_inr": d.get("checked_balance_inr"), "from_env": env, "active": bool(delta_broker.keys(mode))}
+                     "checked_balance_inr": c.get("balance_inr", d.get("checked_balance_inr")), "balance_at": c.get("ok_at") or d.get("saved_at"),
+                     "checked_at": c.get("at") or d.get("saved_at"), "check_error": c.get("error"), "check_every_sec": CHECK_EVERY,
+                     "from_env": env, "active": bool(delta_broker.keys(mode))}
     return out
+
+
+async def check(mode):
+    """Read the free balance again with the key in use (pasted or .env). Read-only: no order is sent and the key is not changed."""
+    import autotrade
+    import delta_broker
+    if mode not in MODES:
+        raise ValueError("Unknown mode")
+    if not delta_broker.keys(mode):
+        raise ValueError("No key is connected for this mode")
+    now = iso(now_utc())
+    try:
+        bal = await delta_broker.get(mode).available_inr(await autotrade.settings())
+        row = {"at": now, "ok_at": now, "balance_inr": round(bal, 2), "error": None}
+    except Exception as e:
+        row = {"at": now, "error": explain(e, mode)}          # the last good balance and its time are kept
+    await db.broker_checks.update_one({"_id": mode}, {"$set": row}, upsert=True)
+    return row
+
+
+async def loop():
+    """Re-check every connected key every 10 minutes, so the page never shows a balance from the day the key was pasted."""
+    import delta_broker
+    await asyncio.sleep(45)
+    while True:
+        for mode in MODES:
+            try:
+                if delta_broker.keys(mode):
+                    await check(mode)
+            except Exception as e:
+                log.warning("key check %s: %s", mode, e)
+        await asyncio.sleep(CHECK_EVERY)
 
 
 async def save(mode, key, secret, by):
@@ -86,6 +125,7 @@ async def save(mode, key, secret, by):
         raise ValueError(explain(e, mode)) from None
     await db.broker_keys.update_one({"_id": mode}, {"$set": {"key": encrypt(key), "secret": encrypt(secret), "last4": key[-4:], "saved_at": iso(now_utc()),
                                                              "saved_by": by, "checked_balance_inr": round(bal, 2)}}, upsert=True)
+    await db.broker_checks.delete_one({"_id": mode})      # the new key's own check is now the latest
     await load()
     delta_broker.forget(mode)
     return await status()
@@ -97,6 +137,7 @@ async def remove(mode, by):
         raise ValueError("Unknown mode")
     await _not_in_use(mode)
     await db.broker_keys.delete_one({"_id": mode})
+    await db.broker_checks.delete_one({"_id": mode})
     await load()
     delta_broker.forget(mode)
     return await status()

@@ -169,3 +169,32 @@ def test_switch_alerts_need_strong_support_from_19_nov(m, monkeypatch):
     assert v is None and "could not be recorded" in why
     assert support.allows({"level": "STRONG"}) and not support.allows({"level": "MEDIUM"}) and not support.allows(None)
     assert not support.gate_on(support.strong_only_ts() - 1) and support.gate_on(support.strong_only_ts())
+
+
+def test_connected_key_is_rechecked_and_errors_keep_the_last_balance(m):
+    bk = m.broker_keys
+    calls = {"n": 0, "fail": False}
+
+    async def bal(self, cfg):
+        calls["n"] += 1
+        if calls["fail"]:
+            raise RuntimeError("Delta 401 ip_not_whitelisted")
+        return 0.0 if calls["n"] == 1 else 61250.0
+    m.delta_broker.DeltaBroker.available_inr = bal
+    with pytest.raises(ValueError):
+        run(bk.check("TESTNET"))                            # nothing connected yet
+    st = run(bk.save("TESTNET", KEY, SECRET, "me"))
+    assert st["TESTNET"]["checked_balance_inr"] == 0.0 and st["TESTNET"]["checked_at"] == st["TESTNET"]["saved_at"]
+    run(bk.check("TESTNET"))
+    st = run(bk.status())["TESTNET"]
+    assert st["checked_balance_inr"] == 61250.0 and st["check_error"] is None and st["checked_at"] >= st["saved_at"]
+    calls["fail"] = True
+    run(bk.check("TESTNET"))
+    st = run(bk.status())["TESTNET"]
+    assert st["checked_balance_inr"] == 61250.0 and "whitelist" in st["check_error"]    # last good balance kept, new error shown
+    assert run(m.core.db.broker_checks.count_documents({})) == 1
+    calls["fail"] = False
+    st = run(bk.save("TESTNET", KEY, SECRET, "me"))["TESTNET"]                           # a new key starts from its own check
+    assert st["check_error"] is None and run(m.core.db.broker_checks.count_documents({})) == 0
+    run(bk.remove("TESTNET", "me"))
+    assert not run(bk.status())["TESTNET"]["saved"]

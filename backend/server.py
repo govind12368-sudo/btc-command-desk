@@ -1377,6 +1377,16 @@ async def autotrade_keys_put(body: BrokerKeyIn, request: Request, u=Depends(admi
     return out
 
 
+@api.post("/autotrade/keys/{mode}/check")
+async def autotrade_keys_check(mode: str, u=Depends(admin_user)):
+    """Read the Delta balance again with the connected key (read-only)."""
+    try:
+        await broker_keys.check(mode)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return await broker_keys.status()
+
+
 @api.delete("/autotrade/keys/{mode}")
 async def autotrade_keys_delete(mode: str, request: Request, u=Depends(admin_user)):
     try:
@@ -1574,7 +1584,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 
