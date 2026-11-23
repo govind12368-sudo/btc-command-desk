@@ -28,7 +28,7 @@ function legsText(legs) {
 function CrossCheck({ d }) {
   const rows = d.strategies;
   return (
-    <Card title="Cross-check on Delta Exchange India's real data" sub="Your workbook vs the same rules rebuilt on Delta's own prices, official settlement index and fee record, including Delta's settlement fee on options that expire in the money. Picks 1 and 3 failed and are not run." testid="opt-check">
+    <Card title="Cross-check on Delta Exchange India's real data" sub="Your workbook vs the same rules rebuilt on Delta's own prices, official settlement index and fee record, including Delta's settlement fee on options that expire in the money. Only pick 5 runs on this page." testid="opt-check">
       <div className="overflow-x-auto scroll-thin">
         <table className="desk-table">
           <thead><tr><th>Pick</th><th>Strategy</th><th>Period</th><th className="num">Workbook trades</th><th className="num">Workbook net</th><th className="num">Real-data trades</th><th className="num">Real-data net</th><th className="num">Real max DD</th><th className="num">Real net 2024 → today</th><th>Verdict</th><th>On this page</th></tr></thead>
@@ -127,7 +127,7 @@ function Live({ d }) {
   const live = d.live || [];
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {d.enabled.map((k) => {
           const s = d.strategies.find((x) => x.key === k);
           const ls = d.live_stats[k] || {};
@@ -182,11 +182,11 @@ export default function OptionPicks() {
   const cur = enabled.find((s) => s.key === tab);
   return (
     <div className="space-y-4" data-testid="option-picks-page">
-      <PageHead title="Option Picks" sub="BTC daily options on Delta Exchange India (expiry 17:30 IST) · $1,000 at 10x per strategy, about $10,000 of BTC per leg · paper only" />
-      <Note>Paper only: no orders are sent and no alerts. Each strategy is tracked on its own; they are not added together.</Note>
+      <PageHead title="Option Picks" sub="Pick 5: short ATM BTC straddle at 17:00 IST on Delta Exchange India (expiry 17:30 IST) · $1,000 at 10x, about $10,000 of BTC per leg · paper only" />
+      <Note>Paper only: no orders are sent and no alerts.</Note>
       {d.error && <Note tone="red">Last update failed: {d.error}</Note>}
       <CrossCheck d={d} />
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         {enabled.map((s) => (
           <div key={s.key} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2 text-[12px]">
             <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name}</div>

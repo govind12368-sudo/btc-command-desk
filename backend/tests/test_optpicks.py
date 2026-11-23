@@ -44,7 +44,7 @@ def test_entry_times(op):
     assert st - op.entry_t("IFLY", DAY) == 900 and op.live_entry_t("IFLY", DAY) == st - 600          # 17:15 bar, filled 17:20
     assert st - op.live_entry_t("SP16", DAY) == 5340 and st - op.live_entry_t("SSTR", DAY) == 1740   # 16:01 and 17:01
     assert st - op.entry_t("BPS", DAY) == 72000                                                      # 21:30 the day before
-    assert op.ENABLED == ["IFLY", "SP16", "SSTR"] and not op.STRATS["BPS"]["enabled"] and not op.STRATS["BCS"]["enabled"]
+    assert op.ENABLED == ["SSTR"]                                   # owner: only pick 5 on the site; the other four stay in the code, off
 
 
 def test_iron_fly_hold_to_settlement(op):
@@ -97,6 +97,7 @@ def test_stats_and_tables(op):
 
 
 def test_live_paper_engine(op, monkeypatch):
+    monkeypatch.setattr(op, "ENABLED", ["SP16", "SSTR"])             # the engine itself is tested on the 16:00 put too
     st = op.settle_t(DAY)
     now = [op.live_entry_t("SP16", DAY) + 5]
     eng = op.Engine(clock=lambda: now[0])

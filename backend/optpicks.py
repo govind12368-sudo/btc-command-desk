@@ -1,5 +1,6 @@
 """Option Picks: the owner's BTC daily-option selling picks on Delta Exchange India (paper only, owner request 23 Nov 2026).
 
+Owner, 23 Nov 2026 16:00 IST: run ONLY pick 5 (SSTR) on the site; the others stay in the code, switched off.
 Cross-checked first on Delta's own data (lab: research/opt_verify, the owner's workbook "BTC_Option_Picks_Crosscheck"):
   IFLY  pick 2  BTC-IFLY-ATM2-1715-NS       iron fly: sell ATM put + call, buy put ~spot-2% and call ~spot+2%, 17:15 IST, hold   profitable, fragile
   SP16  pick 4  BTC-SP-ATM-1600-SL2X-F20    short ATM put (strike nearest BTC futures) 16:00, stop 2x on 1-min mark high      profitable, fragile
@@ -36,10 +37,10 @@ CAPITAL, LEVERAGE, NOTIONAL = 1000.0, 10, 10000.0
 GST = 0.18
 STRATS = {
     "IFLY": {"pick": 2, "id": 1995, "code": "BTC-IFLY-ATM2-1715-NS", "name": "Iron fly, ATM body, wings ±2%", "kind": "hold", "ref": "index", "entry": (17, 15), "bar": 300,
-             "legs": [(-1, "P", 1.0), (-1, "C", 1.0), (1, "P", 0.98), (1, "C", 1.02)], "enabled": True, "grade": "caution",
+             "legs": [(-1, "P", 1.0), (-1, "C", 1.0), (1, "P", 0.98), (1, "C", 1.02)], "enabled": False, "grade": "caution",
              "verdict": "Profitable on real data but smaller than the workbook; loses with 5% worse fills + 2x fees; real trades at the fill price only 1 day in 4"},
     "SP16": {"pick": 4, "id": None, "code": "BTC-SP-ATM-1600-SL2X-F20", "name": "Short ATM put 16:00, stop 2x", "kind": "stop", "ref": "futures", "entry": (16, 0), "bar": 60,
-             "typs": "P", "enabled": True, "grade": "caution",
+             "typs": "P", "enabled": False, "grade": "caution",
              "verdict": "Profitable on real data, about 25% smaller than the workbook; loses with 5% worse fills + 2x fees"},
     "SSTR": {"pick": 5, "id": None, "code": "BTC-SSTR-ATM-1700-SL2X-F20", "name": "Short ATM straddle 17:00, stop 2x each leg", "kind": "stop", "ref": "futures", "entry": (17, 0),
              "bar": 60, "typs": "PC", "enabled": True, "grade": "pass",
@@ -612,7 +613,7 @@ def _strat_view(k):
 
 async def dashboard():
     data = STATE.get("data") or {}
-    live = [{k: v for k, v in x.items() if k != "_id"} | {"id": x["_id"]} async for x in db.opt_live.find().sort("created", -1).limit(400)]
+    live = [{k: v for k, v in x.items() if k != "_id"} | {"id": x["_id"]} async for x in db.opt_live.find({"key": {"$in": ENABLED}}).sort("created", -1).limit(400)]
     bt = data.get("backtest") or {}
     btmap = {(k, r["day"]): r for k in ORDER for r in (bt.get(k) or {}).get("trades", [])}
     cmp_rows = []
@@ -631,7 +632,7 @@ async def dashboard():
             if live_entry_t(k, d) > now:
                 nxt[k] = datetime.fromtimestamp(live_entry_t(k, d), IST).strftime("%d %b %H:%M IST"); break
     return {"name": NAME, "computed_at": STATE.get("computed_at"), "error": STATE.get("error"), "paper_only": True,
-            "strategies": [_strat_view(k) for k in ORDER], "enabled": ENABLED, "check": history().get("check", {}),
+            "strategies": [_strat_view(k) for k in ENABLED], "enabled": ENABLED, "check": {k: v for k, v in history().get("check", {}).items() if k in ENABLED},
             "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED}, "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
             "settings": {"capital": CAPITAL, "leverage": LEVERAGE, "notional": NOTIONAL}}
 
