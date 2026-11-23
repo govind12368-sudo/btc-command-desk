@@ -31,7 +31,7 @@ export function onTopic(topic, cb) {
 }
 
 // API path -> push topic
-const TOPICS = [["/state", "state"], ["/candle-runs", "runs"], ["/delta-top3", "trio"], ["/elite", "elite"], ["/option-picks", "optpicks"], ["/flush-short", "flush"],
+const TOPICS = [["/state", "state"], ["/candle-runs", "runs"], ["/delta-top3", "trio"], ["/elite", "elite"], ["/option-picks", "optpicks"], ["/fund", "fund"], ["/flush-short", "flush"],
   ["/plan-a", "plan_a"], ["/regime-journal", "regime"], ["/observer", "observer"], ["/autotrade", "autotrade"], ["/signals", "signals"], ["/news", "news"], ["/desk-summary", "state"],
   ["/switch-support", "state"], ["/market", "state"], ["/scanner", "state"]];
 export const topicFor = (url) => (TOPICS.find(([p]) => url.startsWith(p)) || [])[1];

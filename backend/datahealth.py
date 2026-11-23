@@ -20,6 +20,7 @@ ENGINES = [  # module, label, cycle in seconds, key holding the last run
     ("optpicks", "Option Picks", 900, "computed_at"),
     ("observer", "Strategy Observer", 600, "computed_at"),   # recomputes every 10th minute
     ("daytype", "Day-type switch", 60, "updated"),
+    ("fundmgr", "Fund Manager (paper fund, signal checks)", 60, "computed_at"),
 ]
 
 

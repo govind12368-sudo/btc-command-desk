@@ -3,8 +3,7 @@ import { NavLink, Outlet, useLocation, Link, Navigate } from "react-router-dom";
 import {
   LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X,
   RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical, Bot, TrendingDown, Layers, Trophy, Gem, Server, Target, HeartPulse,
-  PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Eye, EyeOff, Lock, Globe,
-} from "lucide-react";
+  PanelLeftClose, PanelLeftOpen, SlidersHorizontal, Eye, EyeOff, Lock, Globe, PieChart } from "lucide-react";
 import { SiteFooter } from "@/components/brand/Branding";
 import Logo from "@/components/brand/Logo";
 import { APP_SHORT } from "@/config/brand";
@@ -22,7 +21,7 @@ export const NAV_GROUPS = [
   ["Signals", [["/scalping", "Scalping Signal", Zap], ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/validation", "Trade Validation", ShieldCheck]]],
   ["Strategies", [["/plan-a", "Plan A – Live", FlaskConical], ["/flush-short", "Flush Short", TrendingDown], ["/candle-runs", "Candle Runs", Layers], ["/delta-top3", "Delta Top 3", Trophy],
     ["/elite-4-edge", "Elite 4 Edge", Gem], ["/option-picks", "Option Picks", Target], ["/observer", "Strategy Observer", Telescope]]],
-  ["Trading", [["/auto-trade", "Auto-Trade", Bot], ["/journal", "Trade Journal", BookOpen], ["/regime", "Regime Journal", BookOpen]]],
+  ["Trading", [["/fund-manager", "Fund Manager", PieChart], ["/auto-trade", "Auto-Trade", Bot], ["/journal", "Trade Journal", BookOpen], ["/regime", "Regime Journal", BookOpen]]],
   ["System", [["/data-health", "Data Health", HeartPulse], ["/server", "Server", Server], ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope],
     ["/upgrades", "Upgrade Requests", Lightbulb], ["/account", "Account Settings", UserCircle], ["/users", "User Management", Users]]],
 ];

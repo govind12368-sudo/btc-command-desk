@@ -231,3 +231,46 @@ export function OutcomeBar({ counts, order, colors, testid = "outcome-bar" }) {
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ monthly return bars with target / stop lines */
+export function MonthBars({ months, target, stop, height = 210, names = {}, testid = "month-bars" }) {
+  const W = 760, H = height, L = 6, R = 92, T = 12, B = 22;
+  const pts = months || [];
+  const h = useHover(pts.length, L, W - R, W);
+  if (!pts.length) return <div style={{ height }} className="grid place-items-center text-[12px] text-slate-500">No months yet.</div>;
+  const hi = Math.max(target * 1.25, ...pts.map((p) => p.pct)), lo = Math.min(-stop * 1.25, ...pts.map((p) => p.pct));
+  const y = (v) => T + ((hi - v) / (hi - lo)) * (H - T - B);
+  const bw = (W - L - R) / pts.length;
+  const line = (v, label, color, dash) => (
+    <g>
+      <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={color} strokeWidth="1" strokeDasharray={dash} />
+      <text x={W - R + 6} y={y(v) + 3.5} fontSize="10.5" fill={VIZ.muted} fontFamily="JetBrains Mono, ui-monospace, monospace">{label}</text>
+    </g>
+  );
+  const p = h.i != null ? pts[h.i] : null;
+  return (
+    <div className="relative" data-testid={testid}>
+      <svg ref={h.ref} viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" onMouseMove={h.onMove} onMouseLeave={h.onLeave} role="img" aria-label="Fund return by month, in percent of the fund">
+        {line(target, `target +${target}%`, VIZ.brand, "4 3")}
+        {line(-stop, `stop −${stop}%`, VIZ.neutral, "4 3")}
+        {line(0, "0%", VIZ.neutral)}
+        {pts.map((m, i) => {
+          const pos = m.pct >= 0, y0 = y(0), y1 = y(m.pct);
+          return <rect key={m.month} x={L + i * bw + 1} width={Math.max(1.5, bw - 2)} y={pos ? y1 : y0} height={Math.max(1, Math.abs(y1 - y0))} rx="2"
+            fill={pos ? VIZ.up : VIZ.down} opacity={h.i == null || h.i === i ? 1 : 0.4} />;
+        })}
+        {pts.map((m, i) => (m.month.endsWith("-01") || i === 0) && (
+          <text key={m.month} x={L + i * bw + 2} y={H - 6} fontSize="10.5" fill={VIZ.axis} fontFamily="JetBrains Mono, ui-monospace, monospace">{m.month.endsWith("-01") ? m.month.slice(0, 4) : m.month}</text>
+        ))}
+      </svg>
+      {p && (
+        <Tip x={L + h.i * bw} W={W}>
+          <div className="text-slate-400">{p.month}</div>
+          <b>{p.pct > 0 ? "+" : ""}{p.pct.toFixed(1)}%</b> <span className="text-slate-400">({p.net >= 0 ? "+" : "−"}${n(Math.abs(p.net), 0)})</span>
+          {Object.entries(p.by || {}).filter(([, v]) => v).map(([k, v]) => <div key={k} className="text-slate-400">{names[k] || k}: {v >= 0 ? "+" : "−"}${n(Math.abs(v), 0)}</div>)}
+          {p.skipped > 0 && <div className="text-slate-500">{p.skipped} trades not taken</div>}
+        </Tip>
+      )}
+    </div>
+  );
+}

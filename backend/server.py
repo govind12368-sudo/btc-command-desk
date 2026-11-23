@@ -47,6 +47,7 @@ import intel
 import desk
 import support
 import broker_keys
+import fundmgr
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1109,6 +1110,52 @@ class EliteModeIn(BaseModel):
     confirm: Optional[str] = Field(default=None, max_length=10)
 
 
+class FundSettingsIn(BaseModel):
+    capital: Optional[float] = Field(default=None, ge=100, le=10_000_000)
+    alloc: Optional[dict[str, float]] = None
+    target_pct: Optional[float] = Field(default=None, ge=0.5, le=100)
+    month_loss_pct: Optional[float] = Field(default=None, ge=1, le=100)
+    fund_dd_pct: Optional[float] = Field(default=None, ge=1, le=100)
+    strat_dd_pct: Optional[dict[str, float]] = None
+    max_use_pct: Optional[float] = Field(default=None, ge=5, le=100)
+    lock_at_target: Optional[bool] = None
+
+
+class FundControlIn(BaseModel):
+    action: Literal["pause", "resume", "stop_all", "resume_all", "restart"]
+    strategy: Optional[Literal["elite", "optpicks", "flush"]] = None
+    confirm: Optional[str] = Field(default=None, max_length=10)
+
+
+@api.get("/fund")
+async def fund_get(u=Depends(current_user)):
+    """Fund Manager: a paper fund over Elite 4 Edge, Option Picks and Flush Short. No order is ever sent from here."""
+    return await fundmgr.dashboard(u["role"] == "admin")
+
+
+@api.put("/fund/settings")
+async def fund_settings_put(body: FundSettingsIn, request: Request, u=Depends(admin_user)):
+    try:
+        await fundmgr.save_settings(body.model_dump(exclude_none=True), u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("fund_settings", request, u["email"])
+    await fundmgr.sync()
+    return await fundmgr.dashboard(True)
+
+
+@api.post("/fund/control")
+async def fund_control(body: FundControlIn, request: Request, u=Depends(admin_user)):
+    if body.action == "restart" and (body.confirm or "").strip().upper() != "RESTART":
+        raise HTTPException(400, "Type RESTART to begin a new fund book")
+    try:
+        await fundmgr.control(body.action, body.strategy, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("fund_control", request, u["email"], detail=f"{body.action} {body.strategy or ''}".strip())
+    return await fundmgr.dashboard(True)
+
+
 @api.get("/elite")
 async def elite_get(u=Depends(current_user)):
     out = await elite.dashboard()
@@ -1584,7 +1631,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), fundmgr.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

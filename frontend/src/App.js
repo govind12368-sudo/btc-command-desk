@@ -31,6 +31,7 @@ const DeltaTop3 = lazy(() => import("@/pages/DeltaTop3"));
 const EliteEdge = lazy(() => import("@/pages/EliteEdge"));
 const ServerHealth = lazy(() => import("@/pages/ServerHealth"));
 const OptionPicks = lazy(() => import("@/pages/OptionPicks"));
+const FundManager = lazy(() => import("@/pages/FundManager"));
 const StrategyObserver = lazy(() => import("@/pages/StrategyObserver"));
 const AutoTrade = lazy(() => import("@/pages/AutoTrade"));
 const DataHealth = lazy(() => import("@/pages/DataHealth"));
@@ -82,6 +83,7 @@ function Gate() {
         <Route path="/delta-top3" element={<DeltaTop3 />} />
         <Route path="/elite-4-edge" element={<EliteEdge />} />
         <Route path="/option-picks" element={<OptionPicks />} />
+        <Route path="/fund-manager" element={<FundManager />} />
         <Route path="/observer" element={<StrategyObserver />} />
         <Route path="/auto-trade" element={isAdmin ? <AutoTrade /> : <Navigate to="/" replace />} />
         <Route path="/validation" element={<Validation />} />

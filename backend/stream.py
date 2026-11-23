@@ -52,7 +52,7 @@ async def markers():
                   (S.get("readiness") or {}).get("status") if isinstance(S.get("readiness"), dict) else None]
     v = {
         "state": hash((srcs, WS.get("status"), json.dumps(core_state, sort_keys=True, default=str))),
-        "runs": _ca("runs"), "trio": _ca("trio"), "flush": _ca("flush"), "plan_a": _ca("plan_a"), "regime": _ca("regime"), "observer": _ca("observer"),
+        "runs": _ca("runs"), "trio": _ca("trio"), "flush": _ca("flush"), "plan_a": _ca("plan_a"), "regime": _ca("regime"), "observer": _ca("observer"), "fund": _ca("fundmgr"),
         "elite": f"{_ca('elite')}|{await _db_latest('elite_events')}",
         "optpicks": f"{_ca('optpicks')}|{await _db_latest('opt_live', 'created')}",
         "autotrade": await _db_latest("autotrade_events"),

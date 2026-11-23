@@ -20,6 +20,7 @@ const MAP = {
   BLOCKED: "red", FAIL: "red", SELL: "red", SHORT: "red", "STOP FIRST": "red", ERROR: "red", CONFLICT: "red", INVALIDATED: "red", DOWN: "red",
   "STILL NEEDS ATTENTION": "red", "SOURCE ERROR": "red", "INVALID SNAPSHOT": "red", CRITICAL: "red", HIGH: "amber", MEDIUM: "indigo", LOW: "slate",
   STALE: "slate", EXPIRED: "slate", CANCELLED: "slate", IGNORED: "slate", RECONNECTING: "amber", IDLE: "slate", LIVE: "red", PAPER: "slate", TESTNET: "amber",
+  TRADE: "teal", TAKEN: "teal", TARGET: "teal", "IN TRADE": "indigo", "STAND ASIDE": "slate", STOPPED: "red", CHECK: "amber", WARN: "amber", SKIPPED: "slate", INFO: "slate", OFF: "gray",
   UNAVAILABLE: "gray", "HISTORY GAP": "gray", ACCESS_NEEDED: "gray", "PROVIDER ACCESS/INPUT NEEDED": "gray", RATE_LIMITED: "amber",
 };
 
