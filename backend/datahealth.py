@@ -18,7 +18,7 @@ ENGINES = [  # module, label, cycle in seconds, key holding the last run
     ("trio", "Delta Top 3", 120, "computed_at"),
     ("elite", "Elite 4 Edge", 120, "computed_at"),
     ("optpicks", "Option Picks", 900, "computed_at"),
-    ("observer", "Strategy Observer", 60, "computed_at"),
+    ("observer", "Strategy Observer", 600, "computed_at"),   # recomputes every 10th minute
     ("daytype", "Day-type switch", 60, "updated"),
 ]
 
