@@ -29,6 +29,7 @@ import CandleRuns from "@/pages/CandleRuns";
 import DeltaTop3 from "@/pages/DeltaTop3";
 import EliteEdge from "@/pages/EliteEdge";
 import ServerHealth from "@/pages/ServerHealth";
+import OptionPicks from "@/pages/OptionPicks";
 import StrategyObserver from "@/pages/StrategyObserver";
 import AutoTrade from "@/pages/AutoTrade";
 
@@ -72,6 +73,7 @@ function Gate() {
         <Route path="/candle-runs" element={<CandleRuns />} />
         <Route path="/delta-top3" element={<DeltaTop3 />} />
         <Route path="/elite-4-edge" element={<EliteEdge />} />
+        <Route path="/option-picks" element={<OptionPicks />} />
         <Route path="/observer" element={<StrategyObserver />} />
         <Route path="/auto-trade" element={isAdmin ? <AutoTrade /> : <Navigate to="/" replace />} />
         <Route path="/validation" element={<Validation />} />

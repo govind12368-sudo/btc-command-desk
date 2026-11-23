@@ -34,6 +34,7 @@ import runs
 import trio
 import elite
 import sysmon
+import optpicks
 import observer
 import autotrade
 import daytype
@@ -1032,6 +1033,18 @@ async def delta_top3_get(u=Depends(current_user)):
     return {**(st["data"] or {"name": trio.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
+# ---------------- Option Picks (BTC daily options on Delta India; paper only, no orders, no alerts) ----------------
+@api.get("/option-picks")
+async def option_picks_get(u=Depends(current_user)):
+    return await optpicks.dashboard()
+
+
+@api.get("/option-picks/trades.csv")
+async def option_picks_csv(key: Literal["IFLY", "SP16", "SSTR", "BPS", "BCS"], u=Depends(current_user)):
+    return PlainTextResponse(optpicks.trades_csv(key), media_type="text/csv",
+                             headers={"Content-Disposition": f'attachment; filename="option_picks_{key}_backtest.csv"'})
+
+
 # ---------------- Elite 4 Edge (one trade at a time; paper by default, real orders only when an admin switches it on) ----------------
 class EliteControlIn(BaseModel):
     action: Literal["stop_all", "resume"]
@@ -1470,7 +1483,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 
