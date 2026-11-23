@@ -1,22 +1,25 @@
-"""Option Picks: the owner's BTC daily-option selling picks on Delta Exchange India (paper only, owner request 23 Nov 2026).
+"""Option Picks: BTC daily-option selling on Delta Exchange India (paper only: no orders, no alerts).
 
-Owner, 23 Nov 2026 16:00 IST: run ONLY pick 5 (SSTR) on the site; the others stay in the code, switched off.
-Cross-checked first on Delta's own data (lab: research/opt_verify, the owner's workbook "BTC_Option_Picks_Crosscheck"):
-  IFLY  pick 2  BTC-IFLY-ATM2-1715-NS       iron fly: sell ATM put + call, buy put ~spot-2% and call ~spot+2%, 17:15 IST, hold   profitable, fragile
-  SP16  pick 4  BTC-SP-ATM-1600-SL2X-F20    short ATM put (strike nearest BTC futures) 16:00, stop 2x on 1-min mark high      profitable, fragile
-  SSTR  pick 5  BTC-SSTR-ATM-1700-SL2X-F20  short ATM straddle 17:00, each leg stop 2x                                       CONFIRMED
-  BPS   pick 1  BTC-BPS-S2B5-2130-NS        bull put spread 2%/5%, 21:30 the day before                                     NOT confirmed (kept in code, off)
-  BCS   pick 3  BTC-BCS-S2B5-2130-NS        bear call spread 2%/5%, 21:30 the day before                                    NOT confirmed (kept in code, off)
+On the site (owner, 23 Nov 2026): only pick 5, BTC-SSTR-ATM-1700-SL2X-F20, short ATM straddle at 17:00 IST, expiry 17:30 IST.
+The other four picks stay in the code, switched off:
+  IFLY  pick 2  BTC-IFLY-ATM2-1715-NS       iron fly: sell ATM put + call, buy put ~spot-2% and call ~spot+2%, 17:15 IST, hold
+  SP16  pick 4  BTC-SP-ATM-1600-SL2X-F20    short ATM put 16:00, stop 2x on the 1-minute mark high
+  BPS   pick 1  BTC-BPS-S2B5-2130-NS        bull put spread 2%/5%, 21:30 the day before
+  BCS   pick 3  BTC-BCS-S2B5-2130-NS        bear call spread 2%/5%, 21:30 the day before
 
-Rules as written in the owner's workbooks. Daily expiry 17:30 IST (12:00 UTC). Entry value = the candle that OPENS at the entry
-time (5-minute bars for IFLY/BPS/BCS, 1-minute for SP16/SSTR), which is how the owner's 5 PM workbook was built (matched on all 389
-days), so the live paper entry is at the end of that bar (IFLY 17:20, SP16 16:01, SSTR 17:01). Strike = nearest listed strike to the
-target (spot = BTC index .DEXBTUSD for IFLY/BPS/BCS, BTC futures BTCUSD for SP16/SSTR). SELL at mark - max($0.10, 1%), BUY at
-mark + max($0.10, 1%) (rounded to $0.1 for SP16/SSTR). Size floor($10,000 / price / 0.001) x 0.001 BTC per leg ($1,000 at 10x).
-Fees: each expiry's Delta fee record (taker rate on notional, capped at a share of the premium) + 18% GST at entry, on a stop
-buy-back, and at settlement (settlement fee, capped on the settlement value, so worthless legs pay none). SP16/SSTR: stop when a
-1-minute mark high reaches 2x the sell price, fill at stop + max($0.10, 1%) rounded up; skip the day if the put mark < $20 or BTC
-futures are up > 2% since 17:31 IST yesterday. Everything else settles at Delta's official settlement index.
+Daily expiry 17:30 IST (12:00 UTC). Entry value = the candle that OPENS at the entry time (1-minute for SSTR/SP16, 5-minute for the
+others), so the live paper entry is at the end of that bar (SSTR 17:01). Strike = nearest listed strike (BTCUSD futures for SSTR/SP16,
+BTC index .DEXBTUSD for the others). SELL at mark - max($0.10, 1%), BUY at mark + max($0.10, 1%) (rounded to $0.1 for SSTR/SP16).
+SSTR/SP16: each leg stopped when a 1-minute mark high reaches 2x its sell price, bought back at stop + max($0.10, 1%) rounded up; the
+other leg stays open; skip the day if the ATM put mark < $20 or BTC futures are up > 2% since 17:31 IST yesterday. Otherwise legs
+settle at Delta's official settlement index.
+
+Trades are stored as FACTS (strikes, marks, fills, stop times, settlement index, each expiry's fee record); size, P&L and fees are
+worked out from the size settings, so changing a setting re-sizes every backtest and paper trade:
+  qty per leg = floor(capital x leverage / reference price at entry / 0.001) x 0.001 BTC   (put legs use the put setting, calls the call)
+  fees = Delta fee record (taker rate on notional, capped at a share of the premium) + 18% GST at entry, on a stop buy-back and at
+         settlement (Delta's settlement fee is capped on the settlement value, so worthless legs pay none)
+Settings (admin, db.opt_settings): put_capital, put_leverage, call_capital, call_leverage; default $2,000 x 25 each (owner, 23 Nov 2026).
 """
 import asyncio
 import json
@@ -33,31 +36,105 @@ log = logging.getLogger("optpicks")
 NAME = "Option Picks"
 IST = timezone(timedelta(hours=5, minutes=30))
 DELTA = "https://api.india.delta.exchange"
-CAPITAL, LEVERAGE, NOTIONAL = 1000.0, 10, 10000.0
 GST = 0.18
+SIZING_DEFAULT = {"put_capital": 2000.0, "put_leverage": 25.0, "call_capital": 2000.0, "call_leverage": 25.0}
+SIZING_LIMITS = {"put_capital": (0, 1_000_000), "call_capital": (0, 1_000_000), "put_leverage": (1, 100), "call_leverage": (1, 100)}
+RECENT_FROM = "2025-10-30"
+NOT_CHECKED = "Not checked: Delta margin for $100,000 of short options on $4,000, and order-book depth at ~5× the original size"
 STRATS = {
-    "IFLY": {"pick": 2, "id": 1995, "code": "BTC-IFLY-ATM2-1715-NS", "name": "Iron fly, ATM body, wings ±2%", "kind": "hold", "ref": "index", "entry": (17, 15), "bar": 300,
-             "legs": [(-1, "P", 1.0), (-1, "C", 1.0), (1, "P", 0.98), (1, "C", 1.02)], "enabled": False, "grade": "caution",
-             "verdict": "Profitable on real data but smaller than the workbook; loses with 5% worse fills + 2x fees; real trades at the fill price only 1 day in 4"},
-    "SP16": {"pick": 4, "id": None, "code": "BTC-SP-ATM-1600-SL2X-F20", "name": "Short ATM put 16:00, stop 2x", "kind": "stop", "ref": "futures", "entry": (16, 0), "bar": 60,
-             "typs": "P", "enabled": False, "grade": "caution",
-             "verdict": "Profitable on real data, about 25% smaller than the workbook; loses with 5% worse fills + 2x fees"},
-    "SSTR": {"pick": 5, "id": None, "code": "BTC-SSTR-ATM-1700-SL2X-F20", "name": "Short ATM straddle 17:00, stop 2x each leg", "kind": "stop", "ref": "futures", "entry": (17, 0),
-             "bar": 60, "typs": "PC", "enabled": True, "grade": "pass",
-             "verdict": "Confirmed: matches the workbook (same max drawdown and worst trade); profit in 2024, 2025 and 2026"},
-    "BPS": {"pick": 1, "id": 1525, "code": "BTC-BPS-S2B5-2130-NS", "name": "Bull put spread sell 2% / buy 5%", "kind": "hold", "ref": "index", "entry": (21, 30), "bar": 300,
-            "legs": [(-1, "P", 0.98), (1, "P", 0.95)], "enabled": False, "grade": "fail",
-            "verdict": "Not confirmed: +$365 in 3 years instead of +$5,254, the $1,000 account fell to $73, loss in 2025"},
-    "BCS": {"pick": 3, "id": 1565, "code": "BTC-BCS-S2B5-2130-NS", "name": "Bear call spread sell 2% / buy 5%", "kind": "hold", "ref": "index", "entry": (21, 30), "bar": 300,
-            "legs": [(-1, "C", 1.02), (1, "C", 1.05)], "enabled": False, "grade": "fail",
-            "verdict": "Not confirmed: a $574 loss instead of +$3,758; the $1,000 account fell below $0"},
+    "IFLY": {"pick": 2, "code": "BTC-IFLY-ATM2-1715-NS", "name": "Iron fly, ATM body, wings ±2%", "kind": "hold", "ref": "index", "entry": (17, 15), "bar": 300,
+             "legs": [(-1, "P", 1.0), (-1, "C", 1.0), (1, "P", 0.98), (1, "C", 1.02)], "enabled": False,
+             "verdict": "Profitable on Delta's real prices, but loses with 5% worse fills and 2x fees; real trades at the fill price only about 1 day in 4."},
+    "SP16": {"pick": 4, "code": "BTC-SP-ATM-1600-SL2X-F20", "name": "Short ATM put 16:00, stop 2x", "kind": "stop", "ref": "futures", "entry": (16, 0), "bar": 60,
+             "typs": "P", "enabled": False, "verdict": "Profitable on Delta's real prices, but loses with 5% worse fills and 2x fees."},
+    "SSTR": {"pick": 5, "code": "BTC-SSTR-ATM-1700-SL2X-F20", "name": "Short ATM straddle 17:00, stop 2x each leg", "kind": "stop", "ref": "futures", "entry": (17, 0),
+             "bar": 60, "typs": "PC", "enabled": True,
+             "verdict": "Profitable in 2024, 2025 and 2026 on Delta's real prices. Sensitive to fills: with 5% worse fills and 2× fees the full period turns negative."},
+    "BPS": {"pick": 1, "code": "BTC-BPS-S2B5-2130-NS", "name": "Bull put spread sell 2% / buy 5%", "kind": "hold", "ref": "index", "entry": (21, 30), "bar": 300,
+            "legs": [(-1, "P", 0.98), (1, "P", 0.95)], "enabled": False, "verdict": "Little profit on Delta's real prices and a deep drawdown; a loss in 2025."},
+    "BCS": {"pick": 3, "code": "BTC-BCS-S2B5-2130-NS", "name": "Bear call spread sell 2% / buy 5%", "kind": "hold", "ref": "index", "entry": (21, 30), "bar": 300,
+            "legs": [(-1, "C", 1.02), (1, "C", 1.05)], "enabled": False, "verdict": "A loss on Delta's real prices over 2024-2026."},
 }
 ORDER = ["IFLY", "SP16", "SSTR", "BPS", "BCS"]
 ENABLED = [k for k in ORDER if STRATS[k]["enabled"]]
 HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "optpicks_history.json")
 HISTORY_TO = date(2026, 11, 22)                    # the history file covers expiries up to this day; the server backtests later days
-STATE = {"computed_at": None, "error": None, "data": None}
+STATE = {"computed_at": None, "error": None, "data": None, "sizing": dict(SIZING_DEFAULT)}
 _HIST = {}
+
+
+# ================================================================ size settings and pricing (P&L from trade facts)
+def leg_qty(typ, ref_price, sizing):
+    cap, lev = (sizing["put_capital"], sizing["put_leverage"]) if typ == "P" else (sizing["call_capital"], sizing["call_leverage"])
+    return math.floor(cap * lev / ref_price / 0.001 + 1e-9) * 0.001 if ref_price else 0.0
+
+
+def capital_for(key, sizing):
+    typs = STRATS[key]["typs"] if STRATS[key]["kind"] == "stop" else {t for _, t, _ in STRATS[key]["legs"]}
+    return sum(sizing["put_capital"] if t == "P" else sizing["call_capital"] for t in set(typs))
+
+
+def size_label(sizing):
+    p, c = sizing, sizing
+    if p["put_capital"] == c["call_capital"] and p["put_leverage"] == c["call_leverage"]:
+        return f"${p['put_capital']:,.0f} × {p['put_leverage']:g}x per leg (put + call)"
+    return f"put ${p['put_capital']:,.0f} × {p['put_leverage']:g}x, call ${c['call_capital']:,.0f} × {c['call_leverage']:g}x"
+
+
+def price(t, sizing):
+    """P&L of a trade (backtest or paper) at the given size, from its facts. Net is None while any leg is still open."""
+    day = date.fromisoformat(t["day"])
+    ref, settle = t.get("price"), t.get("settle")
+    legs, gross, fees, gross2, fees2, open_ = [], 0.0, 0.0, 0.0, 0.0, False
+    for l in t.get("legs", []):
+        typ = l.get("type") or l["sym"][0]
+        q = round(leg_qty(typ, ref, sizing), 3)
+        p = {"taker": l.get("taker"), "cap": l.get("cap")}
+        sd = -1 if l["side"] == "SELL" else 1
+        px, ex, xp = l["fill"], l.get("exit"), l.get("exit_price")
+        f_in = fee(px, q, ref, p, day)
+        px2 = px * 0.95 if sd < 0 else px * 1.05
+        if ex is None or xp is None:
+            open_ = True
+            legs.append({**l, "qty": q, "gross": None, "fees": round(f_in, 4)})
+            fees += f_in
+            continue
+        if ex == "Stop":
+            f_out, xp2 = fee(xp, q, ref, p, day), xp * 1.05
+            f2 = 2 * (fee(px2, q, ref, p, day) + fee(xp2, q, ref, p, day))
+        else:
+            f_out, xp2 = fee(xp, q, settle, p, day), xp
+            f2 = 2 * (fee(px2, q, ref, p, day) + fee(xp, q, settle, p, day))
+        g = (px - xp) * q if sd < 0 else (xp - px) * q
+        g2 = (px2 - xp2) * q if sd < 0 else (xp2 - px2) * q
+        gross += g; fees += f_in + f_out; gross2 += g2; fees2 += f2
+        legs.append({**l, "qty": q, "gross": round(g, 4), "fees": round(f_in + f_out, 4)})
+    qtys = sorted({l["qty"] for l in legs})
+    return {**t, "legs": legs, "qty": qtys[0] if len(qtys) == 1 else None, "gross": None if open_ else gross, "fees": fees,
+            "net": None if open_ else gross - fees, "net_v2": None if open_ else gross2 - fees2}
+
+
+async def get_sizing():
+    doc = await db.opt_settings.find_one({"_id": "sizing"}) or {}
+    s = {k: float(doc.get(k, v)) for k, v in SIZING_DEFAULT.items()}
+    STATE["sizing"] = s
+    return s
+
+
+async def set_sizing(values, by):
+    s = await get_sizing()
+    for k, v in values.items():
+        if k not in SIZING_DEFAULT or v is None:
+            continue
+        lo, hi = SIZING_LIMITS[k]
+        v = float(v)
+        if not (lo < v <= hi) and not (k.endswith("capital") and v == 0):
+            raise ValueError(f"{k} must be between {lo} and {hi}")
+        s[k] = v
+    await db.opt_settings.update_one({"_id": "sizing"}, {"$set": {**s, "by": by, "at": iso(now_utc())}}, upsert=True)
+    STATE["sizing"] = s
+    await compute()
+    return s
 
 
 # ================================================================ pure rules (the lab runs this same code on its cached data)
@@ -115,10 +192,6 @@ def ce1(x):
     return math.ceil(x * 10 - 1e-7) / 10
 
 
-def qty_for(px):
-    return math.floor(NOTIONAL / px / 0.001 + 1e-9) * 0.001
-
-
 def real_print(trades, t0, t1, side, px):
     vol, ok = 0.0, False
     for t in sorted(trades or {}):
@@ -148,10 +221,11 @@ def pick_legs(key, prods, price, t):
 
 
 def build_trade(key, D):
-    """The backtest trade of one strategy on one expiry day from fetched data D (see needs()). Returns (trade, reason)."""
+    """The backtest trade of one strategy on one expiry day from fetched data D (see needs()): FACTS only (no size, no P&L).
+    Returns (trade, reason). A trade the skip rules reject has t["skip"] set."""
     s, prods, settle, day = STRATS[key], D["prods"], D["settle"], D["day"]
     st, et = settle_t(day), entry_t(key, day)
-    out = {"key": key, "day": day.isoformat(), "entry_ist": datetime.fromtimestamp(et, IST).strftime("%Y-%m-%d %H:%M"), "settle": settle, "legs": []}
+    out = {"key": key, "day": day.isoformat(), "entry_ist": datetime.fromtimestamp(et, IST).strftime("%Y-%m-%d %H:%M"), "settle": settle, "legs": [], "skip": None}
     if s["kind"] == "hold":
         spot = at(D["index"], et)
         if spot is None:
@@ -159,10 +233,8 @@ def build_trade(key, D):
         legs, why = pick_legs(key, prods, spot, et)
         if not legs:
             return None, why
-        qty = qty_for(spot)
-        out.update(price=spot, qty=round(qty, 3))
+        out["price"] = spot
         near = et > st - 43200
-        gross = fees = gross2 = fees2 = 0.0
         real_all = True
         for side, sym in legs:
             p = prods[sym]
@@ -170,18 +242,12 @@ def build_trade(key, D):
             if mark is None:
                 return None, f"no mark for {sym} at entry"
             px = mark - max(0.10, 0.01 * mark) if side < 0 else mark + max(0.10, 0.01 * mark)
-            px2 = px * 0.95 if side < 0 else px * 1.05
-            intr = intrinsic(p, settle)
-            g = (px - intr) * qty if side < 0 else (intr - px) * qty
-            g2 = (px2 - intr) * qty if side < 0 else (intr - px2) * qty
-            f = fee(px, qty, spot, p, day) + fee(intr, qty, settle, p, day)
-            gross += g; fees += f; gross2 += g2; fees2 += 2 * (fee(px2, qty, spot, p, day) + fee(intr, qty, settle, p, day))
             w = (et - 120, et + 120) if near else (et - 600, et + 600)
             ok, vol = real_print((D["t1"] if near else D["t5"]).get(sym), *w, side, px)
             real_all &= ok
-            out["legs"].append({"side": "SELL" if side < 0 else "BUY", "sym": sym, "k": p["k"], "mark": round(mark, 4), "fill": round(px, 4), "exit": "Settle",
-                                "exit_price": round(intr, 4), "gross": round(g, 4), "fee": round(f, 4), "real": ok, "vol": vol})
-        out.update(gross=gross, fees=fees, net=gross - fees, net_v2=gross2 - fees2, exit="Settle", real=real_all, skip=None)
+            out["legs"].append({"side": "SELL" if side < 0 else "BUY", "sym": sym, "type": p["type"], "k": p["k"], "mark": round(mark, 4), "fill": round(px, 4),
+                                "exit": "Settle", "exit_price": round(intrinsic(p, settle), 4), "taker": p.get("taker"), "cap": p.get("cap"), "real": ok, "vol": vol})
+        out.update(exit="Settle", real=real_all)
         return out, None
     # short ATM leg(s) with a 2x stop and the two skip rules
     f = at(D["fut"], et)
@@ -192,7 +258,6 @@ def build_trade(key, D):
     legs, why = pick_legs(key, prods, f, et)
     if not legs:
         return None, why
-    qty = qty_for(f)
     marks = {}
     for _, sym in legs:
         m = at(D["m1"].get(sym, {}), et)
@@ -201,8 +266,7 @@ def build_trade(key, D):
         marks[sym] = m
     put = next((marks[sym] for _, sym in legs if prods[sym]["type"] == "P"), None)
     skip = "put mark below $20" if put is not None and put < 20 else "BTC up more than 2% since 17:31 IST yesterday" if chg is not None and chg > 0.02 else None
-    out.update(price=f, qty=round(qty, 3), chg_1731=chg, skip=skip)
-    gross = fees = gross2 = fees2 = 0.0
+    out.update(price=f, chg_1731=chg, skip=skip)
     real_all, exits = True, []
     for _, sym in legs:
         p, m = prods[sym], marks[sym]
@@ -213,21 +277,14 @@ def build_trade(key, D):
             if et + 60 <= c_t < st and D["m1"][sym][c_t][1] >= stop - 1e-9:
                 ex, ex_t = ce1(stop + max(0.10, 0.01 * stop)), c_t
                 break
-        intr = intrinsic(p, settle)
-        if ex is not None:
-            g, fe = (sell - ex) * qty, fee(sell, qty, f, p, day) + fee(ex, qty, f, p, day)
-            g2, fe2 = (sell * 0.95 - ex * 1.05) * qty, 2 * (fee(sell * 0.95, qty, f, p, day) + fee(ex * 1.05, qty, f, p, day))
-        else:
-            g, fe = (sell - intr) * qty, fee(sell, qty, f, p, day) + fee(intr, qty, settle, p, day)
-            g2, fe2 = (sell * 0.95 - intr) * qty, 2 * (fee(sell * 0.95, qty, f, p, day) + fee(intr, qty, settle, p, day))
-        gross += g; fees += fe; gross2 += g2; fees2 += fe2
         ok, vol = real_print(D["t1"].get(sym), et - 120, et + 120, -1, sell)
         real_all &= ok
         exits.append("Stop" if ex is not None else "Settle")
-        out["legs"].append({"side": "SELL", "sym": sym, "k": p["k"], "mark": round(m, 4), "fill": sell, "stop": round(stop, 2), "exit": exits[-1],
-                            "exit_price": ex if ex is not None else round(intr, 4), "stop_ist": datetime.fromtimestamp(ex_t + 60, IST).strftime("%H:%M") if ex_t else None,
-                            "gross": round(g, 4), "fee": round(fe, 4), "real": ok, "vol": vol})
-    out.update(gross=gross, fees=fees, net=gross - fees, net_v2=gross2 - fees2, exit="/".join(exits), real=real_all)
+        out["legs"].append({"side": "SELL", "sym": sym, "type": p["type"], "k": p["k"], "mark": round(m, 4), "fill": sell, "stop": round(stop, 2), "exit": exits[-1],
+                            "exit_price": ex if ex is not None else round(intrinsic(p, settle), 4),
+                            "stop_ist": datetime.fromtimestamp(ex_t + 60, IST).strftime("%H:%M") if ex_t else None,
+                            "taker": p.get("taker"), "cap": p.get("cap"), "real": ok, "vol": vol})
+    out.update(exit="/".join(exits), real=real_all)
     return out, None
 
 
@@ -249,38 +306,60 @@ def needs(key, D):
     return [x for _, sym in legs or [] for x in (("m1", sym, "MARK:" + sym, "1m", et - 300, st), ("t1", sym, sym, "1m", et - 300, et + 300))]
 
 
-def stats(rows):
-    rows = sorted(rows, key=lambda r: r["entry_ist"])
+def stats(rows, capital):
+    """Priced rows (net set) -> totals; equity, peak and drawdown start from `capital`."""
+    rows = sorted([r for r in rows if r.get("net") is not None], key=lambda r: r["entry_ist"])
     n = len(rows)
     if not n:
-        return {"trades": 0, "wins": 0, "win_rate": None, "gross": 0.0, "fees": 0.0, "net": 0.0, "max_dd": 0.0, "worst": None, "best": None, "view2_net": 0.0,
-                "real_fill": None, "lowest_balance": CAPITAL}
-    eq = pk = low = CAPITAL
+        return {"trades": 0, "wins": 0, "losses": 0, "win_rate": None, "gross": 0.0, "fees": 0.0, "net": 0.0, "return": 0.0, "max_dd": 0.0, "max_dd_pct": 0.0,
+                "worst": None, "best": None, "view2_net": 0.0, "real_fill": None, "lowest_balance": capital, "capital": capital}
+    eq = pk = low = capital
     dd = 0.0
     for r in rows:
         eq += r["net"]; pk = max(pk, eq); dd = max(dd, pk - eq); low = min(low, eq)
     w = sum(r["net"] > 0 for r in rows)
-    return {"trades": n, "wins": w, "win_rate": w / n, "gross": round(sum(r["gross"] for r in rows), 2), "fees": round(sum(r["fees"] for r in rows), 2),
-            "net": round(sum(r["net"] for r in rows), 2), "max_dd": round(dd, 2), "worst": round(min(r["net"] for r in rows), 2), "best": round(max(r["net"] for r in rows), 2),
-            "view2_net": round(sum(r.get("net_v2", r["net"]) for r in rows), 2), "real_fill": sum(1 for r in rows if r.get("real")) / n, "lowest_balance": round(low, 2)}
+    net = sum(r["net"] for r in rows)
+    return {"trades": n, "wins": w, "losses": n - w, "win_rate": w / n, "gross": round(sum(r["gross"] for r in rows), 2), "fees": round(sum(r["fees"] for r in rows), 2),
+            "net": round(net, 2), "return": net / capital if capital else None, "max_dd": round(dd, 2), "max_dd_pct": dd / capital if capital else None,
+            "worst": round(min(r["net"] for r in rows), 2), "best": round(max(r["net"] for r in rows), 2),
+            "view2_net": round(sum(r.get("net_v2") if r.get("net_v2") is not None else r["net"] for r in rows), 2),
+            "real_fill": sum(1 for r in rows if r.get("real")) / n, "lowest_balance": round(low, 2), "capital": capital}
 
 
-def tables(rows):
-    rows = sorted(rows, key=lambda r: r["entry_ist"])
+def tables(rows, capital):
+    rows = sorted([r for r in rows if r.get("net") is not None], key=lambda r: r["entry_ist"])
     by_y, by_m = defaultdict(list), defaultdict(list)
     for r in rows:
         by_y[r["day"][:4]].append(r); by_m[r["day"][:7]].append(r)
     cum, months = 0.0, []
     for m in sorted(by_m):
-        s = stats(by_m[m]); cum += s["net"]
+        s = stats(by_m[m], capital); cum += s["net"]
         months.append({"month": m, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net")}, "cumulative": round(cum, 2)})
     cum, years = 0.0, []
     for y in sorted(by_y):
-        s = stats(by_y[y]); cum += s["net"]
-        years.append({"year": y, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd")}, "cumulative": round(cum, 2)})
-    tot = stats(rows)
-    years.append({"year": "Total till date", **{k: tot[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd")}, "cumulative": tot["net"]})
+        s = stats(by_y[y], capital); cum += s["net"]
+        years.append({"year": y, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": round(cum, 2)})
+    tot = stats(rows, capital)
+    years.append({"year": "Total till date", **{k: tot[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": tot["net"]})
     return {"stats": tot, "yearly": years, "monthly": months}
+
+
+def realdata_rows(key, rows, sizing, period_from="2024-01-01", period_to=None):
+    """The two rows of the real-data backtest table: the whole period and the last 13 months (from 30 Oct 2025)."""
+    cap = capital_for(key, sizing)
+    rows = [r for r in rows if r.get("net") is not None]
+    if not rows:
+        return []
+    last = period_to or max(r["day"] for r in rows)
+    fmt = lambda d: date.fromisoformat(d).strftime("%-d %b %Y")
+    out = []
+    for lab, sub in ((f"{fmt(period_from)} – {fmt(last)}", rows), (f"{fmt(RECENT_FROM)} – {fmt(last)}", [r for r in rows if r["day"] >= RECENT_FROM])):
+        st = stats(sub, cap)
+        out.append({"size": size_label(sizing), "period": lab, **{k: st[k] for k in ("trades", "wins", "losses", "win_rate", "gross", "fees", "net", "return", "max_dd",
+                                                                                     "max_dd_pct", "worst", "best", "view2_net", "real_fill")},
+                    "years": {y: (round(sum(r["net"] for r in sub if r["day"][:4] == y), 2) if any(r["day"][:4] == y for r in sub) else None) for y in ("2024", "2025", "2026")},
+                    "verdict": STRATS[key]["verdict"] if sub is rows else None})
+    return out
 
 
 # ================================================================ Delta data (server)
@@ -455,8 +534,7 @@ class Engine:
         if not legs:
             doc.update(status="SKIPPED", reason=why)
             return doc
-        qty = qty_for(price)
-        doc.update(price=price, qty=round(qty, 3), ref=s["ref"])
+        doc.update(price=price, ref=s["ref"])
         if s["kind"] == "stop":
             fp = await self.fut_1731(d)
             chg = price / fp - 1 if fp else None
@@ -476,7 +554,7 @@ class Engine:
                 px = m - max(0.10, 0.01 * m) if side < 0 else m + max(0.10, 0.01 * m)
             doc["legs"].append({"side": "SELL" if side < 0 else "BUY", "sym": sym, "k": c["k"], "type": c["type"], "mark": m, "bid": c["bid"], "ask": c["ask"],
                                 "fill": round(px, 4), "stop": round(2 * px, 2) if s["kind"] == "stop" else None, "status": "OPEN", "taker": info[0], "cap": info[1],
-                                "entry_fee": fee(px, qty, price, {"taker": info[0], "cap": info[1]}, d), "high": m})
+                                "high": m})
         return doc
 
     async def fee_info(self, sym):
@@ -505,8 +583,7 @@ class Engine:
             if hi >= leg["stop"] - 1e-9:
                 hit = min((ct for ct, c in cs.items() if et <= ct < st and c[1] >= leg["stop"] - 1e-9), default=None)
                 ex = ce1(leg["stop"] + max(0.10, 0.01 * leg["stop"]))
-                leg.update(status="STOPPED", exit="Stop", exit_price=ex, exit_ist=datetime.fromtimestamp((hit or now) + 60, IST).strftime("%H:%M"),
-                           exit_fee=fee(ex, t["qty"], t["price"], leg, d))
+                leg.update(status="STOPPED", exit="Stop", exit_price=ex, stop_ist=datetime.fromtimestamp((hit or now) + 60, IST).strftime("%H:%M"))
                 changed = True
         return changed
 
@@ -516,18 +593,21 @@ class Engine:
         settle = next((p["settle"] for p in prods.values() if p["settle"]), None)
         if not settle:
             return False
-        gross = fees = 0.0
         for leg in t["legs"]:
-            sd = -1 if leg["side"] == "SELL" else 1
             if leg["status"] == "OPEN":
-                intr = intrinsic(leg, settle)
-                leg.update(status="SETTLED", exit="Settle", exit_price=round(intr, 4), exit_fee=fee(intr, t["qty"], settle, leg, d))
-            g = (leg["fill"] - leg["exit_price"]) * t["qty"] if sd < 0 else (leg["exit_price"] - leg["fill"]) * t["qty"]
-            leg["gross"] = round(g, 4)
-            gross += g; fees += leg["entry_fee"] + leg.get("exit_fee", 0.0)
-        t.update(status="CLOSED", settle=settle, gross=gross, fees=fees, net=gross - fees, closed=iso(now_utc()),
-                 exit="/".join(l["exit"] for l in t["legs"]))
+                leg.update(status="SETTLED", exit="Settle", exit_price=round(intrinsic(leg, settle), 4))
+        t.update(status="CLOSED", settle=settle, closed=iso(now_utc()), exit="/".join(l["exit"] for l in t["legs"]))
         return True
+
+    async def fill_check(self, t):
+        """Each leg: did a real trade print at our fill price or better within ±2 minutes of the paper entry? (Delta traded candles)"""
+        et = int(datetime.fromisoformat(t["entry_ist"]).replace(tzinfo=IST).timestamp())
+        for leg in t["legs"]:
+            cs = await candles(leg["sym"], "1m", et - 180, et + 180)
+            ok, vol = real_print(cs, et - 120, et + 120, -1 if leg["side"] == "SELL" else 1, leg["fill"])
+            leg.update(real=ok, vol=vol)
+        t["real"] = all(l["real"] for l in t["legs"])
+        t["fill_checked"] = True
 
     async def tick(self):
         async with self.lock:
@@ -551,6 +631,13 @@ class Engine:
                         log.warning("option entry %s: %s", _id, e)
                         continue                       # retried on the next tick while inside the 3-minute window
                     await db.opt_live.insert_one(doc)
+            async for t in db.opt_live.find({"status": {"$in": ["OPEN", "CLOSED"]}, "fill_checked": {"$ne": True}}):
+                try:
+                    if t.get("entry_ist") and t.get("legs") and now >= datetime.fromisoformat(t["entry_ist"]).replace(tzinfo=IST).timestamp() + 180:
+                        await self.fill_check(t)
+                        await db.opt_live.update_one({"_id": t["_id"]}, {"$set": {"legs": t["legs"], "real": t["real"], "fill_checked": True}})
+                except Exception as e:
+                    log.warning("option fill check %s: %s", t["_id"], e)
             async for t in db.opt_live.find({"status": "OPEN"}):
                 d = date.fromisoformat(t["day"])
                 try:
@@ -569,13 +656,19 @@ ENGINE = Engine()
 
 
 async def compute():
-    rows = await backtest_rows()
+    sizing = await get_sizing()
+    raw = await backtest_rows()
+    STATE["skips"] = {(k, r["day"]): r["skip"] for k in ORDER for r in raw.get(k, []) if r.get("skip")}
+    rows = {k: [price(r, sizing) for r in raw.get(k, []) if not r.get("skip")] for k in ORDER}     # days the skip rules reject are not trades
+    days = [doc["_id"] async for doc in db.opt_backtest.find({"_id": {"$gt": HISTORY_TO.isoformat()}}, {"_id": 1})]
+    period_to = max(days + [HISTORY_TO.isoformat()])           # the last expiry checked (history file, then the server's own days)
     per = {}
     for k in ORDER:
-        tb = tables(rows.get(k, []))
-        per[k] = {**tb, "trades": sorted(rows.get(k, []), key=lambda r: r["entry_ist"], reverse=True)}
+        cap = capital_for(k, sizing)
+        per[k] = {**tables(rows[k], cap), "trades": sorted(rows[k], key=lambda r: r["entry_ist"], reverse=True),
+                  "realdata": realdata_rows(k, rows[k], sizing, history().get("from", "2024-01-01"), period_to)}
     STATE["rows"] = rows
-    STATE.update(data={"backtest": per}, computed_at=iso(now_utc()), error=None)
+    STATE.update(data={"backtest": per, "sizing": sizing}, computed_at=iso(now_utc()), error=None)
 
 
 async def loop():
@@ -604,26 +697,33 @@ async def loop():
         await asyncio.sleep(10)
 
 
-def _strat_view(k):
+def _strat_view(k, sizing):
     s = STRATS[k]
-    return {"key": k, "pick": s["pick"], "code": s["code"], "name": s["name"], "enabled": s["enabled"], "verdict": s["verdict"], "grade": s["grade"],
-            "entry_ist": "%02d:%02d" % s["entry"] + (" (day before)" if s["entry"] > (17, 30) else ""), "live_entry_ist": time.strftime("%H:%M", time.gmtime(
-                (s["entry"][0] * 3600 + s["entry"][1] * 60 + s["bar"]))), "stop": "2x sell price (1-min mark high)" if s["kind"] == "stop" else "none (hold to 17:30 settlement)"}
+    return {"key": k, "pick": s["pick"], "code": s["code"], "name": s["name"], "enabled": s["enabled"], "verdict": s["verdict"],
+            "entry_ist": "%02d:%02d" % s["entry"] + (" (day before)" if s["entry"] > (17, 30) else ""),
+            "live_entry_ist": time.strftime("%H:%M", time.gmtime(s["entry"][0] * 3600 + s["entry"][1] * 60 + s["bar"])),
+            "stop": "2x sell price (1-min mark high)" if s["kind"] == "stop" else "none (hold to 17:30 settlement)", "capital": capital_for(k, sizing)}
 
 
 async def dashboard():
     data = STATE.get("data") or {}
-    live = [{k: v for k, v in x.items() if k != "_id"} | {"id": x["_id"]} async for x in db.opt_live.find({"key": {"$in": ENABLED}}).sort("created", -1).limit(400)]
+    sizing = STATE.get("sizing") or dict(SIZING_DEFAULT)
+    raw_live = [{k: v for k, v in x.items() if k != "_id"} | {"id": x["_id"]} async for x in db.opt_live.find({"key": {"$in": ENABLED}}).sort("created", -1).limit(400)]
+    live = []
+    for t in raw_live:
+        if t.get("legs") and t.get("price") and t["status"] in ("OPEN", "CLOSED"):
+            live.append(price(t, sizing))
+        else:
+            live.append({**t, "gross": None, "fees": None, "net": None, "qty": None})
     bt = data.get("backtest") or {}
     btmap = {(k, r["day"]): r for k in ORDER for r in (bt.get(k) or {}).get("trades", [])}
     cmp_rows = []
     for t in live:
         b = btmap.get((t["key"], t["day"]))
+        bskip = (STATE.get("skips") or {}).get((t["key"], t["day"]))
         cmp_rows.append({"day": t["day"], "key": t["key"], "live_status": t["status"], "live_reason": t.get("reason"), "live_net": t.get("net"),
-                         "bt_status": ("SKIPPED" if b.get("skip") else "TAKEN") if b else "not yet", "bt_net": None if not b or b.get("skip") else b["net"],
-                         "bt_reason": b.get("skip") if b else None})
-    live_closed = [t for t in live if t["status"] == "CLOSED"]
-    per_live = {k: stats([{**t, "entry_ist": t["entry_ist"]} for t in live_closed if t["key"] == k]) for k in ENABLED}
+                         "bt_status": "TAKEN" if b else "SKIPPED" if bskip else "not yet", "bt_net": b["net"] if b else None, "bt_reason": bskip})
+    per_live = {k: stats([t for t in live if t["key"] == k and t["status"] == "CLOSED"], capital_for(k, sizing)) for k in ENABLED}
     now = time.time()
     today = datetime.fromtimestamp(now, IST).date()
     nxt = {}
@@ -631,23 +731,28 @@ async def dashboard():
         for d in (today, today + timedelta(days=1), today + timedelta(days=2)):
             if live_entry_t(k, d) > now:
                 nxt[k] = datetime.fromtimestamp(live_entry_t(k, d), IST).strftime("%d %b %H:%M IST"); break
+    notional = sizing["put_capital"] * sizing["put_leverage"] + sizing["call_capital"] * sizing["call_leverage"]
     return {"name": NAME, "computed_at": STATE.get("computed_at"), "error": STATE.get("error"), "paper_only": True,
-            "strategies": [_strat_view(k) for k in ENABLED], "enabled": ENABLED, "check": {k: v for k, v in history().get("check", {}).items() if k in ENABLED},
-            "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED}, "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
-            "settings": {"capital": CAPITAL, "leverage": LEVERAGE, "notional": NOTIONAL}}
+            "strategies": [_strat_view(k, sizing) for k in ENABLED], "enabled": ENABLED,
+            "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED},
+            "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
+            "sizing": sizing, "size_label": size_label(sizing), "order_notional": notional, "not_checked": NOT_CHECKED}
 
 
 def trades_csv(key):
-    """All backtest trades of one strategy as CSV (newest first)."""
+    """All backtest trades of one strategy at the current size as CSV (newest first)."""
     import csv
     import io
-    rows = sorted((STATE.get("rows") or {}).get(key, []), key=lambda r: r["entry_ist"], reverse=True)
+    rows = sorted([r for r in (STATE.get("rows") or {}).get(key, []) if r.get("net") is not None], key=lambda r: r["entry_ist"], reverse=True)
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["Strategy", "Expiry day", "Entry (IST)", "BTC price used", "Qty (BTC per leg)", "Settlement index", "Exit", "Legs", "Gross P&L ($)", "Fees + GST ($)",
-                "Net P&L ($)", "Net with 5% worse fills + 2x fees ($)", "Real trades on all legs at fill", "Source"])
+    w.writerow(["Strategy", "Size", "Expiry day", "Entry (IST)", "BTC futures at entry", "Qty per leg (BTC)", "Settlement index", "Exit", "Legs (sell fill -> exit)",
+                "Gross P&L ($)", "Fees + GST ($)", "Net P&L ($)", "Net with 5% worse fills + 2x fees ($)", "Real trades on all legs at fill", "Source"])
+    lab = size_label(STATE.get("sizing") or SIZING_DEFAULT)
     for r in rows:
-        legs = " ; ".join(f"{l['side']} {l['sym']} fill {l['fill']} -> {l['exit']} {l['exit_price']}" for l in r.get("legs", []))
-        w.writerow([STRATS[key]["code"], r["day"], r["entry_ist"], r.get("price"), r.get("qty"), r.get("settle"), r.get("exit"), legs, round(r["gross"], 4),
-                    round(r["fees"], 4), round(r["net"], 4), round(r.get("net_v2", r["net"]), 4), "Yes" if r.get("real") else "No", r.get("source", "history file")])
+        legs = " ; ".join(f"{l['side']} {l['sym']} {l['qty']:.3f} BTC fill {l['fill']} -> {l['exit']} {l['exit_price']}" + (f" at {l['stop_ist']}" if l.get("stop_ist") else "")
+                          for l in r.get("legs", []))
+        w.writerow([STRATS[key]["code"], lab, r["day"], r["entry_ist"], r.get("price"), r.get("qty"), r.get("settle"), r.get("exit"), legs, round(r["gross"], 4),
+                    round(r["fees"], 4), round(r["net"], 4), round(r["net_v2"], 4) if r.get("net_v2") is not None else "", "Yes" if r.get("real") else "No",
+                    r.get("source", "backtest file")])
     return buf.getvalue()

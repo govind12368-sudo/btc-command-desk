@@ -1036,7 +1036,25 @@ async def delta_top3_get(u=Depends(current_user)):
 # ---------------- Option Picks (BTC daily options on Delta India; paper only, no orders, no alerts) ----------------
 @api.get("/option-picks")
 async def option_picks_get(u=Depends(current_user)):
-    return await optpicks.dashboard()
+    return {**await optpicks.dashboard(), "is_admin": u["role"] == "admin"}
+
+
+class OptSizingIn(BaseModel):
+    put_capital: float = Field(gt=0, le=1_000_000)
+    put_leverage: float = Field(ge=1, le=100)
+    call_capital: float = Field(gt=0, le=1_000_000)
+    call_leverage: float = Field(ge=1, le=100)
+
+
+@api.post("/option-picks/sizing")
+async def option_picks_sizing(body: OptSizingIn, request: Request, u=Depends(admin_user)):
+    """Admin: size per leg (capital x leverage). Every backtest and paper trade is re-sized from its stored facts."""
+    try:
+        await optpicks.set_sizing(body.model_dump(), u["email"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    await SEC.log_event("option_picks_sizing", request, u["email"], detail=str(body.model_dump()))
+    return {**await optpicks.dashboard(), "is_admin": True}
 
 
 @api.get("/option-picks/trades.csv")
