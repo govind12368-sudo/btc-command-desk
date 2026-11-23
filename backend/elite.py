@@ -249,10 +249,10 @@ async def ensure_indexes():
     await db.elite_events.create_index("at")
 
 
-async def get_state():
+async def get_state(now=None):
     st = await db.elite_state.find_one({"_id": "state"})
     if not st:
-        now = now_utc()
+        now = now or now_utc()
         st = {"_id": "state", "mode": "PAPER", "mode_since": iso(now), "live_start": iso(now), "last_tc": None, "peak": 0.0, "halt": None, "testnet_ok": False}
         await db.elite_state.insert_one(st)
     return st
@@ -349,7 +349,7 @@ class Engine:
     async def on_candles(self, cands, last_tc):
         """New candle closes: record every signal (taken or skipped with the reason) and take the first allowed one."""
         async with self.lock:
-            st = await get_state()
+            st = await get_state(self.clock())
             now = self.clock()
             if st.get("last_tc") is None:
                 await set_state(last_tc=last_tc)      # first start: never trade signals from before the engine ran
@@ -367,7 +367,7 @@ class Engine:
             return
         doc = {**_sigrow(g), "_id": sid, "seen_at": iso(now), "mode": st["mode"], "d": g["sig"][2], "chg30": g["sig"][4], "market": runs.market_type(g["sig"][4])}
         open_t = await db.elite_trades.find_one({"status": {"$in": ["OPEN", "PENDING"]}})
-        st = await get_state()
+        st = await get_state(self.clock())
         if not g["ok"]:
             doc.update(status="SKIPPED", reason=g["skip"])
         elif open_t:
@@ -443,7 +443,7 @@ class Engine:
         lo = price if lo is None else lo
         self.last_price = price
         async with self.lock:
-            st = await get_state()
+            st = await get_state(self.clock())
             now = self.clock()
             broker = self.broker_factory(st["mode"])
             if not self.reconciled:
@@ -534,7 +534,7 @@ class Engine:
     # ---- controls (admin)
     async def stop_all(self, by):
         async with self.lock:
-            st, now = await get_state(), self.clock()
+            st, now = await get_state(self.clock()), self.clock()
             broker = self.broker_factory(st["mode"])
             await set_state(halt={"reason": f"Stop all pressed by {by}", "at": iso(now), "kind": "manual"})
             t = await db.elite_trades.find_one({"status": "OPEN"})
@@ -551,7 +551,7 @@ class Engine:
 
     async def resume(self, by):
         async with self.lock:
-            st = await get_state()
+            st = await get_state(self.clock())
             t = await db.elite_trades.find_one({"status": "OPEN"})
             pnl = await self.book_pnl(st) + self.unrealized(t, self.last_price)
             await set_state(halt=None, peak=round(pnl, 2))     # the drawdown is measured again from here
@@ -559,7 +559,7 @@ class Engine:
 
     async def set_mode(self, mode, confirm, by):
         async with self.lock:
-            st, now = await get_state(), self.clock()
+            st, now = await get_state(self.clock()), self.clock()
             if mode not in MODES:
                 raise ValueError("Unknown mode")
             if mode == st["mode"]:

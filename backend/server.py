@@ -33,6 +33,7 @@ import flush
 import runs
 import trio
 import elite
+import sysmon
 import observer
 import autotrade
 import daytype
@@ -966,6 +967,12 @@ async def health():
     return {"ok": True, "time": iso(now_utc())}
 
 
+@api.get("/admin/server")
+async def admin_server(u=Depends(admin_user)):
+    """Server capacity and how the site uses it (admin only): CPU, memory, disk, load, backend, MongoDB, 7-day history."""
+    return await sysmon.report()
+
+
 @api.get("/health/deep")
 async def health_deep(response: Response):
     """Public liveness check for Docker / uptime monitors. Returns 503 if the 2-second
@@ -1463,7 +1470,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

@@ -28,6 +28,7 @@ import FlushShort from "@/pages/FlushShort";
 import CandleRuns from "@/pages/CandleRuns";
 import DeltaTop3 from "@/pages/DeltaTop3";
 import EliteEdge from "@/pages/EliteEdge";
+import ServerHealth from "@/pages/ServerHealth";
 import StrategyObserver from "@/pages/StrategyObserver";
 import AutoTrade from "@/pages/AutoTrade";
 
@@ -80,6 +81,7 @@ function Gate() {
         <Route path="/account" element={isAdmin ? <Account /> : <Navigate to="/" replace />} />
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/users" element={isAdmin ? <AdminUsers /> : <Navigate to="/" replace />} />
+        <Route path="/server" element={isAdmin ? <ServerHealth /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

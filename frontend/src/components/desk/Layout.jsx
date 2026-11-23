@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
-import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical, Bot, TrendingDown, Layers, Trophy, Gem } from "lucide-react";
+import { LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X, RefreshCw, LogOut, WifiOff, UserCircle, Users, ChevronDown, FlaskConical, Bot, TrendingDown, Layers, Trophy, Gem, Server } from "lucide-react";
 import { DevCredit, SiteFooter } from "@/components/brand/Branding";
 import Logo from "@/components/brand/Logo";
 import { APP_NAME, APP_SHORT, APP_TAGLINE } from "@/config/brand";
@@ -79,6 +79,7 @@ function UserMenu({ user, logout }) {
             <div className="mt-1 font-mono text-[10px] uppercase text-amber-400/80">{user?.role === "admin" ? "Administrator" : "User · read only"}</div></div>
           {user?.role === "admin" && <Link to="/account" data-testid="menu-account" className="flex items-center gap-2 rounded px-2.5 py-2 text-sm text-slate-300 hover:bg-[#131c35]"><UserCircle size={15} /> Account Settings</Link>}
           {user?.role === "admin" && <Link to="/users" data-testid="menu-users" className="flex items-center gap-2 rounded px-2.5 py-2 text-sm text-slate-300 hover:bg-[#131c35]"><Users size={15} /> User Management</Link>}
+          {user?.role === "admin" && <Link to="/server" data-testid="menu-server" className="flex items-center gap-2 rounded px-2.5 py-2 text-sm text-slate-300 hover:bg-[#131c35]"><Server size={15} /> Server</Link>}
           <button data-testid="logout-button" onClick={logout} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-sm text-red-300 hover:bg-red-500/10"><LogOut size={15} /> Sign out</button>
         </div>
       )}
