@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useState } from "react";
 import { n, ist, sgn } from "@/lib/fmt";
 
-// Chart tokens. Categorical slots are the validated dark steps (blue, orange, aqua) checked against
-// the card surface #131c35. Up/down is polarity: teal / red, always paired with a sign or arrow.
+// Chart tokens (terminal theme). Categorical slots (blue, orange, aqua) re-validated against the graphite
+// panel #11151b (dataviz validate_palette: all checks pass). Up/down is polarity: green / red, always with a sign or arrow.
 export const VIZ = {
-  surface: "#131c35", grid: "#1e2a4a", axis: "#64748b", text: "#e2e8f0", muted: "#94a3b8",
-  up: "#2dd4bf", down: "#f87171", neutral: "#475569", brand: "#f59e0b",
+  surface: "#11151b", grid: "#232933", axis: "#6c7581", text: "#e8ebef", muted: "#9099a5",
+  up: "#2fcb84", down: "#ff5f6d", neutral: "#4d555f", brand: "#f0a000",
   s1: "#3987e5", s2: "#d95926", s3: "#199e70",
 };
 
@@ -27,7 +27,7 @@ function Tip({ x, W, children }) {
   const left = `${(x / W) * 100}%`;
   const flip = x > W * 0.62;
   return (
-    <div className="pointer-events-none absolute top-1 z-10 rounded-md border border-[#2a3a63] bg-[#0b132b]/95 px-2.5 py-1.5 text-[11px] leading-snug text-slate-200 shadow-xl"
+    <div className="pointer-events-none absolute top-1 z-10 rounded-md border border-line2 bg-chrome/95 px-2.5 py-1.5 text-[11px] leading-snug text-slate-200 shadow-xl"
       style={{ left, transform: flip ? "translateX(calc(-100% - 10px))" : "translateX(10px)" }}>{children}</div>
   );
 }
@@ -109,7 +109,7 @@ export function PillarBars({ pillars, names, live, testid = "pillar-bars" }) {
           return (
             <div key={r.k} className="grid grid-cols-[96px_1fr_52px] items-center gap-2" title={r.valid && r.w != null ? `${r.name}: score ${sgn(r.score, 2)} × share ${Math.round(r.w * 100)}%` : `${r.name}: unavailable`}>
               <span className={`truncate text-[12.5px] ${r.valid ? "text-slate-200" : "text-slate-500"}`}>{r.name}</span>
-              <div className="relative h-4 rounded bg-[#0f172a]">
+              <div className="relative h-4 rounded bg-panel2">
                 <div className="absolute inset-y-0 left-1/2 w-px bg-slate-600" />
                 {r.valid ? (r.c ? (
                   <div className="absolute inset-y-0.5 rounded-sm" style={{ background: pos ? VIZ.up : VIZ.down, width: `${frac * 50}%`, left: pos ? "calc(50% + 1px)" : `calc(${50 - frac * 50}% - 1px)`, transition: "width .5s ease, left .5s ease" }} />
@@ -121,7 +121,7 @@ export function PillarBars({ pillars, names, live, testid = "pillar-bars" }) {
           );
         })}
       </div>
-      <div className="mt-3 flex items-center justify-between border-t border-[#1e2a4a] pt-2 text-[12px]">
+      <div className="mt-3 flex items-center justify-between border-t border-line pt-2 text-[12px]">
         <span className="text-slate-400">Model tilt (−1 … +1; ±0.15 or more = direction)</span>
         <span className={`font-mono font-semibold ${total > 0 ? "text-teal-300" : total < 0 ? "text-red-300" : "text-slate-300"}`}>{total > 0 ? "▲" : total < 0 ? "▼" : "•"} {sgn(total, 2)}</span>
       </div>
@@ -164,7 +164,7 @@ export function LineChart({ series, height = 180, yFmt = (v) => n(v, 0), xFmt = 
     const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
     return { x, y, lo, hi };
   }, [series, pts0.length, H]);
-  if (!g) return <div style={{ height }} className="grid place-items-center rounded border border-dashed border-[#1e2a4a] text-[12px] text-slate-500">Collecting history — the chart appears after a few snapshots.</div>;
+  if (!g) return <div style={{ height }} className="grid place-items-center rounded border border-dashed border-line text-[12px] text-slate-500">Collecting history — the chart appears after a few snapshots.</div>;
   return (
     <div className="relative" data-testid={testid}>
       <svg ref={h.ref} viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" onMouseMove={h.onMove} onMouseLeave={h.onLeave} role="img" aria-label={series.map((s) => s.name).join(", ")}>

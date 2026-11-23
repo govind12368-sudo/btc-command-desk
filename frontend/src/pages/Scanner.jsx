@@ -32,7 +32,7 @@ function Decision({ title, sub, d, testid }) {
 }
 
 const Score = ({ label, s }) => (
-  <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+  <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
     <div className="text-[11.5px] text-slate-400">{label}</div>
     <div className="font-mono text-lg font-bold text-slate-50">{s?.checked ? `${s.right} of ${s.checked} right (${s.pct}%)` : "No checked calls yet"}</div>
   </div>
@@ -56,10 +56,10 @@ export default function Scanner() {
         <Card title="Plan for the day type" sub={d.playbook} testid="scan-levels">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {lv.map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2"><div className="text-[11.5px] text-slate-400">{k}</div><div className="font-mono text-base font-bold text-slate-50">{v == null ? "—" : n(v, 0)}</div></div>
+              <div key={k} className="rounded-lg border border-line bg-panel2/60 px-3 py-2"><div className="text-[11.5px] text-slate-400">{k}</div><div className="font-mono text-base font-bold text-slate-50">{v == null ? "—" : n(v, 0)}</div></div>
             ))}
           </div>
-          <p className="mt-2 text-[11.5px] text-slate-500">A break of the 12-hour high or low that holds for an hour is the usual sign that a range is ending.</p>
+          <Note tone="plain">A break of the 12-hour high or low that holds for an hour is the usual sign that a range is ending.</Note>
         </Card>
         <Card title="Score card" sub={`Every hour's call is saved (${d.scorecard?.hours_logged || 0} hours so far) and checked later against the price.`} testid="scan-score">
           <div className="grid grid-cols-1 gap-2">
@@ -81,7 +81,7 @@ export default function Scanner() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11.5px] text-slate-500">Order flow, leverage and macro come from the site's own pillars (Delta and OKX live data, US Federal Reserve series).</p>
+        <Note tone="plain">Order flow, leverage and macro come from the site's own pillars (Delta and OKX live data, US Federal Reserve series).</Note>
       </Card>
       <Card title="How a professional desk works" testid="scan-method">
         <ol className="list-decimal space-y-1 pl-5 text-[13px] text-slate-200">

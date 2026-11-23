@@ -29,7 +29,7 @@ export function StrengthMeter({ value, light }) {
   const col = n <= 2 ? "bg-red-500" : n <= 4 ? "bg-amber-500" : "bg-teal-500";
   return (
     <div data-testid="password-strength" className="mt-1.5">
-      <div className="flex gap-1">{RULES.map((_, i) => <span key={i} className={`h-1 flex-1 rounded-full transition-colors duration-300 ${i < n ? col : light ? "bg-slate-200" : "bg-[#1e2a4a]"}`} />)}</div>
+      <div className="flex gap-1">{RULES.map((_, i) => <span key={i} className={`h-1 flex-1 rounded-full transition-colors duration-300 ${i < n ? col : light ? "bg-slate-200" : "bg-line"}`} />)}</div>
       <div className="mt-1 flex flex-wrap gap-x-3 text-[10.5px]">
         {RULES.map(([f, l]) => <span key={l} className={f(value) ? "text-teal-500" : light ? "text-slate-500" : "text-slate-500"}>{f(value) ? "✓" : "•"} {l}</span>)}
       </div>

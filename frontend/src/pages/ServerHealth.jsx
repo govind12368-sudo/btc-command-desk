@@ -14,13 +14,13 @@ const label = (p, warn, bad) => (p >= bad ? "Tight" : p >= warn ? "Watch" : "Ple
 
 function Meter({ title, used, total, p, warn, bad, lines, testid }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-3" data-testid={testid}>
+    <div className="rounded-lg border border-line bg-panel2/60 p-3" data-testid={testid}>
       <div className="flex items-baseline justify-between">
         <div className="text-[12px] text-slate-400">{title}</div>
         <div className={`text-[11px] font-semibold ${p >= bad ? "text-red-300" : p >= warn ? "text-amber-300" : "text-teal-300"}`}>{label(p, warn, bad)}</div>
       </div>
       <div className="mt-1 font-mono text-xl font-bold text-slate-50">{pct(p)} <span className="text-[12px] font-normal text-slate-400">{used} of {total}</span></div>
-      <div className="mt-2 h-2.5 rounded bg-[#1e2a4a]"><div className={`h-2.5 rounded ${tone(p, warn, bad)}`} style={{ width: `${Math.min(100, Math.max(1, p || 0))}%` }} /></div>
+      <div className="mt-2 h-2.5 rounded bg-line"><div className={`h-2.5 rounded ${tone(p, warn, bad)}`} style={{ width: `${Math.min(100, Math.max(1, p || 0))}%` }} /></div>
       <ul className="mt-2 space-y-0.5 text-[11.5px] text-slate-400">{lines.map((l) => <li key={l}>{l}</li>)}</ul>
     </div>
   );
@@ -31,15 +31,15 @@ function Share({ rows, total, unit }) {
   const sum = rows.reduce((a, r) => a + (r.v || 0), 0);
   return (
     <div>
-      <div className="flex h-4 w-full overflow-hidden rounded bg-[#1e2a4a]">
-        {rows.map((r) => <div key={r.name} title={`${r.name}: ${r.txt}`} style={{ width: `${Math.max(0, (r.v || 0) / total * 100)}%`, background: r.color }} className="border-r-2 border-[#0f172a] last:border-r-0" />)}
+      <div className="flex h-4 w-full overflow-hidden rounded bg-line">
+        {rows.map((r) => <div key={r.name} title={`${r.name}: ${r.txt}`} style={{ width: `${Math.max(0, (r.v || 0) / total * 100)}%`, background: r.color }} className="border-r-2 border-panel2 last:border-r-0" />)}
       </div>
       <table className="desk-table mt-2">
         <thead><tr><th>Part of the site</th><th className="num">Now</th><th className="num">Share of the server</th><th>What it is</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.name}><td><span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-middle" style={{ background: r.color }} />{r.name}</td>
             <td className="num">{r.txt}</td><td className="num">{pct((r.v || 0) / total * 100, 1)}</td><td className="text-[12px] text-slate-400">{r.what}</td></tr>))}
-          <tr className="border-t-2 border-[#2a3a66] font-semibold"><td>Free</td><td className="num">{unit(total - sum)}</td><td className="num">{pct((total - sum) / total * 100, 1)}</td><td /></tr>
+          <tr className="border-t-2 border-line2 font-semibold"><td>Free</td><td className="num">{unit(total - sum)}</td><td className="num">{pct((total - sum) / total * 100, 1)}</td><td /></tr>
         </tbody>
       </table>
     </div>
@@ -99,7 +99,7 @@ export default function ServerHealth() {
       </div>
 
       <div className="flex gap-2">
-        {["24h", "7d"].map((r) => <button key={r} onClick={() => setRange(r)} className={`rounded px-3 py-1.5 text-xs font-semibold ${range === r ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300"}`} data-testid={`range-${r}`}>{r === "24h" ? "Last 24 hours" : "Last 7 days"}</button>)}
+        {["24h", "7d"].map((r) => <button key={r} onClick={() => setRange(r)} className={`rounded px-3 py-1.5 text-xs font-semibold ${range === r ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300"}`} data-testid={`range-${r}`}>{r === "24h" ? "Last 24 hours" : "Last 7 days"}</button>)}
         <span className="self-center text-[11.5px] text-slate-500">{hist.length} samples (one every 5 minutes, kept 8 days; history starts when this page was added)</span>
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

@@ -25,7 +25,7 @@ export function FreeBadge({ light = false }) {
 
 export function SiteFooter({ light = false }) {
   return (
-    <footer data-testid="site-footer" className={`mt-10 border-t px-4 py-6 text-center ${light ? "border-slate-200 text-slate-600" : "border-[#1e2a4a] text-slate-400"}`}>
+    <footer data-testid="site-footer" className={`mt-10 border-t px-4 py-6 text-center ${light ? "border-slate-200 text-slate-600" : "border-line text-slate-400"}`}>
       <p className="mx-auto max-w-3xl text-[11.5px] leading-relaxed" data-testid="footer-disclaimer">
         <span className={`font-semibold ${light ? "text-slate-800" : "text-slate-200"}`}>Disclaimer: </span>{DISCLAIMER}
       </p>

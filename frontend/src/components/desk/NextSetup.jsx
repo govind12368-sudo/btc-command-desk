@@ -1,4 +1,5 @@
 import React from "react";
+import { Note } from "./ui";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { n, usd, ist } from "@/lib/fmt";
@@ -43,7 +44,7 @@ export function NextSetup({ scalp, swing, isAdmin }) {
           <h3 className={`mt-0.5 text-xl font-bold tracking-tight ${live ? (dir === "LONG" ? "text-teal-300" : "text-red-300") : "text-slate-50"}`} data-testid="next-setup-title">{head.replace(/\s+—/, " —")}</h3>
           <div className="text-[12px] text-slate-500">{ev.passed}/{total} checks pass · {CADENCE[ev.strategy]}</div>
         </div>
-        <Link to={ev.strategy === "scalp" ? "/scalping" : "/swing"} className="rounded-md border border-[#1e2a4a] px-3 py-1.5 text-xs text-slate-200 hover:border-amber-500/50">Full {name.toLowerCase()} checklist</Link>
+        <Link to={ev.strategy === "scalp" ? "/scalping" : "/swing"} className="rounded-md border border-line px-3 py-1.5 text-xs text-slate-200 hover:border-amber-500/50">Full {name.toLowerCase()} checklist</Link>
       </div>
 
       <div className="mt-4 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
@@ -52,7 +53,7 @@ export function NextSetup({ scalp, swing, isAdmin }) {
           {live ? <p className="text-[13px] text-slate-300">Every active check passes on the latest completed candle. Verify on Delta before placing any order — this desk never trades for you.</p> : (
             <ul className="space-y-2.5">
               {fails.map((c) => (
-                <li key={c.id} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-3">
+                <li key={c.id} className="rounded-lg border border-line bg-panel2/60 p-3">
                   <div className="flex items-center gap-2 text-[13px] text-slate-100"><XCircle size={15} className="shrink-0 text-red-300" /><span className="font-mono text-[11px] text-slate-500">{c.id}</span>{c.name}</div>
                   <p className="ml-6 mt-0.5 text-[12px] text-slate-400">{CHECK_PLAIN[c.id] || c.detail}</p>
                   {c.conditions?.length > 0 && (
@@ -74,7 +75,7 @@ export function NextSetup({ scalp, swing, isAdmin }) {
         <div>
           <div className="mb-2 text-[13px] font-semibold text-slate-200">{live ? "Planned order" : "If it triggers, the plan would be"}</div>
           {!lv ? <p className="text-[13px] text-slate-500">No levels yet — needs a clear direction and valid data.</p> : (
-            <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-3 font-mono text-[13px]" data-testid="next-setup-ticket">
+            <div className="rounded-lg border border-line bg-panel2/60 p-3 font-mono text-[13px]" data-testid="next-setup-ticket">
               <Row k="Side" v={<span className={dir === "LONG" ? "text-teal-300" : "text-red-300"}>{dir === "LONG" ? "▲ LONG (buy)" : "▼ SHORT (sell)"}</span>} />
               <Row k="Entry" v={`${n(lv.entry, 1)} · ${String(lv.entry_type || "MARKET").toLowerCase()}`} />
               <Row k="Stop loss" v={<span className="text-red-300">{n(lv.stop, 1)}</span>} />
@@ -85,7 +86,7 @@ export function NextSetup({ scalp, swing, isAdmin }) {
               {lv.valid_until && <Row k="Limit valid until" v={ist(lv.valid_until)} />}
             </div>
           )}
-          <p className="mt-2 text-[11.5px] text-slate-500">Model plan only. Levels update every candle until the setup qualifies.</p>
+          <Note tone="plain">Model plan only. Levels update every candle until the setup qualifies.</Note>
         </div>
       </div>
     </section>
@@ -93,5 +94,5 @@ export function NextSetup({ scalp, swing, isAdmin }) {
 }
 
 function Row({ k, v }) {
-  return <div className="flex items-baseline justify-between gap-3 border-b border-[#1e2a4a]/60 py-1 last:border-0"><span className="font-sans text-[12px] text-slate-400">{k}</span><span className="text-right text-slate-100">{v}</span></div>;
+  return <div className="flex items-baseline justify-between gap-3 border-b border-line/60 py-1 last:border-0"><span className="font-sans text-[12px] text-slate-400">{k}</span><span className="text-right text-slate-100">{v}</span></div>;
 }

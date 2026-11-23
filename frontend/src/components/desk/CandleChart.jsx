@@ -58,7 +58,7 @@ export function CandleChart({ tf: tf0 = "5m", levels, testid = "candle-chart" })
   return (
     <div data-testid={testid}>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <div className="flex rounded-md border border-[#1e2a4a] p-0.5" role="tablist" aria-label="Candle timeframe">
+        <div className="flex rounded-md border border-line p-0.5" role="tablist" aria-label="Candle timeframe">
           {Object.keys(TF_SEC).map((t) => (
             <button key={t} role="tab" aria-selected={tf === t} data-testid={`${testid}-tf-${t}`} onClick={() => setTf(t)}
               className={`rounded px-2.5 py-1 font-mono text-[11.5px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${tf === t ? "bg-amber-500/15 text-amber-200" : "text-slate-400 hover:text-slate-100"}`}>{t}</button>
@@ -98,18 +98,18 @@ export function CandleChart({ tf: tf0 = "5m", levels, testid = "candle-chart" })
           {[[g.e20, VIZ.s1], [g.e50, VIZ.s2]].map(([arr, col], k) => (
             <polyline key={k} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" points={arr.map((v, i) => (v ? `${g.x(i)},${g.y(v)}` : null)).filter(Boolean).join(" ")} />
           ))}
-          {levels && [["entry", "#e2e8f0"], ["stop", VIZ.down], ["target", VIZ.up]].map(([k, col]) => levels[k] && !(k === "entry" && Math.abs(g.y(levels[k]) - g.y(last.c)) < 16) ? (
+          {levels && [["entry", "#e8ebef"], ["stop", VIZ.down], ["target", VIZ.up]].map(([k, col]) => levels[k] && !(k === "entry" && Math.abs(g.y(levels[k]) - g.y(last.c)) < 16) ? (
             <g key={k}>
               <line x1={0} x2={g.plotW} y1={g.y(levels[k])} y2={g.y(levels[k])} stroke={col} strokeDasharray="6 4" strokeWidth="1.3" />
               <rect x={g.plotW + 2} y={g.y(levels[k]) - 8} width={RIGHT - 4} height="16" rx="3" fill={VIZ.surface} stroke={col} />
-              <text x={g.plotW + 6} y={g.y(levels[k]) + 3.5} fontSize="10" fill="#e2e8f0" fontFamily="JetBrains Mono">{k[0].toUpperCase()} {n(levels[k], 0)}</text>
+              <text x={g.plotW + 6} y={g.y(levels[k]) + 3.5} fontSize="10" fill="#e8ebef" fontFamily="JetBrains Mono">{k[0].toUpperCase()} {n(levels[k], 0)}</text>
             </g>
           ) : null)}
           {(() => { const up = last.c >= last.o; return (
             <g>
               <line x1={0} x2={g.plotW} y1={g.y(last.c)} y2={g.y(last.c)} stroke={up ? VIZ.up : VIZ.down} strokeOpacity="0.5" strokeDasharray="1 3" />
               <rect x={g.plotW + 2} y={g.y(last.c) - 9} width={RIGHT - 4} height="18" rx="3" fill={up ? VIZ.up : VIZ.down} />
-              <text x={g.plotW + 6} y={g.y(last.c) + 4} fontSize="11" fontWeight="700" fill="#0b132b" fontFamily="JetBrains Mono">{n(last.c, 0)}</text>
+              <text x={g.plotW + 6} y={g.y(last.c) + 4} fontSize="11" fontWeight="700" fill="#080a0d" fontFamily="JetBrains Mono">{n(last.c, 0)}</text>
             </g>); })()}
           {hi != null && <line x1={g.x(hi)} x2={g.x(hi)} y1={TOP} y2={TOP + PH + GAP + VH} stroke={VIZ.muted} strokeDasharray="2 3" />}
         </svg>

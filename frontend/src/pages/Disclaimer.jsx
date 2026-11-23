@@ -9,7 +9,7 @@ function Body() {
     <div className="mx-auto max-w-3xl" data-testid="disclaimer-page">
       <div className="flex items-center gap-2 text-amber-300"><ShieldCheck size={20} /><h1 className="text-2xl font-bold text-slate-50 sm:text-3xl">Disclaimer</h1></div>
       <div className="mt-4"><FreeBadge /></div>
-      <div className="mt-6 rounded-xl border border-[#1e2a4a] bg-[#131c35]/80 p-5 sm:p-7 leading-relaxed text-slate-200">
+      <div className="mt-6 rounded-xl border border-line bg-raised/80 p-5 sm:p-7 leading-relaxed text-slate-200">
         <p className="text-[15px]" data-testid="disclaimer-text">{DISCLAIMER}</p>
         <ul className="mt-5 list-disc space-y-2 pl-5 text-sm text-slate-400">
           <li>No payment, subscription or paid membership exists on this platform.</li>

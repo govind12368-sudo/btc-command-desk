@@ -54,7 +54,7 @@ function Profile() {
       </div>
       <div className="mt-4 flex max-w-md items-end gap-2">
         <div className="flex-1"><label className="mb-1 block text-xs text-slate-400">Full name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} data-testid="profile-name" className="w-full rounded border border-[#1e2a4a] bg-[#0f172a] px-2.5 py-1.5 text-sm" /></div>
+          <input value={name} onChange={(e) => setName(e.target.value)} data-testid="profile-name" className="w-full rounded border border-line bg-panel2 px-2.5 py-1.5 text-sm" /></div>
         <Btn data-testid="profile-save" onClick={save}>Save</Btn>
       </div>
     </Card>

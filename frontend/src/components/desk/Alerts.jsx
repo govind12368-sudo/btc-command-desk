@@ -49,14 +49,14 @@ function ChannelSetup({ onSaved }) {
     } catch (e) { toast.error(errText(e)); } finally { setBusy(false); }
   };
   return (
-    <div className="mb-4 rounded-xl border border-[#1e2a4a] bg-[#0f172a]/50" data-testid="channel-setup">
+    <div className="mb-4 rounded-xl border border-line bg-panel2/50" data-testid="channel-setup">
       <button className="flex w-full items-center justify-between px-4 py-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open} data-testid="channel-setup-toggle">
         <span><span className="text-sm font-semibold text-slate-100">Set up where alerts go</span>
           <span className="block text-[11.5px] text-slate-400">{anySet ? "Some channels are set up. Open to change them." : "Step 1 — add Gmail, Telegram or a phone call. Saved securely on your server."}</span></span>
         <span className="text-amber-300 text-sm">{open ? "Close" : "Open"}</span>
       </button>
       {open && (
-        <div className="space-y-4 border-t border-[#1e2a4a] px-4 py-4">
+        <div className="space-y-4 border-t border-line px-4 py-4">
           {GROUPS.map((g) => (
             <fieldset key={g.title}>
               <legend className="text-[13px] font-semibold text-slate-100">{g.title}</legend>
@@ -69,7 +69,7 @@ function ChannelSetup({ onSaved }) {
                       placeholder={f[k].secret ? (f[k].set ? "saved — leave empty to keep" : "paste here") : PH[k] || ""}
                       onChange={(e) => setForm({ ...form, [k]: e.target.value })}
                       disabled={f[k].source === "server .env"}
-                      className="mt-1 w-full rounded-md border border-[#1e2a4a] bg-[#0b132b] px-2.5 py-2 font-mono text-[12.5px] text-slate-100 outline-none focus:border-amber-400 disabled:opacity-50" />
+                      className="mt-1 w-full rounded-md border border-line bg-chrome px-2.5 py-2 font-mono text-[12.5px] text-slate-100 outline-none focus:border-amber-400 disabled:opacity-50" />
                   </label>
                 ))}
               </div>
@@ -126,14 +126,14 @@ function AlertModePanel({ data, reload, isAdmin }) {
         ) : (
           <div className="flex flex-col items-end gap-1"><div className="flex items-center gap-2">
             <input data-testid="alert-arm-confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`type ${data.confirm_word}`}
-              className="w-24 rounded-md border border-[#1e2a4a] bg-[#0f172a] px-2 py-1.5 font-mono text-xs text-slate-100 outline-none focus:border-amber-400" disabled={m.kill_switch} />
+              className="w-24 rounded-md border border-line bg-panel2 px-2 py-1.5 font-mono text-xs text-slate-100 outline-none focus:border-amber-400" disabled={m.kill_switch} />
             <Btn data-testid="alert-arm" disabled={busy || m.kill_switch || confirm.trim().toUpperCase() !== data.confirm_word} onClick={() => save(true)}>Turn ON alerts</Btn>
           </div><span className="text-[11px] text-slate-400">Type ARM in the box to unlock the button.{!Object.values(ready).some(Boolean) && " No channel is set up yet — set one up first, or nothing will reach you."}</span></div>
         ))}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {Object.keys(CH_LABEL).map((c) => (
-          <label key={c} data-testid={`alert-ch-${c}`} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-[#1e2a4a] bg-[#0f172a]/70 px-2.5 py-2 text-[11.5px]">
+          <label key={c} data-testid={`alert-ch-${c}`} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-line bg-panel2/70 px-2.5 py-2 text-[11.5px]">
             <span>
               <span className="block font-semibold text-slate-200">{CH_LABEL[c]}</span>
               <span className={ready[c] ? "text-teal-300" : "text-slate-500"}>{ready[c] ? "ready" : "not set up"}</span>
@@ -167,10 +167,10 @@ export function AlertsCard({ isAdmin }) {
         <Chip status={on(data?.telegram) ? "PASS" : "UNAVAILABLE"} label="TELEGRAM" testid="alert-telegram" />
         <Chip status={on(data?.call) ? "PASS" : "UNAVAILABLE"} label="PHONE CALL" testid="alert-call" />
       </div>
-      {data && <p className="mt-2 text-[11px] text-slate-500">Email: {data.email} · SMS: {data.sms} · Telegram: {data.telegram} · Phone call: {data.call || "not configured"}</p>}
+      {data && <Note tone="plain">Email: {data.email} · SMS: {data.sms} · Telegram: {data.telegram} · Phone call: {data.call || "not configured"}</Note>}
       <div className="mt-2">
         {(data?.log || []).slice(0, 10).map((l) => (
-          <div key={l.id} className="flex justify-between gap-2 border-b border-[#1e2a4a]/40 py-1 font-mono text-[11px]">
+          <div key={l.id} className="flex justify-between gap-2 border-b border-line/40 py-1 font-mono text-[11px]">
             <span className="truncate" title={l.preview || ""}>{ist(l.at)} · {l.channel || "email"} · {l.test ? "test" : l.signal_id}</span>
             <span className={String(l.result).startsWith("sent") ? "text-teal-300" : String(l.result).startsWith("dry run") || String(l.result).startsWith("skipped") ? "text-amber-300" : "text-red-300"}>{l.result}</span>
           </div>
@@ -187,7 +187,7 @@ export function DailySummaryCard({ isAdmin }) {
   };
   return (
     <Card title="Daily recap (8 PM IST)" sub={data?.schedule} testid="daily-summary-card" right={isAdmin && <Btn data-testid="summary-send-now" onClick={send}>Send recap now</Btn>}>
-      <pre className="max-h-56 overflow-auto scroll-thin whitespace-pre-wrap rounded bg-[#0f172a] p-2 font-mono text-[11px] text-slate-300" data-testid="summary-preview">{data?.preview || "Loading…"}</pre>
+      <pre className="max-h-56 overflow-auto scroll-thin whitespace-pre-wrap rounded bg-panel2 p-2 font-mono text-[11px] text-slate-300" data-testid="summary-preview">{data?.preview || "Loading…"}</pre>
       {(data?.history || []).slice(0, 5).map((h) => <div key={h.id} className="mt-1 font-mono text-[11px] text-slate-400">{ist(h.at)} · {h.dry_run ? "dry run (alert mode OFF) · " : ""}email {h.result?.email} · telegram {h.result?.telegram}</div>)}
     </Card>
   );
@@ -206,7 +206,7 @@ export function DeltaSyncCard({ isAdmin, onDone }) {
         <span className="font-mono text-slate-400">last success {ist(data.last_success)} · raw fills {data.raw_fills} · new trades {data.imported} · updated {data.updated}</span>
       </div>
       {data.error && <Note tone="amber">{data.error}</Note>}
-      <p className="mt-2 text-[11px] text-slate-500">Runs every 5 minutes while the server runs. {data.server_ip_note} Imported trades keep their Delta fill IDs (no duplicates); once you edit an imported trade, sync stops overwriting it.</p>
+      <Note tone="plain">Runs every 5 minutes while the server runs. {data.server_ip_note} Imported trades keep their Delta fill IDs (no duplicates); once you edit an imported trade, sync stops overwriting it.</Note>
     </Card>
   );
 }

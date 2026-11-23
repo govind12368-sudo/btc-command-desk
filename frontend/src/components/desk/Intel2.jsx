@@ -9,12 +9,12 @@ const sign = (v, d = 2) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" :
 const flow = (v) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}$${n(Math.abs(v), 1)}M`);
 const tone = (v) => (v == null || v === 0 ? "text-slate-300" : v > 0 ? "text-teal-300" : "text-red-300");
 const compact = (v, d = 0) => (v == null ? "—" : Math.abs(v) >= 1e12 ? `${(v / 1e12).toFixed(2)}T` : Math.abs(v) >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : n(v, d));
-const Wait = ({ what }) => <p className="rounded border border-[#1e2a4a] px-3 py-3 text-[12.5px] text-slate-400">{what}: waiting for the first update. Nothing is estimated in its place.</p>;
-const Src = ({ children }) => <p className="mt-2 text-[11px] text-slate-500">{children}</p>;
+const Wait = ({ what }) => <p className="rounded border border-line px-3 py-3 text-[12.5px] text-slate-400">{what}: waiting for the first update. Nothing is estimated in its place.</p>;
+const Src = ({ children }) => <Note tone="plain" className="mt-1">{children}</Note>;
 
 function Fig({ label, value, sub, cls = "text-slate-50" }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${cls}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -27,7 +27,7 @@ function Spark({ data, label }) {
   if (v.length < 3) return <span className="text-slate-600">—</span>;
   const lo = Math.min(...v), hi = Math.max(...v), w = 96, h = 22;
   const pts = v.map((y, i) => `${((i / (v.length - 1)) * w).toFixed(1)},${(h - 2 - ((y - lo) / (hi - lo || 1)) * (h - 4)).toFixed(1)}`).join(" ");
-  return <svg width={w} height={h} role="img" aria-label={label}><polyline points={pts} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
+  return <svg width={w} height={h} role="img" aria-label={label}><polyline points={pts} fill="none" stroke="#9099a5" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
 }
 
 const macroVal = (r, v) => (v == null ? "—" : r.unit === "USD million" ? `$${n(v / 1e6, 3)}T` : r.unit === "USD billion" ? `$${n(v, 1)}B` : r.unit === "thousand jobs" ? `${sign(v, 0)}K` : r.unit === "index" ? n(v, 2) : `${n(v, 2)}%`);
@@ -42,7 +42,7 @@ export function Macro({ m }) {
   const s = m.summary;
   return (
     <Card title="US economy and interest rates" sub="Slow background forces. They change over weeks and months, not minutes." testid="intel-macro">
-      {s && <div className="mb-3 rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+      {s && <div className="mb-3 rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
         <div className="text-[14px] font-semibold text-slate-50">{s.label}</div>
         <div className="mt-1 text-[12px] text-slate-400">{s.headwinds} against · {s.tailwinds} in favour. {s.note}</div>
         {s.points.length > 0 && <ul className="mt-1.5 space-y-0.5 text-[12.5px]">{s.points.map((p) => <li key={p.key} className={p.side === "HEADWIND" ? "text-red-300" : "text-teal-300"}>{p.side === "HEADWIND" ? "▼ Against: " : "▲ In favour: "}<span className="text-slate-200">{p.text}</span></li>)}</ul>}
@@ -85,7 +85,7 @@ export function Etf({ e }) {
               <div className="flex flex-1 items-start">{r.total_musd < 0 && <div className="w-full rounded-b bg-red-400" style={{ height: `${(-r.total_musd / max) * 100}%`, minHeight: 2 }} />}</div>
             </div>))}
         </div>
-        <p className="mt-1 text-[11px] text-slate-500"><span className="text-teal-300">■</span> inflow · <span className="text-red-300">■</span> outflow · {hist[0].date} to {hist[hist.length - 1].date} · tallest bar ${n(max, 0)}M · hover a bar for the day</p>
+        <Note tone="plain"><span className="text-teal-300">■</span> inflow · <span className="text-red-300">■</span> outflow · {hist[0].date} to {hist[hist.length - 1].date} · tallest bar ${n(max, 0)}M · hover a bar for the day</Note>
       </>}
       {funds.length > 0 && <p className="mt-2 text-[12px] text-slate-300">Latest day by fund: {funds.slice(0, 8).map(([k, v]) => <span key={k} className="mr-3 whitespace-nowrap">{k} <span className={`font-mono ${tone(v)}`}>{flow(v)}</span></span>)}</p>}
       <p className={`mt-2 text-[12px] ${c.status === "OK" ? (c.mismatches?.length ? "text-amber-300" : "text-teal-300") : "text-slate-400"}`}>

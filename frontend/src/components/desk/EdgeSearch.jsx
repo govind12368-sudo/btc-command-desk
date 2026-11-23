@@ -49,7 +49,7 @@ export default function EdgeSearch({ e }) {
         </table>
         <p className="mt-2">R is the average result per trade as a share of the amount risked, after fees. Positive in training but not in validation means it did not hold up.</p>
       </Expand>
-      <p className="mt-2 text-[11.5px] leading-snug text-slate-500">{e.rules} Pass mark: {e.pass_mark} Periods: training {e.splits.train}; validation {e.splits.validation}; test {e.splits.test}. Past results do not promise future results.</p>
+      <Note tone="plain">{e.rules} Pass mark: {e.pass_mark} Periods: training {e.splits.train}; validation {e.splits.validation}; test {e.splits.test}. Past results do not promise future results.</Note>
     </Card>
   );
 }

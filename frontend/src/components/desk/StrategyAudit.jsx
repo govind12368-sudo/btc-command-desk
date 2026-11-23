@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { Card } from "@/components/desk/ui";
+import { Card, Note } from "@/components/desk/ui";
 import { n, usd, ist } from "@/lib/fmt";
 import { BOOK_NAME, DayChip, EvidenceCard, PeriodSwitch } from "@/components/desk/Books";
 import LongTest from "@/components/desk/LongTest";
@@ -38,7 +38,7 @@ export default function StrategyAudit() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11.5px] text-slate-500">Switch = range → Plan A, trend with the signal → follow, anything else → no trade. The day type is frozen at the minute each signal was captured.</p>
+        <Note tone="plain">Switch = range → Plan A, trend with the signal → follow, anything else → no trade. The day type is frozen at the minute each signal was captured.</Note>
       </Card>
 
       <Card title="Conclusion and recommendation" testid="audit-conclusion">

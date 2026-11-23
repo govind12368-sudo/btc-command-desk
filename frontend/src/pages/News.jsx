@@ -22,13 +22,13 @@ function DailyReview({ isAdmin }) {
     <Card title={`Daily review — ${data.id} IST · information only`} sub="These review statuses are personal notes. They do not change readiness, trade decisions, BTC Direction, swing/scalp eligibility or Trade Planner guardrails." testid="daily-review" right={<Chip status={data.status?.status} label={`NOTES: ${data.status?.status || "UNAVAILABLE"}`} testid="review-status" />}>
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map(([k, label]) => (
-          <div key={k} className="flex items-center justify-between rounded border border-[#1e2a4a] px-3 py-2">
+          <div key={k} className="flex items-center justify-between rounded border border-line px-3 py-2">
             <div><div className="text-sm">{label}</div><div className="font-mono text-[10px] text-slate-500">{data[k]?.ok ? `confirmed ${ist(data[k].at)} by ${data[k].by}` : "not confirmed"}</div></div>
             {isAdmin && <Btn data-testid={`review-${k}`} tone={data[k]?.ok ? "ghost" : "teal"} disabled={busy} onClick={() => save({ [k]: !data[k]?.ok })}>{data[k]?.ok ? "Undo" : "Confirm"}</Btn>}
           </div>
         ))}
         {[["event_decision", "Economic event decision"], ["flow_decision", "Large-flow decision"]].map(([k, label]) => (
-          <div key={k} className="flex items-center justify-between rounded border border-[#1e2a4a] px-3 py-2">
+          <div key={k} className="flex items-center justify-between rounded border border-line px-3 py-2">
             <div><div className="text-sm">{label}</div><div className="font-mono text-[10px] text-slate-500">{data[k] ? `set ${ist(data[k + "_at"])}` : "not set"}</div></div>
             {isAdmin ? <div className="w-32"><Select data-testid={`review-${k}`} value={data[k] || ""} disabled={busy} onChange={(e) => e.target.value && save({ [k]: e.target.value })} options={[{ value: "", label: "— choose —" }, "PASS", "REVIEW", "BLOCKED"]} /></div> : <Chip status={data[k] || "UNAVAILABLE"} />}
           </div>
@@ -60,7 +60,7 @@ function Events({ isAdmin }) {
       {(!complete || cal?.status !== "ok") && <Note tone="amber">Calendar coverage is incomplete. {coverage.coverage || cal?.error || "Some official schedules are unavailable."} An empty list does not establish that no market-moving events are scheduled.</Note>}
       <p className="mt-2 text-[11px] text-slate-400">Official scheduled release times are shown in IST, with each publisher and source linked below. {coverage.timezone_note} {coverage.source_note}</p>
       {providers.length > 0 && <div className="grid gap-2 mt-3 sm:grid-cols-3" data-testid="calendar-provider-coverage">
-        {providers.map((p) => <div key={p.publisher} className="rounded border border-[#1e2a4a] px-3 py-2">
+        {providers.map((p) => <div key={p.publisher} className="rounded border border-line px-3 py-2">
           <div className="flex items-center justify-between gap-2"><a className="text-xs text-amber-300" href={p.source_url} target="_blank" rel="noreferrer">{p.publisher}</a><Chip status={p.status} /></div>
           <p className="mt-1 font-mono text-[10.5px] text-slate-500">{p.events_in_window ?? 0} timed events · retrieved {ist(p.retrieved_at)}</p>
           {(p.error || p.errors?.length > 0) && <p className="mt-1 text-[11px] text-amber-300">{p.error || p.errors.join("; ")}</p>}
@@ -106,11 +106,11 @@ export default function News() {
           <span className="ml-auto self-center font-mono text-[11px] text-slate-500">{data?.total ?? 0} headlines (deduplicated)</span>
         </div>
         {!data ? <Empty>Loading…</Empty> : data.items.map((x) => (
-          <div key={x.id} className="py-2.5 border-b border-[#1e2a4a]/50" data-testid={`news-${x.id}`}>
+          <div key={x.id} className="py-2.5 border-b border-line/50" data-testid={`news-${x.id}`}>
             <div className="flex flex-wrap items-center gap-2"><Chip status={x.impact} /><Chip status={x.keyword_direction} label={x.keyword_direction} /><span className="font-mono text-[10.5px] text-slate-500">{x.publisher} · published {x.published_at ? `${ist(x.published_at)} (${ago(x.published_at)})` : "—"} · retrieved {ist(x.retrieved_at)}</span>
               {x.time_error && <Chip status="BLOCKED" label={x.time_error} />}<Chip status={x.review_status} /></div>
             <a href={x.link} target="_blank" rel="noreferrer" className="mt-1 block text-[14px] text-slate-100 hover:text-amber-300">{x.title}</a>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">{x.categories.map((c) => <span key={c} className="rounded bg-[#0f172a] px-1.5 py-0.5 text-[10.5px] text-slate-400">{c}</span>)}
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">{x.categories.map((c) => <span key={c} className="rounded bg-panel2 px-1.5 py-0.5 text-[10.5px] text-slate-400">{c}</span>)}
               {isAdmin && <span className="ml-auto flex gap-1"><Btn tone="teal" data-testid={`news-reviewed-${x.id}`} onClick={() => mark(x.id, "REVIEWED")}>Reviewed</Btn><Btn tone="ghost" data-testid={`news-ignore-${x.id}`} onClick={() => mark(x.id, "IGNORED")}>Not relevant</Btn></span>}</div>
           </div>
         ))}

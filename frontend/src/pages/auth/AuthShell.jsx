@@ -25,7 +25,7 @@ export default function AuthShell({ title, sub, children, wide = false }) {
           </div>
         </div>
         <button data-testid="theme-toggle" onClick={() => setTheme(light ? "dark" : "light")} aria-label="Toggle light or dark mode"
-          className={`rounded-full border p-2 transition-colors ${light ? "border-slate-300 bg-white/70 text-slate-700 hover:text-amber-600" : "border-[#1e2a4a] bg-[#0b132b]/60 text-slate-300 hover:text-amber-300"}`}>
+          className={`rounded-full border p-2 transition-colors ${light ? "border-slate-300 bg-white/70 text-slate-700 hover:text-amber-600" : "border-line bg-chrome/60 text-slate-300 hover:text-amber-300"}`}>
           {light ? <Moon size={16} /> : <Sun size={16} />}
         </button>
       </header>

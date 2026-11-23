@@ -26,7 +26,7 @@ export default function AdminUsers() {
         <Stat label="Deactivated" value={users.filter((u) => u.status === "disabled").length} />
         <Stat label="Verified email" value={users.filter((u) => u.email_verified).length} />
       </div>
-      <Card title="Accounts" testid="users-table" right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, username, email" data-testid="users-search" className="rounded border border-[#1e2a4a] bg-[#0f172a] px-2.5 py-1.5 text-xs" />}>
+      <Card title="Accounts" testid="users-table" right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, username, email" data-testid="users-search" className="rounded border border-line bg-panel2 px-2.5 py-1.5 text-xs" />}>
         <div className="overflow-x-auto scroll-thin"><table className="desk-table">
           <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Verified</th><th>Status</th><th>Joined</th><th>Last login</th><th></th></tr></thead>
           <tbody>{users.map((u) => (

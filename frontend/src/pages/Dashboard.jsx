@@ -3,7 +3,7 @@ import { DayTypeCard } from "@/components/desk/Books";
 import { Link } from "react-router-dom";
 import { useDesk } from "@/context/DeskContext";
 import { useFetch } from "@/hooks/useFetch";
-import { Card, Chip, KV, Stat, PageHead, Empty, Note } from "@/components/desk/ui";
+import { Card, Chip, KV, PageHead, Empty, Note, More } from "@/components/desk/ui";
 import { StrategyCard, CompareTable } from "@/components/desk/Strategy";
 import { PillarCard, DirectionPanel } from "@/components/desk/Pillars";
 import { CandleChart } from "@/components/desk/CandleChart";
@@ -41,7 +41,7 @@ function DeskBrief({ b }) {
           {!b.watch?.length && <p className="text-[13px] text-teal-300/80">Nothing outstanding.</p>}
         </div>
       </div>
-      <p className="mt-3 text-[10.5px] text-slate-500">{b.note}</p>
+      <Note tone="plain" className="mt-2">{b.note}</Note>
     </section>
   );
 }
@@ -65,7 +65,7 @@ function DecisionHero({ s }) {
   return (
     <section data-testid="decision-panel" className={`desk-card relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-1 ${edge}`}>
       <div className="grid gap-0 lg:grid-cols-[1.15fr_1fr_1.05fr]">
-        <div className="p-5 lg:border-r lg:border-[#1e2a4a]">
+        <div className="p-5 lg:border-r lg:border-line">
           <div className="text-[13px] font-medium text-slate-400">Trade decision now</div>
           <div data-testid="decision-value" className={`mt-1 font-mono text-5xl font-extrabold tracking-tight sm:text-6xl ${tone}`}>{d || "—"}</div>
           <p className="mt-2 text-[14px] leading-snug text-slate-200" data-testid="decision-reason">{s.decision?.reason}</p>
@@ -77,7 +77,7 @@ function DecisionHero({ s }) {
             </div>
           )}
         </div>
-        <div className="border-t border-[#1e2a4a] p-5 lg:border-r lg:border-t-0">
+        <div className="border-t border-line p-5 lg:border-r lg:border-t-0">
           <div className="flex items-baseline justify-between gap-2">
             <div className="text-[13px] font-medium text-slate-400">BTC price · Delta BTCUSD</div>
             {chg != null && <span data-testid="stat-change" className={`rounded px-1.5 py-0.5 font-mono text-[12px] font-semibold ${chg >= 0 ? "bg-teal-500/10 text-teal-300" : "bg-red-500/10 text-red-300"}`}>{chg >= 0 ? "▲" : "▼"} {sgn(chg, 2)}% 24h</span>}
@@ -87,7 +87,7 @@ function DecisionHero({ s }) {
           <div className="mt-2"><Sparkline bars={day.bars} height={58} testid="price-24h" /></div>
           {day.bars && <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-500"><span>24h low {n(Math.min(day.low, price || day.low), 0)}</span><span>24h high {n(Math.max(day.high, price || day.high), 0)}</span></div>}
         </div>
-        <div className="grid grid-cols-2 gap-4 border-t border-[#1e2a4a] p-5 lg:border-t-0">
+        <div className="grid grid-cols-2 gap-4 border-t border-line p-5 lg:border-t-0">
           <div data-testid="readiness-score" className="col-span-2"><Ring value={s.readiness?.score ?? 0} max={1} size={68} color={VIZ.brand} label="Checklist progress" sub="share of safety checks complete — not a win chance" /></div>
           <Ring testid="stat-scalp" value={s.scalp.passed} max={total(s.scalp)} size={54} stroke={5} color={s.scalp.status === "BUY" ? VIZ.up : s.scalp.status === "SELL" ? VIZ.down : VIZ.s1} label="Scalping" sub={`${s.scalp.passed}/${total(s.scalp)} · ${String(s.scalp.status).toLowerCase()}`} />
           <Ring testid="stat-swing" value={s.swing.passed} max={total(s.swing)} size={54} stroke={5} color={s.swing.status === "BUY" ? VIZ.up : s.swing.status === "SELL" ? VIZ.down : VIZ.s1} label="Swing" sub={`${s.swing.passed}/${total(s.swing)} · ${String(s.swing.status).toLowerCase()}`} />
@@ -99,7 +99,7 @@ function DecisionHero({ s }) {
           </div>
         </div>
       </div>
-      <p className="border-t border-[#1e2a4a] px-5 py-2 text-[11px] text-slate-500">{s.readiness?.note}</p>
+      <div className="border-t border-line px-3"><Note tone="plain">{s.readiness?.note}</Note></div>
     </section>
   );
 }
@@ -116,7 +116,7 @@ function Flow({ f }) {
         <KV k="Trade imbalance" v={sgn(f.imbalance, 3)} testid="flow-imbalance" /><KV k="Trades" v={f.trades} />
         <KV k="Book bid share" v={pct(f.bid_share, 1)} /><KV k="Book ask share" v={pct(f.ask_share, 1)} />
       </div>
-      <p className="mt-2 font-mono text-[10.5px] text-slate-500">window {ist(f.window_start)} → {ist(f.window_end)} · book {ist(f.book_time)} · strong pressure at |imbalance| ≥ 0.65</p>
+      <More label="Window & rules" className="mt-2"><span className="font-mono">window {ist(f.window_start)} → {ist(f.window_end)} · book {ist(f.book_time)} · strong pressure at |imbalance| ≥ 0.65</span></More>
     </Card>
   );
 }
@@ -128,11 +128,11 @@ function JournalSummary() {
     <Card title="Automatic Journal & Validation" testid="journal-summary" right={<Link to="/journal" className="text-xs text-amber-400" data-testid="open-journal">Journal →</Link>}>
       <div className="font-mono text-[11px] text-slate-500 mb-1">Model signals captured: {sig.data?.total ?? "—"}</div>
       {sig.data?.items?.length ? sig.data.items.map((x) => (
-        <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-[#1e2a4a]/50"><span className="font-mono">{x.strategy} {x.direction} @ {n(x.entry, 1)}</span><Chip status={x.observation} /></div>
+        <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-line/50"><span className="font-mono">{x.strategy} {x.direction} @ {n(x.entry, 1)}</span><Chip status={x.observation} /></div>
       )) : <Empty>No model signal has passed every active check yet.</Empty>}
       <div className="mt-3 font-mono text-[11px] text-slate-500">Direction snapshots: {val.data?.total ?? "—"} · 30d history {val.data?.history?.bars ?? "—"} bars, {val.data?.history?.gap_count ?? "—"} gaps</div>
       {val.data?.items?.map((x) => (
-        <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-[#1e2a4a]/50"><span className="font-mono">{x.model} {x.direction} {ist(x.capture_time)}</span><Chip status={x.outcome} /></div>
+        <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-line/50"><span className="font-mono">{x.model} {x.direction} {ist(x.capture_time)}</span><Chip status={x.outcome} /></div>
       ))}
       <Link to="/validation" className="mt-2 inline-block text-xs text-amber-400" data-testid="open-validation">Validation →</Link>
     </Card>
@@ -144,7 +144,7 @@ function NewsRadar() {
   return (
     <Card title="Global News Radar" sub="Information only · news and event reviews do not affect signals or BTC Direction" testid="news-radar" right={<Link to="/news" className="text-xs text-amber-400" data-testid="open-news">All news →</Link>}>
       {!data ? <Empty>Loading…</Empty> : (data.items || []).map((x) => (
-        <a key={x.id} href={x.link} target="_blank" rel="noreferrer" className="block py-2 border-b border-[#1e2a4a]/50 hover:bg-[#1a264a]/40 transition-colors">
+        <a key={x.id} href={x.link} target="_blank" rel="noreferrer" className="block py-2 border-b border-line/50 hover:bg-line2/40 transition-colors">
           <div className="flex items-center gap-2 flex-wrap"><Chip status={x.impact} /><span className="font-mono text-[10.5px] text-slate-500">{x.publisher} · {x.published_at ? ist(x.published_at) : x.time_error}</span><span className="font-mono text-[10px] text-slate-500">{x.keyword_direction}</span></div>
           <div className="mt-1 text-[13px] text-slate-200">{x.title}</div>
         </a>
@@ -158,13 +158,13 @@ function SourceHealth({ sources, recovery }) {
   return (
     <Card title="Execution controls & source health" testid="source-health" right={isAdmin && <Link to="/audit" className="text-xs text-amber-400" data-testid="open-audit">Audit →</Link>}>
       <div className="flex flex-wrap gap-2 mb-3">
-        <Link to="/journal" data-testid="ctl-fill" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/40">Record actual fill</Link>
-        <Link to="/planner" data-testid="ctl-planner" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/40">Trade planner</Link>
+        <Link to="/journal" data-testid="ctl-fill" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/40">Record actual fill</Link>
+        <Link to="/planner" data-testid="ctl-planner" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/40">Trade planner</Link>
       </div>
-      <p className="mb-2 text-[11px] text-slate-500">This desk never places exchange orders. Execute manually on Delta, then record the actual fill.</p>
+      <Note tone="plain">Desk never places orders — trade on Delta, then record the fill.</Note>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
         {(sources || []).map((s) => (
-          <div key={s.key} className="min-w-0 flex items-center justify-between gap-2 py-1 border-b border-[#1e2a4a]/40" data-testid={`src-${s.key}`}>
+          <div key={s.key} className="min-w-0 flex items-center justify-between gap-2 py-1 border-b border-line/40" data-testid={`src-${s.key}`}>
             <span className="min-w-0 flex-1 truncate text-[11.5px] text-slate-300" title={s.error || s.name}>{s.name}</span>
             <span className="flex shrink-0 items-center gap-1.5"><span className="hidden sm:inline font-mono text-[10px] text-slate-500">{ago(s.last_success)}</span><Chip status={s.status} /></span>
           </div>
@@ -190,10 +190,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <PageHead title="BTC Dashboard" sub={`Delta BTCUSD perpetual · computed ${ist(s.computed_at)} · quote ${s.quote?.source || "—"} (exchange time ${ist(s.quote?.event_time)})`}
-        right={<div className="flex rounded-md border border-[#1e2a4a] p-0.5" role="tablist" aria-label="Dashboard view" data-testid="view-toggle">
+        right={<div className="flex rounded-md border border-line p-0.5" role="tablist" aria-label="Dashboard view" data-testid="view-toggle">
           {[["simple", "Simple view"], ["detailed", "Detailed view"]].map(([k, l]) => (
             <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)} data-testid={`view-${k}`}
-              className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${view === k ? "bg-amber-500 text-[#0b132b]" : "text-slate-300 hover:text-slate-50"}`}>{l}</button>
+              className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${view === k ? "bg-amber-500 text-chrome" : "text-slate-300 hover:text-slate-50"}`}>{l}</button>
           ))}
         </div>} />
       <DecisionHero s={s} />
@@ -224,9 +224,9 @@ export default function Dashboard() {
         <JournalSummary />
         <Card title="Multi-timeframe evidence" sub="Supporting data — Delta completed candles" testid="mtf-card">
           {s.mtf?.rows?.map((r) => (
-            <div key={r.tf} className="flex items-center justify-between py-1 border-b border-[#1e2a4a]/40 text-xs"><span className="font-mono text-amber-300 w-10">{r.tf}</span><span className="font-mono text-slate-400 truncate min-w-0 px-2">{r.close ? `${n(r.close, 0)} · ${r.above_vwap ? "above" : "below"} VWAP · vol ${n(r.volume_ratio, 2)}` : ""}</span><Chip status={r.trend} /></div>
+            <div key={r.tf} className="flex items-center justify-between py-1 border-b border-line/40 text-xs"><span className="font-mono text-amber-300 w-10">{r.tf}</span><span className="font-mono text-slate-400 truncate min-w-0 px-2">{r.close ? `${n(r.close, 0)} · ${r.above_vwap ? "above" : "below"} VWAP · vol ${n(r.volume_ratio, 2)}` : ""}</span><Chip status={r.trend} /></div>
           ))}
-          <p className="mt-2 text-[11px] text-slate-400">{s.mtf?.summary}</p>
+          <Note tone="plain" className="mt-1">{s.mtf?.summary}</Note>
         </Card>
       </div>
       <Card title="Active checks — Scalping vs Swing" sub="Click a check on strategy pages to expand. Every active check must pass; F31 review/journal is excluded." testid="compare-card"><CompareTable scalp={s.scalp} swing={s.swing} /></Card>

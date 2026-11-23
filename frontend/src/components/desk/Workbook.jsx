@@ -17,7 +17,7 @@ function RefArchive() {
   };
   if (!sheets) return <div className="mt-3"><Btn tone="ghost" data-testid="load-reference" onClick={load}>Load read-only reference archive</Btn>{err && <span className="ml-2 text-xs text-red-300">{err}</span>}</div>;
   return (
-    <div className="mt-4 rounded border border-[#1e2a4a] p-3" data-testid="reference-archive">
+    <div className="mt-4 rounded border border-line p-3" data-testid="reference-archive">
       <p className="mb-2 text-[11px] text-slate-500">{sheets.note}</p>
       <div className="flex flex-wrap gap-1.5">
         {Object.entries(sheets.sheets).map(([k, v]) => (

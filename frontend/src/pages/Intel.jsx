@@ -14,11 +14,11 @@ const tone = (v) => (v == null ? "text-slate-300" : v > 0 ? "text-teal-300" : v 
 const vote = (v) => (v > 0 ? ["▲ bullish", "text-teal-300"] : v < 0 ? ["▼ bearish", "text-red-300"] : ["— neutral", "text-slate-400"]);
 
 const Badge = ({ label }) => <span className={`inline-flex whitespace-nowrap rounded border px-2 py-0.5 text-[11px] font-semibold ${BIAS[label] || "border-slate-600 text-slate-400"}`}>{label ? label[0] + label.slice(1).toLowerCase() : "No data"}</span>;
-const Src = ({ source, at }) => <p className="mt-2 text-[11px] text-slate-500">Source: {source || "—"}{at ? ` · updated ${ago(at)}` : ""}</p>;
-const Missing = ({ what, why }) => <p className="rounded border border-[#1e2a4a] px-3 py-3 text-[12.5px] text-slate-400">{what}: <b className="text-amber-300">unavailable</b>{why ? ` (${why})` : ""}. Nothing is estimated in its place.</p>;
+const Src = ({ source, at }) => <Note tone="plain" className="mt-1">Source: {source || "—"}{at ? ` · updated ${ago(at)}` : ""}</Note>;
+const Missing = ({ what, why }) => <p className="rounded border border-line px-3 py-3 text-[12.5px] text-slate-400">{what}: <b className="text-amber-300">unavailable</b>{why ? ` (${why})` : ""}. Nothing is estimated in its place.</p>;
 function Fig({ label, value, sub, cls = "text-slate-50" }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${cls}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -47,7 +47,7 @@ function Forecast({ f }) {
                 <td className="whitespace-nowrap font-semibold">{H_NAME[r.horizon]}</td>
                 <td style={{ minWidth: 230 }}>
                   <div className="flex h-3 overflow-hidden rounded" role="img" aria-label={`Rise ${r.up} percent, flat ${r.neutral} percent, fall ${r.down} percent`}>
-                    <div className="bg-teal-400" style={{ width: `${r.up}%` }} /><div className="w-0.5 bg-[#0b1220]" /><div className="bg-slate-500" style={{ width: `${r.neutral}%` }} /><div className="w-0.5 bg-[#0b1220]" /><div className="flex-1 bg-red-400" />
+                    <div className="bg-teal-400" style={{ width: `${r.up}%` }} /><div className="w-0.5 bg-panel2" /><div className="bg-slate-500" style={{ width: `${r.neutral}%` }} /><div className="w-0.5 bg-panel2" /><div className="flex-1 bg-red-400" />
                   </div>
                   <div className="mt-1 flex justify-between font-mono text-[11.5px]"><span className="text-teal-300">▲ {r.up}%</span><span className="text-slate-300">■ {r.neutral}%</span><span className="text-red-300">▼ {r.down}%</span></div>
                 </td>
@@ -56,7 +56,7 @@ function Forecast({ f }) {
                 <td className="num font-mono text-slate-400">{n(r.range90[0], 0)} – {n(r.range90[1], 0)}</td>
                 <td className="num font-mono text-teal-300">{r.support ? n(r.support, 0) : "—"}</td><td className="num font-mono text-red-300">{r.resistance ? n(r.resistance, 0) : "—"}</td>
                 <td className={`text-[12px] font-semibold ${r.confidence === "LOW" ? "text-slate-400" : "text-amber-300"}`}>{r.confidence === "LOW" ? "Low" : "Medium"}</td>
-                <td><button type="button" className="rounded border border-[#1e2a4a] px-2 py-0.5 text-[11.5px] text-slate-200 hover:border-amber-500/50" aria-expanded={open === r.horizon} onClick={() => setOpen(open === r.horizon ? null : r.horizon)}>Why</button></td>
+                <td><button type="button" className="rounded border border-line px-2 py-0.5 text-[11.5px] text-slate-200 hover:border-amber-500/50" aria-expanded={open === r.horizon} onClick={() => setOpen(open === r.horizon ? null : r.horizon)}>Why</button></td>
               </tr>
               {open === r.horizon && <tr><td colSpan={9} className="text-[12px] text-slate-300">
                 <p>Technical state on {r.timeframe}{r.higher ? ` (with ${r.higher})` : ""}: <b>{r.state}</b> (score {r.score}). In {r.samples.toLocaleString("en-US")} past cases like this, BTC rose {r.up}%, stayed flat {r.neutral}% and fell {r.down}% of the time. The normal rates for any moment are {r.base.up}% / {r.base.neutral}% / {r.base.down}%. Flat means a move smaller than {n(r.neutral_move_pct, 2)}%.</p>
@@ -70,7 +70,7 @@ function Forecast({ f }) {
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">What the other modules say now</h3>
           {f?.context?.length ? <ul className="space-y-1 text-[12.5px]">{f.context.map((x) => <li key={x.name} className="flex justify-between gap-3"><span className="text-slate-300">{x.name}<span className="block text-[11px] text-slate-500">{x.text}</span></span><span className={`whitespace-nowrap font-semibold ${vote(x.side)[1]}`}>{vote(x.side)[0]}</span></li>)}</ul> : <p className="text-[12.5px] text-slate-500">Waiting for derivatives, spot pressure and liquidation data.</p>}
-          <p className="mt-1 text-[11px] text-slate-500">Shown for context. They are not inside the probabilities yet, because there is no long history to test them on; this server is now recording them.</p>
+          <Note tone="plain">Shown for context. They are not inside the probabilities yet, because there is no long history to test them on; this server is now recording them.</Note>
         </section>
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Live score card</h3>
@@ -78,7 +78,7 @@ function Forecast({ f }) {
             <thead><tr><th>Period</th><th className="num">Forecasts checked</th><th className="num">Most likely outcome was right</th><th className="num">Lean was right</th></tr></thead>
             <tbody>{rows.map((r) => { const c = card[r.horizon] || {}; return <tr key={r.horizon}><td>{H_NAME[r.horizon]}</td><td className="num font-mono">{c.checked || 0}</td><td className="num font-mono">{c.checked ? `${Math.round((100 * c.top_hit) / c.checked)}%` : "—"}</td><td className="num font-mono">{c.lean_n ? `${Math.round((100 * c.lean_hit) / c.lean_n)}% of ${c.lean_n}` : "—"}</td></tr>; })}</tbody>
           </table>
-          <p className="mt-1 text-[11px] text-slate-500">A forecast is saved every 15 minutes and checked when its period ends. Starts empty.</p>
+          <Note tone="plain">A forecast is saved every 15 minutes and checked when its period ends. Starts empty.</Note>
         </section>
       </div>
       <p className="mt-2 text-[11px] text-slate-500">{f?.method} Not financial advice.</p>
@@ -111,7 +111,7 @@ function Technical({ d }) {
         </table>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Chart timeframe">
-        {d.order.map((k) => <button key={k} type="button" role="tab" aria-selected={tf === k} data-testid={`intel-tf-${k}`} onClick={() => setTf(k)} className={`rounded border px-3 py-1.5 font-mono text-xs ${tf === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-[#1e2a4a] text-slate-400"}`}>{k}</button>)}
+        {d.order.map((k) => <button key={k} type="button" role="tab" aria-selected={tf === k} data-testid={`intel-tf-${k}`} onClick={() => setTf(k)} className={`rounded border px-3 py-1.5 font-mono text-xs ${tf === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-line text-slate-400"}`}>{k}</button>)}
         <span className="ml-2 text-[11px] text-slate-500">Chart time is IST. Lines: EMA20 yellow, EMA50 blue, EMA200 purple, S/R dashed.</span>
       </div>
       <div className="mt-2"><IntelChart data={ch} /></div>
@@ -139,7 +139,7 @@ function Technical({ d }) {
               {ch?.volume_profile && <><dt className="font-sans text-slate-400">Volume point of control</dt><dd className="text-right">{n(ch.volume_profile.poc, 0)}</dd><dt className="font-sans text-slate-400">Value area (70%)</dt><dd className="text-right">{n(ch.volume_profile.value_area_low, 0)} – {n(ch.volume_profile.value_area_high, 0)}</dd></>}
               {a.fib && Object.entries(a.fib.levels).map(([k, v]) => <React.Fragment key={k}><dt className="font-sans text-slate-400">Fib {k}</dt><dd className="text-right">{n(v, 0)}</dd></React.Fragment>)}
             </dl>
-            {a.fib && <p className="mt-1 text-[11px] text-slate-500">Fibonacci from the last {a.fib.bars}-bar swing ({n(a.fib.swing_low, 0)} – {n(a.fib.swing_high, 0)}, {a.fib.direction.toLowerCase()}).</p>}
+            {a.fib && <Note tone="plain">Fibonacci from the last {a.fib.bars}-bar swing ({n(a.fib.swing_low, 0)} – {n(a.fib.swing_high, 0)}, {a.fib.direction.toLowerCase()}).</Note>}
           </section>
         </div>
       ) : <p className="mt-3 text-sm text-slate-500">{a ? "INSUFFICIENT DATA for this timeframe." : "Loading…"}</p>}
@@ -159,8 +159,8 @@ function Pressure({ p }) {
           return (
             <div key={k} className="flex items-center gap-3 text-[12px]">
               <span className="w-14 font-mono text-slate-400">{k}</span>
-              <div className="flex h-3 flex-1 overflow-hidden rounded bg-[#0f172a]" role="img" aria-label={`${k}: buyers ${s.toFixed(0)} percent, sellers ${(100 - s).toFixed(0)} percent`}>
-                <div className="bg-teal-400" style={{ width: `${s}%` }} /><div className="w-0.5 bg-[#0b1220]" /><div className="flex-1 bg-red-400" />
+              <div className="flex h-3 flex-1 overflow-hidden rounded bg-panel2" role="img" aria-label={`${k}: buyers ${s.toFixed(0)} percent, sellers ${(100 - s).toFixed(0)} percent`}>
+                <div className="bg-teal-400" style={{ width: `${s}%` }} /><div className="w-0.5 bg-panel2" /><div className="flex-1 bg-red-400" />
               </div>
               <span className="w-40 text-right font-mono text-slate-200">{s.toFixed(1)}% buy · {big(w.buy_usd + w.sell_usd)}</span>
               <span className={`w-20 text-right font-semibold ${w.label === "BUYERS" ? "text-teal-300" : w.label === "SELLERS" ? "text-red-300" : "text-slate-400"}`}>{w.label[0] + w.label.slice(1).toLowerCase()}</span>
@@ -227,7 +227,7 @@ function Liquidations({ l }) {
             <div className="flex-1 rounded-t bg-teal-400" style={{ height: `${(b.short_usd / max) * 100}%`, minHeight: b.short_usd ? 2 : 0 }} />
           </div>))}
       </div>
-      <p className="mt-1 text-[11px] text-slate-500"><span className="text-red-300">■</span> longs liquidated · <span className="text-teal-300">■</span> shorts liquidated · tallest bar {big(max)} · hover a bar for the hour</p>
+      <Note tone="plain"><span className="text-red-300">■</span> longs liquidated · <span className="text-teal-300">■</span> shorts liquidated · tallest bar {big(max)} · hover a bar for the hour</Note>
       <h3 className="mb-1 mt-4 text-[13px] font-semibold text-slate-100">Large events (≥ {big(l.large_threshold_usd)})</h3>
       {l.large.length ? (
         <div className="max-h-56 overflow-auto scroll-thin"><table className="desk-table">
@@ -236,7 +236,7 @@ function Liquidations({ l }) {
         </table></div>
       ) : <p className="text-[12.5px] text-slate-500">No large liquidation reported in the last 24 hours.</p>}
       {l.by_exchange && Object.keys(l.by_exchange).length > 0 && <p className="mt-2 text-[11.5px] text-slate-400">By exchange (24h): {Object.entries(l.by_exchange).map(([k, v]) => `${k} ${v.count} events, longs ${big(v.long_usd)}, shorts ${big(v.short_usd)}`).join(" · ")}</p>}
-      <p className="mt-2 text-[11px] text-slate-500">Feeds working: {l.feeds_ok.join(", ") || "none"}{l.feeds_down.length ? ` · not working: ${l.feeds_down.join(", ")}` : ""}{l.collecting_since ? ` · collecting since ${ist(l.collecting_since)}` : ""}. {l.note}</p>
+      <Note tone="plain">Feeds working: {l.feeds_ok.join(", ") || "none"}{l.feeds_down.length ? ` · not working: ${l.feeds_down.join(", ")}` : ""}{l.collecting_since ? ` · collecting since ${ist(l.collecting_since)}` : ""}. {l.note}</Note>
     </Card>
   );
 }
@@ -306,7 +306,7 @@ export default function Intel() {
               <td className="font-mono text-[11.5px]">{s.updated ? ago(s.updated) : "—"}</td><td className="text-[11.5px] text-slate-400">{s.error || s.note}</td></tr>)}</tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">ETF flows, macro, on-chain and sentiment feed the crash-risk and recovery scores. They do not change the short-term forecast table. Coming next: alerts.</p>
+        <Note tone="plain">ETF flows, macro, on-chain and sentiment feed the crash-risk and recovery scores. They do not change the short-term forecast table. Coming next: alerts.</Note>
       </Card>
     </div>
   );

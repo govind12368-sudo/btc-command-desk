@@ -1,5 +1,5 @@
 import React from "react";
-import { Chip, Expand } from "./ui";
+import { Chip, Expand, Note } from "./ui";
 import { n, ist, sgn, pct } from "@/lib/fmt";
 
 export const PILLAR_NAMES = { money_flow: "Money Flow", liquidity: "Liquidity", positioning: "Positioning", macro: "Macro", technical: "Technical" };
@@ -61,16 +61,15 @@ export function DirectionPanel({ live, testid = "direction-panel" }) {
       {paused && historical && <p className="mt-2 text-[11px] text-amber-300">The previous {historical} confirmation is historical. Current direction is paused until valid data and fresh candle confirmations return.</p>}
       {quality?.issues?.length > 0 && <ul className="mt-2 space-y-1 text-[11px] text-amber-300" data-testid={`${testid}-issues`}>{quality.issues.map((issue, i) => <li key={i}>• {issue}</li>)}</ul>}
       <div className="mt-3 font-mono text-xs text-slate-400">Frozen assessment score: <span className="text-slate-200">{live.score == null ? "unavailable" : sgn(live.score, 3)}</span>{live.strength ? ` · assessment strength ${live.strength}` : ""}</div>
-      <div className="mt-3 h-2 w-full rounded bg-[#0f172a] relative overflow-hidden">
+      <div className="mt-3 h-2 w-full rounded bg-panel2 relative overflow-hidden">
         <div className="absolute top-0 bottom-0 left-1/2 w-px bg-slate-600" />
         {live.score != null && <div className={`absolute top-0 bottom-0 ${live.score >= 0 ? "left-1/2 bg-teal-500" : "right-1/2 bg-red-500"}`} style={{ width: `${Math.min(50, Math.abs(live.score) * 50)}%` }} />}
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {Object.entries(live.active_shares || {}).map(([k, v]) => <span key={k} className="rounded border border-[#1e2a4a] px-2 py-0.5 font-mono text-[10.5px] text-slate-300">{PILLAR_NAMES[k]} {pct(v, 0)} · {sgn(live.normalized_scores?.[k], 1)}</span>)}
+        {Object.entries(live.active_shares || {}).map(([k, v]) => <span key={k} className="rounded border border-line px-2 py-0.5 font-mono text-[10.5px] text-slate-300">{PILLAR_NAMES[k]} {pct(v, 0)} · {sgn(live.normalized_scores?.[k], 1)}</span>)}
         {(live.excluded || []).map((k) => <span key={k} className="rounded border border-gray-700/60 px-2 py-0.5 font-mono text-[10.5px] text-gray-500 line-through">{PILLAR_NAMES[k]}</span>)}
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">The score measures model tilt on a −1…+1 scale. Strength is not a measured win probability.</p>
-      <p className="mt-2 text-[11px] text-slate-400">Inputs are frozen for each assessed completed 15-minute candle. A new direction needs {live.confirmation_required ?? 2} consecutive, distinct completed candles; refreshing the page adds no confirmations.</p>
+      <Note tone="plain" className="mt-1">Score = model tilt on −1…+1 (not a win chance). A new direction needs {live.confirmation_required ?? 2} consecutive completed 15-minute candles; inputs are frozen per candle and refreshing adds no confirmations.</Note>
       <div className="mt-2 font-mono text-[10.5px] text-slate-500">Candle close {ist(live.candle_close)} · assessed {ist(live.assessed_at)} · frozen coverage {live.coverage ?? 0}/5</div>
       <Expand label="Assessment sources & confirmation policy" testid={`${testid}-provenance`}>
         <div className="space-y-1 text-[11px] text-slate-400">

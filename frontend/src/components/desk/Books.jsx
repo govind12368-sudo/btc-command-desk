@@ -1,5 +1,5 @@
 import React from "react";
-import { Card } from "@/components/desk/ui";
+import { Card, Note } from "@/components/desk/ui";
 import { n, usd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 
@@ -20,7 +20,7 @@ export function DayChip({ type, title }) {
 
 export function Stat({ label, value, tone = "text-slate-50", sub }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -47,7 +47,7 @@ export function BookPanel({ book, title, sub, testid }) {
         <Card title={title || "Cumulative net P&L"} sub={sub}>
           <LineChart series={[{ name: "Net P&L $", color: VIZ.s1, points: b.curve }]} xFmt={(v) => v} yFmt={(v) => n(v, 0)} unit=" $" height={160} />
         </Card>
-      ) : <p className="rounded-lg border border-[#1e2a4a] px-3 py-3 text-center text-[12.5px] text-slate-500">The curve appears after two closed trades in this period.</p>}
+      ) : <p className="rounded-lg border border-line px-3 py-3 text-center text-[12.5px] text-slate-500">The curve appears after two closed trades in this period.</p>}
     </div>
   );
 }
@@ -58,7 +58,7 @@ export function PeriodSwitch({ value, onChange, sinceDate }) {
     <div className="flex gap-1.5">
       {opts.map(([k, l]) => (
         <button key={k} type="button" data-testid={`period-${k}`} onClick={() => onChange(k)}
-          className={`rounded border px-3 py-1.5 text-xs transition-colors ${value === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-[#1e2a4a] text-slate-400"}`}>{l}</button>
+          className={`rounded border px-3 py-1.5 text-xs transition-colors ${value === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-line text-slate-400"}`}>{l}</button>
       ))}
     </div>
   );
@@ -75,8 +75,8 @@ export function DayTypeCard({ day, compact }) {
       {day.type === "NA" ? <p className="text-sm text-slate-500">Waiting for candle data{day.error ? ` (${day.error})` : ""}.</p> : (
         <>
           <div className="grid grid-cols-1 gap-2 text-[12.5px] sm:grid-cols-2">
-            <div className="rounded border border-[#1e2a4a] px-3 py-2">A SHORT signal now: <b className="text-slate-100">{PLAYBOOK_NAME[pb.SHORT] || "—"}</b></div>
-            <div className="rounded border border-[#1e2a4a] px-3 py-2">A LONG signal now: <b className="text-slate-100">{PLAYBOOK_NAME[pb.LONG] || "—"}</b></div>
+            <div className="rounded border border-line px-3 py-2">A SHORT signal now: <b className="text-slate-100">{PLAYBOOK_NAME[pb.SHORT] || "—"}</b></div>
+            <div className="rounded border border-line px-3 py-2">A LONG signal now: <b className="text-slate-100">{PLAYBOOK_NAME[pb.LONG] || "—"}</b></div>
           </div>
           {!compact && (
             <div className="mt-3 overflow-x-auto scroll-thin">
@@ -94,7 +94,7 @@ export function DayTypeCard({ day, compact }) {
               </table>
             </div>
           )}
-          <p className="mt-2 text-[11.5px] text-slate-500">This describes what price has done. In 11 months of testing it did not predict the next hours and switching by it did not make money. See the Strategy audit.</p>
+          <Note tone="plain" className="mt-1">Describes what price has done. In 11 months of testing it did not predict the next hours and switching by it did not make money. See the Strategy audit.</Note>
         </>
       )}
     </Card>
@@ -136,7 +136,7 @@ export function EvidenceCard({ ev }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">Rebuilt on 5-minute candles, so single trades can differ a little from the live 1-minute results. News blocks and daily caps are not rebuilt.</p>
+      <Note tone="plain" className="mt-1">Rebuilt on 5-minute candles, so single trades can differ a little from the live 1-minute results. News blocks and daily caps are not rebuilt.</Note>
     </Card>
   );
 }

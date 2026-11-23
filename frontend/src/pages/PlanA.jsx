@@ -2,7 +2,7 @@ import React from "react";
 import { toast } from "sonner";
 import { useFetch } from "@/hooks/useFetch";
 import { useDesk } from "@/context/DeskContext";
-import { Card, PageHead, Note } from "@/components/desk/ui";
+import { Card, PageHead, Note, usePaged } from "@/components/desk/ui";
 import { Btn } from "@/components/desk/forms";
 import { n, usd, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
@@ -12,7 +12,7 @@ import { DayFilterBar, FilterSummary, SupportLine, useDayFilter, useSupport, mat
 
 function Stat({ label, value, tone = "text-slate-50" }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
     </div>
@@ -31,6 +31,7 @@ export default function PlanA() {
   const sup = useSupport();
   const all = [...(data?.rows || [])].reverse();
   const rows = all.filter((r) => matches(f, r.day_type, r.playbook, sup[r.signal_id]?.level));
+  const [pageRows, pager] = usePaged(rows, 100, JSON.stringify(f));
   const closed = rows.filter((r) => r.taken === "Yes" && ["TARGET", "STOP", "TIME"].includes(r.plan_result));
   return (
     <div className="space-y-4" data-testid="plan-a-page">
@@ -58,7 +59,7 @@ export default function PlanA() {
           <table className="desk-table">
             <thead><tr><th>Signal</th><th>Signal → Plan A</th><th>Day type</th><th className="num">Entry</th><th className="num">Stop</th><th className="num">Target</th><th>Filled</th><th>Result</th><th className="num">Net</th><th>Taken</th><th>Why it won or lost</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {pageRows.map((r) => (
                 <tr key={r.signal_id} className={r.taken === "Skip" ? "opacity-60" : ""}>
                   <SignalCell id={r.signal_id} captured={(r.captured_ist || "").slice(5).replace("-", "/")} />
                   <td className="whitespace-nowrap text-[12px]"><span className={DIR_TONE[r.model_dir]}>{r.model_dir}</span> <span className="text-slate-500">→</span> <span className={`font-semibold ${DIR_TONE[r.plan_dir] || "text-slate-500"}`}>{r.plan_dir || "—"}</span></td>
@@ -76,14 +77,15 @@ export default function PlanA() {
               {!rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-500">{isActive(f) ? "No signal matches this filter." : "No scalp signals captured yet. New ones appear here automatically."}</td></tr>}
             </tbody>
           </table>
+          {pager}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">"Stop gap" = distance from entry to stop. Net is after fees: entry taker, exit maker on Target otherwise taker, +18% GST. Funding and slippage not included.</p>
+        <Note tone="plain">"Stop gap" = distance from entry to stop. Net is after fees: entry taker, exit maker on Target otherwise taker, +18% GST. Funding and slippage not included.</Note>
       </Card>
       <DayTypeCard day={data?.day_type} compact />
       {isAdmin && data?.feed_url && (
         <Card title="Google Sheet link" sub="Paste this into cell B1 of the 'Vantage Feed' tab in your Vantage Google Sheet. Keep it private — anyone with it can read this table." testid="plan-a-feed">
           <div className="flex flex-wrap items-center gap-2">
-            <code className="max-w-full truncate rounded bg-[#0f172a] px-2 py-1.5 text-[11.5px] text-slate-300">{data.feed_url}</code>
+            <code className="max-w-full truncate rounded bg-panel2 px-2 py-1.5 text-[11.5px] text-slate-300">{data.feed_url}</code>
             <Btn onClick={copy} data-testid="plan-a-copy">Copy link</Btn>
           </div>
         </Card>

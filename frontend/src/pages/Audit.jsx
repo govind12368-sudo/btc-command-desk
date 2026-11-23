@@ -18,7 +18,7 @@ function RecoveryResult({ result }) {
     {result.retry_in_sec && <Note tone="amber">Recovery is cooling down. Try again in {result.retry_in_sec} seconds; provider retry windows still apply.</Note>}
     {result.result === "already running" && <Note tone="amber">A recovery pass is running. This page refreshes its audit status every 15 seconds.</Note>}
     {counts && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 font-mono text-xs">
-      {[["Checked", counts.checked], ["Attempted", counts.attempted], ["Fixed", counts.fixed], ["Still failing", counts.still_failing], ["Access / input needed", counts.configuration_required], ["Deferred", counts.deferred]].map(([label, value]) => <div key={label} className="rounded border border-[#1e2a4a] p-2"><div className="text-slate-500 text-[10px]">{label}</div><div className="mt-1 text-slate-200">{value ?? 0}</div></div>)}
+      {[["Checked", counts.checked], ["Attempted", counts.attempted], ["Fixed", counts.fixed], ["Still failing", counts.still_failing], ["Access / input needed", counts.configuration_required], ["Deferred", counts.deferred]].map(([label, value]) => <div key={label} className="rounded border border-line p-2"><div className="text-slate-500 text-[10px]">{label}</div><div className="mt-1 text-slate-200">{value ?? 0}</div></div>)}
     </div>}
     {result.at && <p className="font-mono text-[10.5px] text-slate-500">Started {ist(result.at)}{result.finished_at ? ` · finished ${ist(result.finished_at)}` : ""}{result.duration_sec != null ? ` · ${result.duration_sec}s` : ""}{result.recomputed ? " · dashboard recalculated" : ""}</p>}
     {(result.recompute_error || result.history_saved === false) && <Note tone="amber">{result.recompute_error ? `Dashboard recalculation needs attention: ${result.recompute_error}. ` : ""}{result.history_saved === false ? `This result is visible here, but storing its history failed: ${result.history_error || "storage unavailable"}.` : ""}</Note>}
@@ -49,7 +49,7 @@ function LegacyImport() {
   };
   return (
     <Card title="Import data from BTC Command Desk" sub="One-time move of your model signals, direction snapshots, swing-plan archive, daily review and settings from the old Emergent site. Safe to repeat: records already here are skipped." testid="legacy-import">
-      <label className={`inline-flex cursor-pointer items-center gap-2 rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-[#0b132b] hover:bg-amber-400 ${busy ? "pointer-events-none opacity-60" : ""}`}>
+      <label className={`inline-flex cursor-pointer items-center gap-2 rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-chrome hover:bg-amber-400 ${busy ? "pointer-events-none opacity-60" : ""}`}>
         <input type="file" accept="application/json,.json" className="sr-only" onChange={onFile} data-testid="legacy-import-file" />
         {busy ? "Importing…" : "Choose export file (.json)"}
       </label>
@@ -57,7 +57,7 @@ function LegacyImport() {
         <div className="mt-3 space-y-1 text-[12.5px]" data-testid="legacy-import-result">
           <div className="text-slate-400">From {res.exported_from} · exported {ist(res.exported_at)}</div>
           {Object.entries(res.result).map(([k, v]) => (
-            <div key={k} className="flex justify-between border-b border-[#1e2a4a]/50 py-1"><span className="text-slate-300">{k.replace(/_/g, " ")}</span>
+            <div key={k} className="flex justify-between border-b border-line/50 py-1"><span className="text-slate-300">{k.replace(/_/g, " ")}</span>
               <span className="font-mono text-slate-100">{v.changed ? `${v.changed.length} setting(s) updated` : `${v.added} added · ${v.already_present} already here`}</span></div>
           ))}
         </div>
@@ -92,14 +92,14 @@ export default function Audit() {
       <Card title="Source audit & recovery" sub="The button checks all failing and stale installed sources. Automatic background recovery retries one due source family at a time. 120 s cooldown, bounded retries and provider Retry-After are respected." testid="recovery-card"
         right={<Chip status={a.recovery?.state} label={String(a.recovery?.state || "idle").toUpperCase()} testid="recovery-state" />}>
         <p className="font-mono text-xs text-slate-400">Last pass {ist(a.recovery?.last_pass)} · result {a.recovery?.last_result?.result || "—"} {a.recovery?.last_result?.family ? `(${a.recovery.last_result.family})` : ""}</p>
-        <p className="mt-1 text-[11px] text-slate-500">Recovery never invents values, changes observation dates, overrides risk settings or confirmations, rewrites trades, runs arbitrary URLs/code, or claims an authentication restriction was repaired.</p>
+        <Note tone="plain">Recovery never invents values, changes observation dates, overrides risk settings or confirmations, rewrites trades, runs arbitrary URLs/code, or claims an authentication restriction was repaired.</Note>
         <RecoveryResult result={shownResult} />
         {runError && <Note tone="red">Recovery request failed: {runError}. Check the current audit status below; a failed request does not prove the sources were repaired.</Note>}
         {latest && lastCompleted && shownResult !== lastCompleted && latest.run_id !== lastCompleted.run_id && <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Last completed recovery pass</summary><RecoveryResult result={lastCompleted} /></details>}
       </Card>
       <Card title={`Current issues (${a.current_issues.length})`} testid="current-issues">
         {a.current_issues.length === 0 ? <Empty>All sources healthy.</Empty> : a.current_issues.map((s) => (
-          <div key={s.key} className="py-2 border-b border-[#1e2a4a]/50">
+          <div key={s.key} className="py-2 border-b border-line/50">
             <div className="flex flex-wrap items-center gap-2"><Chip status={s.status} /><span className="text-sm">{s.name}</span><span className="font-mono text-[10.5px] text-slate-500">{s.instrument}</span></div>
             <p className="mt-1 font-mono text-[11px] text-red-300/90">{s.error || "data older than its freshness threshold"}</p>
             <p className="font-mono text-[10.5px] text-slate-500">last success {ist(s.last_success)} · failures {s.fail_count} · next retry {ist(s.next_retry)}{s.status === "access_needed" ? " · provider access/input needed (cannot be repaired automatically)" : ""}</p>
@@ -112,16 +112,16 @@ export default function Audit() {
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Storage health" sub={a.storage.limits} testid="storage-card" right={<Chip status={a.storage.ok ? "PASS" : "BLOCKED"} />}>
-          <div className="grid grid-cols-2 gap-x-6 font-mono text-[12px]">{Object.entries(a.storage.collections).map(([k, v]) => <div key={k} className="flex justify-between py-0.5 border-b border-[#1e2a4a]/40"><span className="text-slate-400">{k}</span><span>{v}</span></div>)}</div>
+          <div className="grid grid-cols-2 gap-x-6 font-mono text-[12px]">{Object.entries(a.storage.collections).map(([k, v]) => <div key={k} className="flex justify-between py-0.5 border-b border-line/40"><span className="text-slate-400">{k}</span><span>{v}</span></div>)}</div>
           <p className="mt-2 font-mono text-[11px] text-slate-500">data size {a.storage.data_mb} MB</p>
         </Card>
         <Card title="Calculation dependencies" testid="dependencies-card">
-          {a.dependencies.map((d) => <div key={d.output} className="py-1.5 border-b border-[#1e2a4a]/40"><div className="text-sm text-slate-200">{d.output}</div><div className="font-mono text-[11px] text-slate-500">← {d.inputs.join(" · ")}</div></div>)}
+          {a.dependencies.map((d) => <div key={d.output} className="py-1.5 border-b border-line/40"><div className="text-sm text-slate-200">{d.output}</div><div className="font-mono text-[11px] text-slate-500">← {d.inputs.join(" · ")}</div></div>)}
         </Card>
       </div>
       <Card title="Release schedules (macro)" testid="release-schedules">
-        {Object.entries(a.release_schedules || {}).map(([k, m]) => <div key={k} className="flex flex-wrap items-center gap-2 py-1.5 border-b border-[#1e2a4a]/40 text-xs"><span className="font-mono text-amber-300 w-14">{k}</span><span>{m.schedule}</span><span className="font-mono text-slate-400">release {m.release_date} · next {m.next_publication}{m.next_publication_inferred ? " (inferred)" : " (official)"} · deadline {ist(m.deadline)}</span><Chip status={m.valid ? "PASS" : "UNAVAILABLE"} /></div>)}
-        <p className="mt-2 text-[11px] text-slate-500">H.10: weekly Monday release of prior-week daily observations. H.15: business-day releases. EIA Brent: weekly batches of daily observations (next date read from EIA). Holiday extensions are never assumed.</p>
+        {Object.entries(a.release_schedules || {}).map(([k, m]) => <div key={k} className="flex flex-wrap items-center gap-2 py-1.5 border-b border-line/40 text-xs"><span className="font-mono text-amber-300 w-14">{k}</span><span>{m.schedule}</span><span className="font-mono text-slate-400">release {m.release_date} · next {m.next_publication}{m.next_publication_inferred ? " (inferred)" : " (official)"} · deadline {ist(m.deadline)}</span><Chip status={m.valid ? "PASS" : "UNAVAILABLE"} /></div>)}
+        <Note tone="plain">H.10: weekly Monday release of prior-week daily observations. H.15: business-day releases. EIA Brent: weekly batches of daily observations (next date read from EIA). Holiday extensions are never assumed.</Note>
       </Card>
       <WorkbookCoverage wb={a.workbook} note={a.historical_findings_note} />
       <Card title="Repair history" sub="Stored separately from trades and reviews" testid="repair-history">

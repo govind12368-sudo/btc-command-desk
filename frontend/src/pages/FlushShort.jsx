@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { Card, PageHead, Note } from "@/components/desk/ui";
+import { Card, PageHead, Note, usePaged } from "@/components/desk/ui";
 import { n, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 
@@ -10,7 +10,7 @@ const RESULT_TONE = { Target: "text-teal-300", Stop: "text-red-300", "Time exit"
 
 function Stat({ label, value, tone = "text-slate-50", sub }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -41,7 +41,7 @@ function Detail({ r }) {
     ["Best / worst move", r.mfe == null ? "—" : `+${r.mfe}R / −${r.mae}R`]];
   return (
     <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-      {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-[#1e2a4a]/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
+      {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
       <div className="pt-1 text-slate-300 sm:col-span-2 lg:col-span-3">{r.reason}</div>
     </div>
   );
@@ -56,11 +56,12 @@ export default function FlushShort() {
   const rowsAll = d.rows || [];
   const rows0 = period === "live" ? rowsAll.filter((r) => r.period === "Live") : rowsAll;
   const rows = showAll ? rows0 : rows0.filter((r) => r.rule !== "No trade");
+  const [pageRows, pager] = usePaged(rows, 100, `${period}-${showAll}`);
   const s = period === "live" ? d.live : d.all;
   let eq = 0;
   const curve = [...rows0].reverse().filter((r) => r.status === "CLOSED").map((r) => ({ t: r.exit_ist, v: (eq += r.net) }));
   const ev = d.evidence;
-  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
+  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   return (
     <div className="space-y-4" data-testid="flush-page">
       <PageHead title="Flush Short v3 – Journal" sub={`Paper trades only (no real orders). Takes a SHORT breakdown signal only in a down market, when all six rules agree. Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}`} />
@@ -71,7 +72,7 @@ export default function FlushShort() {
         <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live from {d.live_start_ist?.slice(5) || "start"}</button>
       </div>
       {d.market_now && (
-        <div className={`rounded-lg border px-4 py-3 ${d.market_now.active ? "border-red-500/50 bg-red-950/20" : "border-slate-600 bg-[#0f172a]/60"}`} data-testid="flush-market">
+        <div className={`rounded-lg border px-4 py-3 ${d.market_now.active ? "border-red-500/50 bg-red-950/20" : "border-slate-600 bg-panel2/60"}`} data-testid="flush-market">
           <div className="text-[12px] text-slate-400">Market now (BTC over the last 30 days)</div>
           <div className="text-lg font-bold text-slate-50">{d.market_now.type} market · {(d.market_now.chg30 * 100).toFixed(1)}%</div>
           <div className="text-[12.5px] text-slate-300">{d.market_now.active ? "Flush Short is ACTIVE: it will take qualifying SHORT breakdown signals." : "Flush Short is STANDING ASIDE: it only trades when BTC is down more than 5% over 30 days. In up and range markets no tested rule beat luck."}</div>
@@ -97,7 +98,7 @@ export default function FlushShort() {
           <table className="desk-table">
             <thead><tr><th>Date</th><th>Time</th><th>Decision</th><th>Side</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th className="num">Exit</th><th className="num">P&L</th><th className="num">Running</th></tr></thead>
             <tbody>
-              {rows.map((r) => {
+              {pageRows.map((r) => {
                 const traded = r.status === "OPEN" || r.status === "CLOSED";
                 return (
                   <React.Fragment key={r.signal_id}>
@@ -111,12 +112,13 @@ export default function FlushShort() {
                       <td className={`num font-semibold ${pnlTone(r.net)}`}>{r.net == null ? "—" : signedUsd(r.net)}</td>
                       <td className={`num ${pnlTone(r.running_total)}`}>{r.running_total == null ? "" : signedUsd(r.running_total)}</td>
                     </tr>
-                    {open === r.signal_id && <tr><td colSpan={11} className="bg-[#0f172a] text-xs"><Detail r={r} /></td></tr>}
+                    {open === r.signal_id && <tr><td colSpan={11} className="bg-panel2 text-xs"><Detail r={r} /></td></tr>}
                   </React.Fragment>
                 );
               })}
             </tbody>
           </table>
+          {pager}
           {!rows.length && <div className="p-4 text-center text-xs text-slate-500">No Flush Short trades yet. It is rare by design: about 1–2 trades a month, and only while BTC is in a down market.</div>}
         </div>
       </Card>

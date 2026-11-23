@@ -1,5 +1,5 @@
 import React from "react";
-import { Card } from "@/components/desk/ui";
+import { Card, Note } from "@/components/desk/ui";
 import { signedUsd } from "@/lib/fmt";
 
 const tone = (v) => (v >= 0 ? "text-teal-300" : "text-red-300");
@@ -45,7 +45,7 @@ export default function LongTest({ lt }) {
             <thead><tr><th>Rule</th><th className="num">Win rate</th><th className="num">Net (bps)</th></tr></thead>
             <tbody>{lt.management.map(([nm, w, b]) => <tr key={nm}><td>{nm}</td><td className="num font-mono">{w}%</td><td className={`num font-mono ${tone(b)}`}>{b}</td></tr>)}</tbody>
           </table>
-          <p className="mt-1 text-[11px] text-slate-500">bps = 0.01% of the position; fees are about 6–12 bps a round trip.</p>
+          <Note tone="plain">bps = 0.01% of the position; fees are about 6–12 bps a round trip.</Note>
         </section>
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Units and filters</h3>

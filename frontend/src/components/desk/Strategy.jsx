@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Chip, KV, Expand } from "./ui";
+import { Chip, KV, Expand, Note } from "./ui";
 import { n, usd, ist, pct } from "@/lib/fmt";
 
 export function ChecksList({ ev, testid }) {
   const [open, setOpen] = useState({});
   if (!ev) return null;
   return (
-    <div data-testid={testid} className="divide-y divide-[#1e2a4a]/70">
+    <div data-testid={testid} className="divide-y divide-line/70">
       {(ev.checks || []).map((c) => {
         const expanded = open[c.id] ?? (c.status === "WAITING SETUP" || c.status === "UNAVAILABLE");
         return (
@@ -21,7 +21,7 @@ export function ChecksList({ ev, testid }) {
         </div>
         );
       })}
-      {ev.excluded_checks?.length > 0 && <p className="py-2 text-[11px] text-slate-500">{ev.excluded_checks.map((c) => `${c.id} ${c.name}`).join(" · ")} is advisory and excluded from this checklist. Review and journal records remain available.</p>}
+      {ev.excluded_checks?.length > 0 && <Note tone="plain">{ev.excluded_checks.map((c) => `${c.id} ${c.name}`).join(" · ")} is advisory and excluded from this checklist. Review and journal records remain available.</Note>}
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function CompareTable({ scalp, swing }) {
           <tr><td /><td className="font-semibold">Passed</td><td className="font-mono" data-testid="cmp-scalp-total">{scalp.passed}/{scalp.total_checks ?? scalp.checks?.length ?? 0}</td><td className="hidden md:table-cell" /><td className="font-mono" data-testid="cmp-swing-total">{swing.passed}/{swing.total_checks ?? swing.checks?.length ?? 0}</td><td className="hidden md:table-cell" /></tr>
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-slate-500">F31 review/journal is advisory and excluded from both totals; existing records are retained.</p>
+      <Note tone="plain">F31 review/journal is advisory and excluded from both totals; existing records are retained.</Note>
     </div>
   );
 }

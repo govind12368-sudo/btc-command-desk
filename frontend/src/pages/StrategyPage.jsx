@@ -56,14 +56,14 @@ export default function StrategyPage({ strat }) {
         <Card title="Signal & levels" sub={`${ev.passed}/${totalChecks} checks · mandatory gates ${ev.mandatory_pass ? "PASS" : "not all passing"}`} testid="strategy-levels-card">
           <Levels lv={ev.levels} testid={`${strat}-page-levels`} />
           {ev.paused_plan && <Note tone="amber">A saved plan is paused ({ev.paused_plan.status_reason}); execution is on hold until bars are continuous again.</Note>}
-          <p className="mt-3 text-[11px] text-slate-500">PLAN ONLY / READY TO CAPTURE are not trade instructions. BUY/SELL appears and is auto-captured only when all {totalChecks} active checks pass. An open actual position switches this strategy to MONITOR. F31 review/journal is advisory and excluded from eligibility; its records are retained.</p>
+          <Note tone="plain">PLAN ONLY / READY TO CAPTURE are not trade instructions. BUY/SELL appears and is auto-captured only when all {totalChecks} active checks pass. An open actual position switches this strategy to MONITOR. F31 review/journal is advisory and excluded from eligibility; its records are retained.</Note>
         </Card>
         <Card title={`${totalChecks} active checks`} sub="Tap a check to see its calculation and any missing prerequisites" testid="strategy-checks-card"><ChecksList ev={ev} testid={`${strat}-checks`} /></Card>
       </div>
       {scenarios.length > 0 && <Card title="F35–F37 scenario calculations" sub="Derived from current venue quotes, contract specifications and completed candles" testid="scenario-levels">
         <Note tone="amber">No qualified direction yet. These LONG and SHORT scenarios are diagnostic previews, cannot be executed, and do not make F35–F37 pass.</Note>
         <div className="grid gap-3 mt-3 lg:grid-cols-2">
-          {scenarios.map(([side, lv]) => <div key={side} className="rounded border border-[#1e2a4a] p-3" data-testid={`scenario-${side.toLowerCase()}`}>
+          {scenarios.map(([side, lv]) => <div key={side} className="rounded border border-line p-3" data-testid={`scenario-${side.toLowerCase()}`}>
             <div className="font-mono text-sm text-amber-300 mb-2">{side} scenario · NOT EXECUTABLE</div>
             <KV k="Entry / stop / target" v={`${n(lv.entry, 1)} / ${n(lv.stop, 1)} / ${n(lv.target, 1)}`} />
             <KV k="F35 · net payoff" v={`${n(lv.net_r, 3)} R after costs`} />

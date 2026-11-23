@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { Card, PageHead, Note } from "@/components/desk/ui";
+import { Card, PageHead, Note, usePaged } from "@/components/desk/ui";
 import { n, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 
@@ -11,7 +11,7 @@ const SIDE_TONE = { LONG: "text-teal-300", SHORT: "text-red-300" };
 
 function Stat({ label, value, tone = "text-slate-50", sub }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -60,7 +60,7 @@ function Detail({ r }) {
     ["Best / worst move", r.mfe == null ? "—" : `+${r.mfe}R / −${r.mae}R`], ["Running total", r.running_total == null ? "—" : signedUsd(r.running_total)]];
   return (
     <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-      {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-[#1e2a4a]/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
+      {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
       <div className="sm:col-span-2 lg:col-span-3 pt-1 text-slate-300">{r.reason}</div>
     </div>
   );
@@ -69,12 +69,13 @@ function Detail({ r }) {
 function Journal({ rows, reverse, showAll }) {
   const [open, setOpen] = useState(null);
   const list = showAll ? rows : rows.filter((r) => r.status);
+  const [pageList, pager] = usePaged(list, 100, String(showAll));
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table">
         <thead><tr><th>Date</th><th>Time</th><th>{reverse ? "Reverse of" : "What we follow"}</th><th>Side</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th className="num">Exit</th><th className="num">P&L</th><th className="num">Running</th></tr></thead>
         <tbody>
-          {list.map((r) => {
+          {pageList.map((r) => {
             const traded = !!r.status && r.status !== "WAITING";
             const key = r.signal_id + (reverse ? "-r" : "");
             return (
@@ -89,12 +90,13 @@ function Journal({ rows, reverse, showAll }) {
                   <td className={`num font-semibold ${pnlTone(r.net)}`}>{r.net == null ? "—" : signedUsd(r.net)}</td>
                   <td className={`num ${pnlTone(r.running_total)}`}>{r.running_total == null ? "" : signedUsd(r.running_total)}</td>
                 </tr>
-                {open === key && <tr><td colSpan={11} className="bg-[#0f172a] text-xs"><Detail r={r} /></td></tr>}
+                {open === key && <tr><td colSpan={11} className="bg-panel2 text-xs"><Detail r={r} /></td></tr>}
               </React.Fragment>
             );
           })}
         </tbody>
       </table>
+      {pager}
       {!list.length && <div className="p-4 text-center text-xs text-slate-500">No trades yet.</div>}
     </div>
   );
@@ -111,7 +113,7 @@ export default function RegimeJournal() {
   const s = book ? (period === "live" ? book.live : book.all) : null;
   let eq = 0;
   const curve = [...rows].reverse().filter((r) => r.status === "CLOSED").map((r) => ({ t: r.exit_ist, v: (eq += r.net) }));
-  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
+  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   return (
     <div className="space-y-4" data-testid="regime-page">
       <PageHead title="Regime Strategy – Journal" sub={`Paper trades on every live scalp signal (no real orders). Updated ${ist(data?.computed_at)} · BTC ${n(data?.live_price, 1)}`} />
@@ -120,7 +122,7 @@ export default function RegimeJournal() {
       <div className="flex flex-wrap items-center gap-2">
         <button className={btn(tab === "regime")} onClick={() => setTab("regime")} data-testid="tab-regime">Regime trades</button>
         <button className={btn(tab === "reverse")} onClick={() => setTab("reverse")} data-testid="tab-reverse">Reverse (Plan A style)</button>
-        <span className="mx-2 h-5 w-px bg-[#1e2a4a]" />
+        <span className="mx-2 h-5 w-px bg-line" />
         <button className={btn(period === "all")} onClick={() => setPeriod("all")}>All since 3 Nov</button>
         <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live from {data?.live_start_ist?.slice(5) || "start"}</button>
       </div>

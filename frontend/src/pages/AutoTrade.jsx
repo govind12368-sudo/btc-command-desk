@@ -57,7 +57,7 @@ function PnlMeter({ today }) {
   const reached = total > 0 ? Math.min(100, (total / target) * 100) : 0;
   return (
     <div data-testid="autotrade-meter">
-      <div className="relative mt-1 h-3.5 rounded border border-[#1e2a4a] bg-[#0f172a]" role="img"
+      <div className="relative mt-1 h-3.5 rounded border border-line bg-panel2" role="img"
         aria-label={`Today's profit and loss ${money(total)} between a loss limit of ${loss} dollars and a target of ${target} dollars`}>
         <div className={`absolute top-0 h-full rounded-sm ${total >= 0 ? "bg-teal-400" : "bg-red-400"}`} style={{ left: `${Math.min(zero, pos)}%`, width: `${Math.abs(pos - zero)}%` }} />
         <div className="absolute -top-1 h-[22px] w-px bg-slate-300" style={{ left: `${zero}%` }} />
@@ -77,7 +77,7 @@ function PnlMeter({ today }) {
 
 function Fig({ label, value, sub, tone = "text-slate-50" }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-base font-bold ${tone}`}>{value}</div>
       {sub && <div className="font-mono text-[11px] text-slate-400">{sub}</div>}
@@ -211,7 +211,7 @@ export default function AutoTrade() {
               : <Btn tone="red" disabled={busy} onClick={() => setConfirmClose(true)} data-testid="autotrade-close">Close everything now</Btn>}
           </div>
           <p className="mt-2 text-[11.5px] text-slate-400">Pause keeps an open trade under its stop and target. Close everything sells the position at market, cancels all orders and pauses.</p>
-          <div className="mt-4 border-t border-[#1e2a4a] pt-3">
+          <div className="mt-4 border-t border-line pt-3">
             <div className="mb-2 text-[12px] font-semibold text-slate-200">Mode</div>
             <div className="flex flex-wrap gap-2">
               {["PAPER", "TESTNET", "LIVE"].map((m) => (

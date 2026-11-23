@@ -57,7 +57,7 @@ function WhatIf({ w }) {
   const cells = (w.cells || []).filter((c) => c.book === book);
   const cols = [["taker", 6], ["maker", 6], ["taker", 12], ["maker", 12]];
   const get = (sp, fee, h) => cells.find((c) => c.stop_pct === sp && c.entry_fee === fee && c.hold_h === h);
-  const btn = (on) => `rounded px-2.5 py-1 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300"}`;
+  const btn = (on) => `rounded px-2.5 py-1 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300"}`;
   return (
     <div>
       <div className="mb-2 flex flex-wrap gap-1.5">{Object.entries(BOOKN).map(([k, v]) => <button key={k} className={btn(book === k)} onClick={() => setBook(k)}>{v}</button>)}</div>
@@ -81,7 +81,7 @@ function WhatIf({ w }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-[11.5px] text-slate-400">Dollars a trade after fees (same $10,000 position everywhere), with R below, {w.signals?.toLocaleString()} signals {w.period?.join(" – ")}. The outlined cell is today's live setting (0.5% stop, market entry, 6h). Detail columns are for market entry, 6h. Hover a cell for its verdict.</p>
+      <Note tone="plain">Dollars a trade after fees (same $10,000 position everywhere), with R below, {w.signals?.toLocaleString()} signals {w.period?.join(" – ")}. The outlined cell is today's live setting (0.5% stop, market entry, 6h). Detail columns are for market entry, 6h. Hover a cell for its verdict.</Note>
     </div>
   );
 }
@@ -92,7 +92,7 @@ function Drift({ d }) {
   const series = [{ name: "Last 30 trades, R", color: VIZ.brand, points: d.points }];
   if (d.band_lo != null) series.push({ name: "History low", color: VIZ.neutral, points: band(d.band_lo) }, { name: "History high", color: VIZ.neutral, points: band(d.band_hi) });
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/50 p-2.5">
+    <div className="rounded-lg border border-line bg-panel2/50 p-2.5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-100">{d.name}</span><Badge v={d.status} /></div>
       <div className="mb-1 text-[12px] text-slate-400">Last {d.window} trades: <b className={ink(d.rolling_r)}>{rr(d.rolling_r)}</b> a trade · history {rr(d.hist_r)} · usual range {rr(d.band_lo)} to {rr(d.band_hi)}</div>
       <LineChart series={series} xFmt={(v) => v} yFmt={(v) => `${v.toFixed(2)}R`} height={130} testid={`drift-${d.key}`} />
@@ -108,7 +108,7 @@ function Reasons({ title, rows }) {
       {(rows || []).map((r) => (
         <div key={r.reason} className="mb-1.5">
           <div className="flex justify-between text-[12px]"><span className={r.reason.startsWith("Win") ? "text-teal-200" : r.reason.startsWith("Loss") ? "text-red-200" : "text-amber-200"}>{r.reason}</span><span className="font-mono text-slate-400">{r.n} · {pc(r.share)}</span></div>
-          <div className="h-1.5 rounded bg-[#1e2a4a]"><div className={`h-1.5 rounded ${r.reason.startsWith("Win") ? "bg-teal-500" : r.reason.startsWith("Loss") ? "bg-red-500" : "bg-amber-500"}`} style={{ width: `${(r.n / max) * 100}%` }} /></div>
+          <div className="h-1.5 rounded bg-line"><div className={`h-1.5 rounded ${r.reason.startsWith("Win") ? "bg-teal-500" : r.reason.startsWith("Loss") ? "bg-red-500" : "bg-amber-500"}`} style={{ width: `${(r.n / max) * 100}%` }} /></div>
         </div>
       ))}
       {!rows?.length && <div className="text-xs text-slate-500">No closed trades yet.</div>}
@@ -120,13 +120,13 @@ function Factor({ f }) {
   const [open, setOpen] = useState(false);
   const w = (s) => (s?.n ? `${s.wins}/${s.n}` : "—");
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/50">
+    <div className="rounded-lg border border-line bg-panel2/50">
       <button className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left" onClick={() => setOpen(!open)}>
         <span className="text-sm text-slate-100">{f.name}</span>
         <span className="flex items-center gap-2"><span className="font-mono text-[11px] text-slate-400">direction {(f.z_direction ?? 0).toFixed(1)}σ · volatility {(f.z_volatility ?? 0).toFixed(1)}σ</span><Badge v={f.verdict} /></span>
       </button>
       {open && (
-        <div className="overflow-x-auto scroll-thin border-t border-[#1e2a4a] px-2 pb-2">
+        <div className="overflow-x-auto scroll-thin border-t border-line px-2 pb-2">
           <table className="desk-table">
             <thead><tr><th>When</th><th className="num">Recent follow wins</th><th className="num">Recent Plan A wins</th><th className="num">26 mo trades</th><th className="num">26 mo follow targets</th><th className="num">follow R</th><th className="num">26 mo Plan A targets</th><th className="num">Plan A R</th></tr></thead>
             <tbody>
@@ -137,7 +137,7 @@ function Factor({ f }) {
               ))}
             </tbody>
           </table>
-          <p className="mt-1 text-[11px] text-slate-500">Direction = groups where follow and reverse move in opposite ways (the data says which side wins). Volatility = both move the same way (the data only says whether price travels far enough to reach 2R). In standard errors over 26 months: under 2σ ≈ could be luck, 3σ+ ≈ real. R columns are after fees.</p>
+          <Note tone="plain">Direction = groups where follow and reverse move in opposite ways (the data says which side wins). Volatility = both move the same way (the data only says whether price travels far enough to reach 2R). In standard errors over 26 months: under 2σ ≈ could be luck, 3σ+ ≈ real. R columns are after fees.</Note>
         </div>
       )}
     </div>
@@ -177,7 +177,7 @@ export default function StrategyObserver() {
         <Card title="What the numbers say" sub="Written from the data on this page; it changes as trades close" testid="observer-conclusions">
           <div className="grid gap-2 lg:grid-cols-2">
             {d.conclusions.map((c) => (
-              <div key={c.title} className={`rounded-lg border px-3 py-2 ${c.title === "Main finding" ? "border-amber-500/50 bg-amber-950/20 lg:col-span-2" : "border-[#1e2a4a] bg-[#0f172a]/60"}`}>
+              <div key={c.title} className={`rounded-lg border px-3 py-2 ${c.title === "Main finding" ? "border-amber-500/50 bg-amber-950/20 lg:col-span-2" : "border-line bg-panel2/60"}`}>
                 <div className="text-[12px] font-semibold text-amber-300">{c.title}</div>
                 <div className="text-[13px] leading-relaxed text-slate-200">{c.text}</div>
               </div>
@@ -229,7 +229,7 @@ export default function StrategyObserver() {
             {[["Avg slippage", rr(d.execution.avg_slip_r)], ["Avg delay vs paper fill", d.execution.avg_delay_s == null ? "—" : `${Math.round(d.execution.avg_delay_s)} s`],
               ["Avg fees", d.execution.avg_fees_r == null ? "—" : `${d.execution.avg_fees_r.toFixed(2)}R`], ["Same result as paper", d.execution.compared ? `${d.execution.same_result} of ${d.execution.compared}` : "—"],
               ["Real vs paper R", d.execution.compared ? `${rr(d.execution.real_r)} vs ${rr(d.execution.paper_r)}` : "—"], ["Missed fills (paper filled)", d.execution.missed.length]].map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2"><div className="text-[11.5px] text-slate-400">{k}</div><div className="font-mono text-base font-bold text-slate-100">{v}</div></div>
+              <div key={k} className="rounded-lg border border-line bg-panel2/60 px-3 py-2"><div className="text-[11.5px] text-slate-400">{k}</div><div className="font-mono text-base font-bold text-slate-100">{v}</div></div>
             ))}
           </div>
           <div className="overflow-x-auto scroll-thin">
@@ -271,7 +271,7 @@ export default function StrategyObserver() {
         <Card title="Every page, observed" sub="What each page is for, what we have measured, and the verdict" testid="observer-pages">
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {d.pages.map((p) => (
-              <div key={p.page} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+              <div key={p.page} className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2"><Link to={p.to} className="text-sm font-semibold text-amber-300 hover:underline">{p.page}</Link></div>
                 <div className="text-[12px] text-slate-400">{p.role}</div>
                 <div className="mt-1 text-[12.5px] font-semibold text-slate-100">{p.verdict}</div>

@@ -67,9 +67,9 @@ function Actual({ isAdmin }) {
         <Stat label="Expectancy / trade" value={usd(st?.expectancy_usd, 0)} /><Stat label="Profit factor" value={n(st?.profit_factor, 2)} />
         <Stat label="Net R total" value={n(st?.net_r_total, 2)} /><Stat label="Unknown-cost trades" value={st?.unknown_cost_trades ?? "—"} />
       </div>
-      {st?.curve?.length > 1 && <Card title="Equity curve (actual fills, known costs)"><div className="h-48"><ResponsiveContainer><LineChart data={st.curve}><XAxis dataKey="time" hide /><YAxis domain={["auto", "auto"]} stroke="#64748b" fontSize={10} /><Tooltip contentStyle={{ background: "#131c35", border: "1px solid #1e2a4a" }} /><Line dataKey="equity" stroke="#f59e0b" dot={false} /></LineChart></ResponsiveContainer></div></Card>}
+      {st?.curve?.length > 1 && <Card title="Equity curve (actual fills, known costs)"><div className="h-48"><ResponsiveContainer><LineChart data={st.curve}><XAxis dataKey="time" hide /><YAxis domain={["auto", "auto"]} stroke="#6c7581" fontSize={10} /><Tooltip contentStyle={{ background: "#11151b", border: "1px solid #313945" }} /><Line dataKey="equity" stroke="#f0a000" dot={false} /></LineChart></ResponsiveContainer></div></Card>}
       <Card title="Actual exchange fills" sub={`${st?.note || ""} Live unrealized P&L uses Delta mid ${n(data?.mark, 1)}.`} testid="fills-card"
-        right={<div className="flex gap-2">{isAdmin && <Btn data-testid="fill-add" onClick={() => setMode("new")}>Add fill</Btn>}<a data-testid="export-fills" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/fills`}>Export CSV</a></div>}>
+        right={<div className="flex gap-2">{isAdmin && <Btn data-testid="fill-add" onClick={() => setMode("new")}>Add fill</Btn>}<a data-testid="export-fills" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/fills`}>Export CSV</a></div>}>
         {mode && <div className="mb-4 rounded border border-amber-500/30 p-3"><FillForm key={mode === "new" ? "new" : mode.id} editing={mode === "new" ? null : mode} onDone={() => { setMode(null); reload(); }} /></div>}
         {!data?.items?.length ? <Empty>No actual fills recorded. Candle touches never become fills — add your real Delta executions here.</Empty> : (
           <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>Entry (IST)</th><th>Strategy</th><th>Dir</th><th>Entry</th><th>Qty BTC</th><th>Exit</th><th>Gross</th><th>Fees</th><th>Funding</th><th>Net</th><th>R</th><th>Unrealized</th><th>Exch ID</th><th /></tr></thead>
@@ -100,7 +100,7 @@ function Signals({ isAdmin }) {
   const [open, setOpen] = useState(null);
   const fs = data?.filter_summary;
   return (
-    <Card title="Signals, newest first" sub="Result, net and the reason are for the signal traded in its own direction at 1:2 with the 6-hour exit. Tap Checks for the 11 checks, quantity and observation." testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
+    <Card title="Signals, newest first" sub="Result, net and the reason are for the signal traded in its own direction at 1:2 with the 6-hour exit. Tap Checks for the 11 checks, quantity and observation." testid="signals-card" right={isAdmin && <a data-testid="export-signals" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/50" href={`${API}/export/signals`}>Export CSV</a>}>
       <DayFilterBar f={f} setF={setF} testid="journal-filter" />
       <FilterSummary f={f} setF={setF} shown={data?.total ?? 0} total={data?.all_total ?? 0} what="signals" trades={fs?.trades} wins={fs?.wins} net={fs?.net} basis="every filled signal traded in its own direction" />
       {!data?.items?.length ? <Empty>{isActive(f) ? "No signal matches this filter." : "No signal has passed all 12 checks yet. Captures are deduplicated by strategy, direction and confirmation bar."}</Empty> : (
@@ -185,7 +185,7 @@ export default function Journal() {
     <div className="space-y-4">
       <PageHead title="Trade Journal" sub="A. automatic model signals and B. actual exchange fills are kept strictly separate. This app never places orders." />
       <div className="flex gap-2">
-        {[["auto", "A. Model signals"], ...(isAdmin ? [["actual", "B. Actual fills"]] : [])].map(([k, l]) => <button key={k} data-testid={`tab-${k}`} onClick={() => setTab(k)} className={`rounded px-4 py-2 text-sm border transition-colors ${tab === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-[#1e2a4a] text-slate-400"}`}>{l}</button>)}
+        {[["auto", "A. Model signals"], ...(isAdmin ? [["actual", "B. Actual fills"]] : [])].map(([k, l]) => <button key={k} data-testid={`tab-${k}`} onClick={() => setTab(k)} className={`rounded px-4 py-2 text-sm border transition-colors ${tab === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-line text-slate-400"}`}>{l}</button>)}
       </div>
       {(tab === "auto" || !isAdmin) && <TopPanel />}
       {(tab === "auto" || !isAdmin) && <SwitchTrades />}

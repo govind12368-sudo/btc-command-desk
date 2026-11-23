@@ -11,8 +11,8 @@ const BAND_TEXT = {
   crash: { LOW: "text-teal-300", MODERATE: "text-slate-200", ELEVATED: "text-amber-300", HIGH: "text-orange-300", EXTREME: "text-red-300" },
   recovery: { LOW: "text-slate-300", MODERATE: "text-slate-200", ELEVATED: "text-amber-300", HIGH: "text-teal-300", EXTREME: "text-teal-200" },
 };
-const Wait = ({ what }) => <p className="rounded border border-[#1e2a4a] px-3 py-3 text-[12.5px] text-slate-400">{what}: waiting for the history study to finish (a few minutes after a restart). Nothing is estimated in its place.</p>;
-const Src = ({ children }) => <p className="mt-2 text-[11px] text-slate-500">{children}</p>;
+const Wait = ({ what }) => <p className="rounded border border-line px-3 py-3 text-[12.5px] text-slate-400">{what}: waiting for the history study to finish (a few minutes after a restart). Nothing is estimated in its place.</p>;
+const Src = ({ children }) => <Note tone="plain" className="mt-1">{children}</Note>;
 
 function Scale({ score, bands }) {
   return (
@@ -27,12 +27,12 @@ function Scale({ score, bands }) {
 }
 
 function Score({ kind, title, s, bands, extra }) {
-  if (!s) return <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-4"><div className="text-[13px] font-semibold text-slate-100">{title}</div><p className="mt-2 text-[12.5px] text-amber-300">No data: none of the evidence groups could be read.</p></div>;
+  if (!s) return <div className="rounded-lg border border-line bg-panel2/60 p-4"><div className="text-[13px] font-semibold text-slate-100">{title}</div><p className="mt-2 text-[12.5px] text-amber-300">No data: none of the evidence groups could be read.</p></div>;
   const word = kind === "crash" ? "fall" : "rise";
   const hr = s.history_rate;
   const rate = (x) => (x && x.days ? `${pc(x.events / x.days)} of ${x.days.toLocaleString("en-US")} days` : "no days");
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-4" data-testid={`intel-${kind}-score`}>
+    <div className="rounded-lg border border-line bg-panel2/60 p-4" data-testid={`intel-${kind}-score`}>
       <div className="text-[13px] font-semibold text-slate-100">{title}</div>
       <div className="mt-1 flex flex-wrap items-baseline gap-x-3">
         <span className="font-mono text-4xl font-bold text-slate-50">{s.score}</span><span className="text-sm text-slate-500">/ 100</span>
@@ -79,7 +79,7 @@ export function RiskScores({ r }) {
 }
 
 export function LiqMap({ m }) {
-  if (!m) return <Card title="Estimated liquidation zones (model)" testid="intel-liq-est"><p className="rounded border border-[#1e2a4a] px-3 py-3 text-[12.5px] text-slate-400">Estimated liquidation zones: waiting for the first update. Nothing is shown in their place.</p></Card>;
+  if (!m) return <Card title="Estimated liquidation zones (model)" testid="intel-liq-est"><p className="rounded border border-line px-3 py-3 text-[12.5px] text-slate-400">Estimated liquidation zones: waiting for the first update. Nothing is shown in their place.</p></Card>;
   const rows = [...m.bins].reverse();
   const max = Math.max(1, ...m.bins.map((b) => Math.max(b.long_usd, b.short_usd)));
   const lean = { LONGS: "More estimated long liquidations sit close below price than short liquidations above it: a fall would hit more forced selling (long squeeze risk is the larger one).", SHORTS: "More estimated short liquidations sit close above price than long liquidations below it: a rise would hit more forced buying (short squeeze risk is the larger one).", BALANCED: "Estimated liquidations within 5% are about equal on both sides." }[m.lean];
@@ -110,7 +110,7 @@ export function LiqMap({ m }) {
           );
         })}
       </div>
-      <p className="mt-1 text-[11px] text-slate-500"><span className="text-teal-300">■</span> shorts forced out above price · <span className="text-red-300">■</span> longs forced out below price · each row is 1% of price · longest bar {usd(max)} · hover a row for details</p>
+      <Note tone="plain"><span className="text-teal-300">■</span> shorts forced out above price · <span className="text-red-300">■</span> longs forced out below price · each row is 1% of price · longest bar {usd(max)} · hover a row for details</Note>
       <p className="mt-2 text-[12.5px] text-slate-300">Largest estimated zones below price: {m.clusters.long.length ? m.clusters.long.map(zone).join(", ") : "none"}. Above price: {m.clusters.short.length ? m.clusters.short.map(zone).join(", ") : "none"}.</p>
       <Expand label="What the model assumes" testid="intel-liq-est-assumptions"><ul className="list-disc space-y-0.5 pl-4">{m.assumptions.map((a) => <li key={a}>{a}</li>)}<li>A zone is removed once price has traded through it. When open interest falls, all remaining positions are reduced by the same share.</li></ul></Expand>
       <Src>Source: {m.source}{m.from ? ` · positions since ${ist(m.from)}` : ""}. Actual liquidations reported by exchanges are in the card above.</Src>
@@ -151,7 +151,7 @@ function KindReport({ kind, title, k, main }) {
           </table>
         </div>
       </div>
-      <p className="mt-1 text-[11.5px] text-slate-500">Prediction error in the test period (Brier score, lower is better): {h.test.brier == null ? "—" : h.test.brier.toFixed(3)} for the score against {h.test.brier_base == null ? "—" : h.test.brier_base.toFixed(3)} for always quoting the normal rate.</p>
+      <Note tone="plain">Prediction error in the test period (Brier score, lower is better): {h.test.brier == null ? "—" : h.test.brier.toFixed(3)} for the score against {h.test.brier_base == null ? "—" : h.test.brier_base.toFixed(3)} for always quoting the normal rate.</Note>
     </div>
   );
 }
@@ -161,7 +161,7 @@ export function Backtest({ b }) {
   const s = b.splits;
   return (
     <Card title="Backtest: how the scores did in the past" testid="intel-backtest" sub={`${b.scored_days.toLocaleString("en-US")} past days scored with today's rules · run ${ago(b.generated)}`}>
-      <p className="text-[12.5px] text-slate-300">Every past day was scored using only what was known at that day's close, then compared with what Bitcoin did next. The days are split by time: training {s.train.from} to {s.train.to}, validation {s.validation.from} to {s.validation.to}, test {s.test.from} to {s.test.to}. The test period is the one that counts: nothing was fitted on it.</p>
+      <Note tone="plain">Every past day was scored using only what was known at that day's close, then compared with what Bitcoin did next. The days are split by time: training {s.train.from} to {s.train.to}, validation {s.validation.from} to {s.validation.to}, test {s.test.from} to {s.test.to}. The test period is the one that counts: nothing was fitted on it.</Note>
       <KindReport kind="crash" title={`Crash risk: did a ${b.move_pct}% fall follow within ${b.main_horizon} days?`} k={b.crash} main={b.main_horizon} />
       <KindReport kind="recovery" title={`Recovery score: did a ${b.move_pct}% rise follow within ${b.main_horizon} days?`} k={b.recovery} main={b.main_horizon} />
       <Expand label="How the test avoids cheating, and how to read the columns" testid="intel-backtest-method">

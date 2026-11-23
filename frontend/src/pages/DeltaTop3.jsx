@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { Card, PageHead, Note } from "@/components/desk/ui";
+import { Card, PageHead, Note, usePaged } from "@/components/desk/ui";
 import { n, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 
@@ -11,7 +11,7 @@ const VERDICT_TONE = { DELTA: "bg-sky-500/15 text-sky-300 border-sky-500/40",  P
 
 function Stat({ label, value, tone = "text-slate-50", sub }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -40,7 +40,7 @@ function Detail({ p }) {
   return (
     <div className="space-y-2">
       <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-        {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-[#1e2a4a]/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
+        {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
       </div>
       <table className="desk-table">
         <thead><tr><th>Part</th><th className="num">Share</th><th className="num">Size</th><th className="num">Target</th><th>Result</th><th>Exit</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">If traded alone ($10,000)</th></tr></thead>
@@ -70,10 +70,11 @@ export default function DeltaTop3() {
   let run = 0;
   const running = new Map([...rows0].sort((a, b) => a.entry_t - b.entry_t).map((r) => [r, (run += r.net)]));
   const rows = rows0;
+  const [pageRows, pager] = usePaged(rows, 100, `${period}-${only}`);
   const tot = only ? strats.find((s) => s.key === only)?.[period] : d.totals?.[period];
   let eq = 0;
   const curve = [...rows].reverse().filter((r) => r.status === "CLOSED").map((r) => ({ t: r.exit_ist || r.parts[0].exit_ist, v: (eq += r.net) }));
-  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
+  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   const mk = d.market_now;
   const upOnly = strats.filter((s) => s.market === "Up");
   return (
@@ -88,7 +89,7 @@ export default function DeltaTop3() {
         {only && <button className={btn(false)} onClick={() => setOnly(null)}>Show all strategies</button>}
       </div>
       {mk && (
-        <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-4 py-3" data-testid="runs-market">
+        <div className="rounded-lg border border-line bg-panel2/60 px-4 py-3" data-testid="runs-market">
           <div className="text-[12px] text-slate-400">Market now (BTC over the last 30 days, at the {mk.as_of_ist} 4h close)</div>
           <div className="text-lg font-bold text-slate-50">{mk.type} market · {(mk.chg30 * 100).toFixed(1)}%</div>
           <div className="text-[12.5px] text-slate-300">
@@ -122,12 +123,12 @@ export default function DeltaTop3() {
         </Card>
       )}
       <Card title="Journal" sub={d.position_rule || "One $10,000 position per entry time; strategies that signal together share it."} testid="runs-table">
-        <div className="mb-2 text-[11.5px] text-slate-400">Newest first. Entry time is when the paper position filled (IST). TP shows each part's own target. Click a row for each part's size, exit, fees and net.</div>
+        <Note tone="plain">Newest first. Entry time is when the paper position filled (IST). TP shows each part's own target. Click a row for each part's size, exit, fees and net.</Note>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Date</th><th>Time</th><th>Strategy</th><th>Side</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th className="num">Exit</th><th className="num">Gross</th><th className="num">Net P&L</th><th className="num">Running</th></tr></thead>
             <tbody>
-              {rows.map((r) => (
+              {pageRows.map((r) => (
                 <React.Fragment key={r.id}>
                   <tr className={`cursor-pointer ${r.members.length > 1 && !only ? "bg-indigo-500/5" : ""}`} onClick={() => setOpen(open === r.id ? null : r.id)}>
                     <td className="font-mono">{r.entry_ist.slice(0, 10)}</td><td className="font-mono">{r.entry_ist.slice(11, 16)}</td>
@@ -143,18 +144,19 @@ export default function DeltaTop3() {
                     <td className={`num font-semibold ${pnlTone(r.net)}`}>{signedUsd(r.net)}</td>
                     <td className={`num ${pnlTone(running.get(r))}`}>{signedUsd(running.get(r))}</td>
                   </tr>
-                  {open === r.id && <tr><td colSpan={12} className="bg-[#0f172a] text-xs"><Detail p={r} /></td></tr>}
+                  {open === r.id && <tr><td colSpan={12} className="bg-panel2 text-xs"><Detail p={r} /></td></tr>}
                 </React.Fragment>
               ))}
             </tbody>
           </table>
+          {pager}
           {!rows.length && <div className="p-4 text-center text-xs text-slate-500">{period === "live" ? "No live paper trades yet. Signals are checked at every 1h close (SMA) and every 4h close (CCI, RSI: 01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST). Switch to “Include replay” or “Backtest” to see history." : "No trades in this period."}</div>}
         </div>
       </Card>
       <Card title="Rules" sub="Fixed. Paper only: this page never sends an order, sends no alerts, and Auto-Trade does not read it.">
         <div className="space-y-3 text-xs text-slate-300">
           {strats.map((s) => (
-            <div key={s.key} className="border-b border-[#1e2a4a]/60 pb-2">
+            <div key={s.key} className="border-b border-line/60 pb-2">
               <div className="font-semibold text-slate-100">{s.rank}. {s.name} <span className="font-normal text-slate-400">({s.wb})</span> <span className={`ml-1 rounded border px-1.5 py-0.5 text-[10.5px] font-semibold ${VERDICT_TONE[s.retest.verdict]}`}>{s.retest.verdict}</span></div>
               <p><b>Rule:</b> {s.rule}</p>
               <p><b>How it works:</b> {s.how}</p>

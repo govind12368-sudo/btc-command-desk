@@ -11,7 +11,7 @@ from typing import Literal, Optional
 import bcrypt
 import jwt
 from bson import ObjectId
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query, WebSocket
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -35,6 +35,9 @@ import trio
 import elite
 import sysmon
 import optpicks
+import stream
+import datahealth
+import ui_prefs
 import observer
 import autotrade
 import daytype
@@ -1033,6 +1036,39 @@ async def delta_top3_get(u=Depends(current_user)):
     return {**(st["data"] or {"name": trio.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
+# ---------------- Menu pages: hide / show (per user, and for everyone by an admin) ----------------
+class HiddenPagesIn(BaseModel):
+    pages: list[str] = Field(default_factory=list, max_length=60)
+
+
+@api.get("/ui/config")
+async def ui_config(u=Depends(current_user)):
+    return await ui_prefs.config(u)
+
+
+@api.put("/ui/hidden")
+async def ui_hidden(body: HiddenPagesIn, u=Depends(current_user)):
+    return await ui_prefs.set_user(u, body.pages)
+
+
+@api.put("/ui/hidden-global")
+async def ui_hidden_global(body: HiddenPagesIn, request: Request, u=Depends(admin_user)):
+    out = await ui_prefs.set_global(u, body.pages)
+    await SEC.log_event("ui_hidden_global", request, u["email"], detail=",".join(out["hidden_global"]))
+    return out
+
+
+# ---------------- Data health (every feed and calculation loop) and the live push stream ----------------
+@api.get("/data-health")
+async def data_health(u=Depends(admin_user)):
+    return await datahealth.report(True)
+
+
+@api.websocket("/ws")
+async def ws_stream(ws: WebSocket):
+    await stream.handle(ws)
+
+
 # ---------------- Option Picks (BTC daily options on Delta India; paper only, no orders, no alerts) ----------------
 @api.get("/option-picks")
 async def option_picks_get(u=Depends(current_user)):
@@ -1424,8 +1460,45 @@ async def origin_guard(request: Request, call_next):
     return await call_next(request)
 
 
+class ETagMiddleware:
+    """GET /api JSON answers carry an ETag; a request with a matching If-None-Match gets an empty 304, so polling an unchanged
+    page costs a few bytes. Answers are marked no-store (nothing is kept in the browser's disk cache); the app keeps the last
+    copy in memory. Pure ASGI, so the WebSocket stream passes straight through."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] != "GET" or not scope["path"].startswith("/api/") or scope["path"].endswith(".csv"):
+            return await self.app(scope, receive, send)
+        import hashlib
+        inm = dict(scope.get("headers") or []).get(b"if-none-match", b"").decode()
+        start, chunks = {}, []
+
+        async def capture(msg):
+            if msg["type"] == "http.response.start":
+                start.update(msg)
+            elif msg["type"] == "http.response.body":
+                chunks.append(msg.get("body", b""))
+                if not msg.get("more_body"):
+                    body = b"".join(chunks)
+                    headers = [(k, v) for k, v in start.get("headers", []) if k.lower() != b"content-length"]
+                    ctype = dict(start.get("headers", [])).get(b"content-type", b"")
+                    if start.get("status") == 200 and ctype.startswith(b"application/json"):
+                        headers = [(k, v) for k, v in headers if k.lower() not in (b"etag", b"cache-control")]
+                        tag = ('W/"' + hashlib.blake2b(body, digest_size=12).hexdigest() + '"').encode()
+                        headers += [(b"etag", tag), (b"cache-control", b"no-store")]
+                        if inm and tag.decode() in inm:
+                            await send({"type": "http.response.start", "status": 304, "headers": [(b"etag", tag), (b"cache-control", b"no-store")]})
+                            await send({"type": "http.response.body", "body": b""})
+                            return
+                    await send({"type": "http.response.start", "status": start.get("status", 200), "headers": headers + [(b"content-length", str(len(body)).encode())]})
+                    await send({"type": "http.response.body", "body": body})
+        await self.app(scope, receive, capture)
+
+
 app.include_router(api)
 app.include_router(accounts.router)
+app.add_middleware(ETagMiddleware)
 app.add_middleware(CORSMiddleware, allow_origins=[u.strip() for u in FRONTEND_URL.split(",")], allow_credentials=True,
                    allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Content-Type", "Authorization"])
 
@@ -1501,7 +1574,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 

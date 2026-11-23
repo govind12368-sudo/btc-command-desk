@@ -39,7 +39,7 @@ function Group({ label, opts, value, onChange, testid }) {
       <span className="w-[88px] shrink-0 text-[11.5px] text-slate-500">{label}</span>
       {opts.map(([k, l]) => (
         <button key={k || "all"} type="button" aria-pressed={value === k} data-testid={`${testid}-${k || "all"}`} onClick={() => onChange(k)}
-          className={`rounded border px-2.5 py-1 text-[11.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${value === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-[#1e2a4a] text-slate-400 hover:border-slate-500 hover:text-slate-200"}`}>{l}</button>
+          className={`rounded border px-2.5 py-1 text-[11.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${value === k ? "border-amber-500/60 bg-amber-500/10 text-amber-300" : "border-line text-slate-400 hover:border-slate-500 hover:text-slate-200"}`}>{l}</button>
       ))}
     </div>
   );
@@ -47,7 +47,7 @@ function Group({ label, opts, value, onChange, testid }) {
 
 export function DayFilterBar({ f, setF, stoodAside = true, testid = "dayfilter" }) {
   return (
-    <div className="mb-3 space-y-1.5 rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5" data-testid={testid}>
+    <div className="mb-3 space-y-1.5 rounded-lg border border-line bg-panel2/60 px-3 py-2.5" data-testid={testid}>
       <Group label="Day type" opts={DAYS} value={f.day} onChange={(v) => setF({ ...f, day: v })} testid={`${testid}-day`} />
       <Group label="Switch did" opts={stoodAside ? ACTIONS : ACTIONS.filter(([k]) => k !== "STAND_ASIDE")} value={f.action} onChange={(v) => setF({ ...f, action: v })} testid={`${testid}-action`} />
       <Group label="Support" opts={LEVELS} value={f.level} onChange={(v) => setF({ ...f, level: v })} testid={`${testid}-level`} />
@@ -76,7 +76,7 @@ export function SupportLine({ sup, playbook }) {
   return (
     <span className="block text-[10.5px]">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={`font-semibold underline decoration-dotted underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${LEVEL_INK[sup.level]}`}>Support: {LEVEL_NAME[sup.level]} {sup.passed} of {sup.of}</button>
-      {open && <span className="mt-1 block min-w-[230px] max-w-[300px] whitespace-normal rounded border border-[#1e2a4a] bg-[#0b132b] p-2 text-left leading-snug">
+      {open && <span className="mt-1 block min-w-[230px] max-w-[300px] whitespace-normal rounded border border-line bg-chrome p-2 text-left leading-snug">
         {(sup.checks || []).map((c) => <span key={c.key} className={`block ${c.ok ? "text-slate-200" : "text-slate-500"}`}>{c.ok == null ? "—" : c.ok ? "✓" : "✗"} <b>{c.name}.</b> {c.text}</span>)}
       </span>}
     </span>

@@ -32,7 +32,7 @@ function KeyBox({ mode, s, ip, reload, busy, setBusy }) {
   };
   const i = INFO[mode];
   return (
-    <section className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-3" data-testid={`delta-key-${mode}`}>
+    <section className="rounded-lg border border-line bg-panel2/60 p-3" data-testid={`delta-key-${mode}`}>
       <h4 className="text-[13px] font-semibold text-slate-100">{i.title}</h4>
       <p className="mt-1 text-[12.5px]" data-testid={`delta-key-${mode}-status`}>
         {s?.from_env ? <b className="text-teal-300">Set in the server file (.env). It takes priority over a pasted key.</b>
@@ -51,7 +51,7 @@ function KeyBox({ mode, s, ip, reload, busy, setBusy }) {
           ? <><Btn tone="red" disabled={busy} onClick={remove}>Yes, remove it</Btn><Btn tone="ghost" onClick={() => setSure(false)}>Keep it</Btn></>
           : <Btn tone="ghost" disabled={busy} onClick={() => setSure(true)}>Remove key</Btn>)}
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">Create it on {i.site} → Account → API Keys. Whitelist IP {ip || "of this server"}.</p>
+      <Note tone="plain">Create it on {i.site} → Account → API Keys. Whitelist IP {ip || "of this server"}.</Note>
     </section>
   );
 }

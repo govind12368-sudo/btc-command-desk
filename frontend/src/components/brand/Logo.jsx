@@ -13,8 +13,8 @@ export default function Logo({ size = 32, className = "" }) {
           <stop offset="1" stopColor="#F59E0B" />
         </linearGradient>
         <linearGradient id={tile} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#16213F" />
-          <stop offset="1" stopColor="#0B132B" />
+          <stop offset="0" stopColor="#1a1f27" />
+          <stop offset="1" stopColor="#0b0e12" />
         </linearGradient>
       </defs>
       <rect x="2" y="2" width="60" height="60" rx="14" fill={`url(#${tile})`} stroke="#F59E0B" strokeOpacity="0.55" strokeWidth="2" />

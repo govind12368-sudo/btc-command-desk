@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, Note } from "@/components/desk/ui";
+import { Card, Note, More } from "@/components/desk/ui";
 import { n, ist, ago, signedUsd } from "@/lib/fmt";
 import { PeriodSwitch, Stat } from "@/components/desk/Books";
 
@@ -34,7 +34,7 @@ const FIT = {
 function Read({ title, forPlan, r, plan }) {
   const fit = FIT[plan?.fit] || FIT.UNKNOWN;
   return (
-    <div className="flex flex-col rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 p-4" data-testid={`read-${r.view}`}>
+    <div className="flex flex-col rounded-lg border border-line bg-panel2/60 p-4" data-testid={`read-${r.view}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-[13.5px] font-semibold text-slate-100">{title}</h4>
         <span className="text-[11.5px] text-slate-500">{forPlan}</span>
@@ -66,7 +66,7 @@ function Read({ title, forPlan, r, plan }) {
         </table>
       </div>
 
-      {plan && <div className="mt-3 flex-1 rounded-md border border-[#1e2a4a] bg-[#0b132b]/60 p-3" data-testid={`plan-link-${r.view}`}>
+      {plan && <div className="mt-3 flex-1 rounded-md border border-line bg-chrome/60 p-3" data-testid={`plan-link-${r.view}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[13px] font-semibold text-slate-100">{plan.name}: <span className={plan.status === "BUY" ? "text-teal-300" : plan.status === "SELL" ? "text-red-300" : "text-amber-300"}>{plan.status || "—"}</span>
             {plan.direction && <span className="text-slate-300"> · {plan.direction}</span>}{plan.total ? <span className="font-mono text-[12px] font-normal text-slate-400"> · {plan.passed}/{plan.total} checks</span> : null}</div>
@@ -90,7 +90,7 @@ export function MarketRead({ d }) {
         <Read title="Intraday read" forPlan="used with the scalping plan" r={d.reads.intraday} plan={d.plans[0]} />
         <Read title="Swing read" forPlan="used with the swing plan" r={d.reads.swing} plan={d.plans[1]} />
       </div>
-      <p className="mt-3 text-[11.5px] leading-snug text-slate-500">How it is worked out: each module gives a reading from −1 (bearish) to +1 (bullish); points = reading × weight; the market read is the total. {d.reads.intraday.rule} {d.note}</p>
+      <More label="How it is worked out" className="mt-2">Each module gives a reading from −1 (bearish) to +1 (bullish); points = reading × weight; the market read is the total. {d.reads.intraday.rule} {d.note}</More>
     </Card>
   );
 }
@@ -100,7 +100,7 @@ function PillarRows({ rows }) {
     <ul className="space-y-1.5">{rows.map((p) => (
       <li key={p.key} className="grid grid-cols-[84px_1fr_58px] items-center gap-2 text-[12px]">
         <span className="text-slate-300">{p.name}</span>
-        {p.valid ? <Diverge value={p.score} max={p.max} height={6} label={`${p.name} score ${signed(p.score, 1)}`} /> : <div className="h-[6px] rounded bg-[repeating-linear-gradient(45deg,#334155_0_4px,transparent_4px_8px)]" title="No data" />}
+        {p.valid ? <Diverge value={p.score} max={p.max} height={6} label={`${p.name} score ${signed(p.score, 1)}`} /> : <div className="h-[6px] rounded bg-[repeating-linear-gradient(45deg,#373d46_0_4px,transparent_4px_8px)]" title="No data" />}
         <span className={`text-right font-mono ${!p.valid ? "text-slate-500" : p.score > 0 ? "text-teal-300" : p.score < 0 ? "text-red-300" : "text-slate-300"}`}>{p.valid ? signed(p.score, 1) : "no data"}</span>
       </li>))}
     </ul>
@@ -163,7 +163,7 @@ export function SwitchFocus({ d }) {
         <Stat label="Target / Stop / 6h exit" value={`${sw.target ?? 0} / ${sw.stop ?? 0} / ${sw.time ?? 0}`} />
         <Stat label="Worst drawdown" value={signedUsd(sw.max_drawdown)} tone="text-red-300" />
       </div>
-      {a && <p className="mt-3 rounded-md border border-[#1e2a4a] bg-[#0b132b]/60 px-3 py-2 text-[12.5px] text-slate-300" data-testid="switch-auto">
+      {a && <p className="mt-3 rounded-md border border-line bg-chrome/60 px-3 py-2 text-[12.5px] text-slate-300" data-testid="switch-auto">
         <b className="text-slate-100">Auto-Trade:</b> {a.mode === "PAPER" ? "paper mode" : a.mode === "LIVE" ? "LIVE mode" : "testnet mode"} · {a.status} · {a.day_type_only ? "takes Day-type switch trades only" : "not set to Day-type switch"} · today <span className={`font-mono ${ink(a.today)}`}>{signedUsd(a.today)}</span>
         {a.open_trade && <> · in a trade: {a.open_trade.bot_dir} from {px(a.open_trade.entry)}, stop {px(a.open_trade.stop)}, target {px(a.open_trade.target)}</>}
         {" · "}<Link to="/autotrade" className={open}>Open Auto-Trade</Link>
@@ -171,7 +171,7 @@ export function SwitchFocus({ d }) {
       {d.support_now && <div className="mt-4" data-testid="switch-support-now">
         <h4 className="mb-1 text-[13px] font-semibold text-slate-100">Support if a scalp signal fires now</h4>
         <div className="grid gap-2 md:grid-cols-2">{d.support_now.map((x) => (
-          <div key={x.signal} className="rounded-md border border-[#1e2a4a] bg-[#0b132b]/60 px-3 py-2">
+          <div key={x.signal} className="rounded-md border border-line bg-chrome/60 px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
               <span className="text-slate-300">A {x.signal} signal: {x.plan === "STAND_ASIDE" ? <b className="text-slate-100">no trade (stand aside)</b> : <><b className="text-slate-100">{x.plan === "PLAN_A" ? "Plan A (reverse)" : "follow it"}</b>, trade <b className={x.trade_dir === "LONG" ? "text-teal-300" : "text-red-300"}>{x.trade_dir}</b></>}</span>
               {x.level && <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${SUP[x.level][1]}`}>{SUP[x.level][0]} support · {x.passed} of {x.of}</span>}
@@ -196,7 +196,7 @@ export function SwitchFocus({ d }) {
                   </tr>))}</tbody>
               </table>
             </div>
-            <p className="mt-1 text-[11.5px] leading-snug text-slate-500">{sp.ready ? `${sp.recorded} recorded trades.` : `Collecting: ${sp.recorded} of ${sp.need} recorded trades.`} {sp.note} Support is saved once, at the moment the signal fires; trades from before this was added are "not recorded".</p>
+            <Note tone="plain">{sp.ready ? `${sp.recorded} recorded trades.` : `Collecting: ${sp.recorded} of ${sp.need} recorded trades.`} {sp.note} Support is saved once, at the moment the signal fires; trades from before this was added are "not recorded".</Note>
           </div>
         );
       })()}
@@ -205,7 +205,7 @@ export function SwitchFocus({ d }) {
         <SwitchTradesTable trades={tr} />
       </div>
       <p className="mt-3 text-[12px] text-slate-400" data-testid="switch-compare">For comparison only, not traded by Auto-Trade: {others.map((r, i) => <span key={r.key}>{i > 0 && " · "}<Link to={r.to} className="underline decoration-slate-600 underline-offset-2">{r.name}</Link> <span className={`font-mono ${ink(r.net)}`}>{signedUsd(r.net)}</span> on {r.taken ?? 0} trades</span>)}.</p>
-      <p className="mt-1 text-[11.5px] leading-snug text-slate-500">{b.note} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</p>
+      <Note tone="plain">{b.note} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</Note>
     </Card>
   );
 }

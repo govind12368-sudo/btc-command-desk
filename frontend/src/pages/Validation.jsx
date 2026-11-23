@@ -8,14 +8,14 @@ import { Field, Input, Select, Btn } from "@/components/desk/forms";
 import { n, pct, ist, sgn } from "@/lib/fmt";
 import { OutcomeBar, VIZ } from "@/components/desk/charts";
 const OUTCOME_ORDER = ["TARGET FIRST", "STOP FIRST", "PENDING", "HISTORY GAP"];
-const OUTCOME_COLORS = { "TARGET FIRST": VIZ.up, "STOP FIRST": VIZ.down, PENDING: VIZ.s1, "HISTORY GAP": "#475569" };
+const OUTCOME_COLORS = { "TARGET FIRST": VIZ.up, "STOP FIRST": VIZ.down, PENDING: VIZ.s1, "HISTORY GAP": "#4d555f" };
 
 function Backtest({ bt }) {
   if (!bt?.computed_at) return <Empty>Rule backtest runs after the 30-day history sync (about every 5 minutes).</Empty>;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {["scalp", "swing"].map((k) => { const b = bt[k]; if (!b) return null; return (
-        <div key={k} className="rounded border border-[#1e2a4a] p-3" data-testid={`backtest-${k}`}>
+        <div key={k} className="rounded border border-line p-3" data-testid={`backtest-${k}`}>
           <div className="flex items-center justify-between"><span className="font-semibold">{k === "scalp" ? "Scalping rules (5m/15m)" : "Swing rules (1h/4h)"}</span><Chip status={b.expectancy_net_r > 0 ? "PASS" : b.expectancy_net_r == null ? "UNAVAILABLE" : "FAIL"} label={`exp ${sgn(b.expectancy_net_r, 2)} R`} /></div>
           <div className="grid grid-cols-2 gap-x-4 mt-2">
             <KV k="Signals" v={`${b.signals} (${b.long} long / ${b.short} short)`} /><KV k="Target first / stop first" v={`${b.target_first} / ${b.stop_first}`} />
@@ -25,7 +25,7 @@ function Backtest({ bt }) {
           <div className="mt-2 max-h-40 overflow-y-auto scroll-thin">{b.recent.map((t, i) => <div key={i} className="flex justify-between font-mono text-[10.5px] py-0.5"><span>{ist(t.time)}</span><span>{t.direction} {n(t.entry, 1)}</span><Chip status={t.outcome} /></div>)}</div>
         </div>); })}
       {bt.scalp?.market && bt.scalp?.limit && <ScalpModes b={bt.scalp} />}
-      <p className="text-[11px] text-slate-500 lg:col-span-2">Historical simulation on {bt.bars} Delta BTCUSD completed 5m bars (higher frames aggregated from complete 5m groups), costs included, one position at a time. It cannot replay spread, news review, daily limits or quote age (F26/F30/F31/F33), so it is supporting evidence — not a guarantee. Computed {ist(bt.computed_at)}.</p>
+      <Note tone="plain" className="lg:col-span-2">Historical simulation on {bt.bars} Delta BTCUSD completed 5m bars (higher frames aggregated from complete 5m groups), costs included, one position at a time. It cannot replay spread, news review, daily limits or quote age (F26/F30/F31/F33), so it is supporting evidence — not a guarantee. Computed {ist(bt.computed_at)}.</Note>
     </div>
   );
 }
@@ -33,12 +33,12 @@ function Backtest({ bt }) {
 function ScalpModes({ b }) {
   const rows = [["market", "Market entry + market exits"], ["limit", "Limit entry + limit target, stop-market"]];
   return (
-    <div className="rounded border border-[#1e2a4a] p-3 lg:col-span-2" data-testid="backtest-scalp-modes">
+    <div className="rounded border border-line p-3 lg:col-span-2" data-testid="backtest-scalp-modes">
       <div className="flex items-center justify-between"><span className="font-semibold">Scalp backtest — Market vs Limit (last 30 days)</span><span className="text-[11px] text-slate-400">active plan: <b className="text-amber-300">{b.mode === "limit" ? "LIMIT" : "MARKET"}</b></span></div>
       <div className="overflow-x-auto scroll-thin mt-2"><table className="desk-table"><thead><tr><th>Execution</th><th className="text-right">Trades</th><th className="text-right">Missed fills</th><th className="text-right">Hit target</th><th className="text-right">Breakeven</th><th className="text-right">Avg net R</th><th className="text-right">Total R</th><th className="text-right">Worst drawdown</th></tr></thead>
         <tbody>{rows.map(([k, label]) => { const x = b[k] || {}; return (
           <tr key={k} data-testid={`backtest-mode-${k}`} className={b.mode === k ? "bg-amber-500/5" : ""}><td>{label}</td><td className="text-right font-mono tabular-nums">{x.signals}</td><td className="text-right font-mono tabular-nums">{x.missed_fills}</td><td className="text-right font-mono tabular-nums">{pct(x.hit_rate, 1)}</td><td className="text-right font-mono tabular-nums">{pct(x.breakeven_hit_rate, 1)}</td><td className={`text-right font-mono tabular-nums ${x.expectancy_net_r > 0 ? "text-teal-300" : "text-red-300"}`}>{sgn(x.expectancy_net_r, 3)}</td><td className="text-right font-mono tabular-nums">{sgn(x.total_net_r, 1)}</td><td className="text-right font-mono tabular-nums">{n(x.max_drawdown_r, 1)} R</td></tr>); })}</tbody></table></div>
-      <p className="mt-2 text-[11px] text-slate-500">{b.note} Small samples: treat as evidence, not a guarantee. The desk never places orders.</p>
+      <Note tone="plain">{b.note} Small samples: treat as evidence, not a guarantee. The desk never places orders.</Note>
     </div>
   );
 }
@@ -84,11 +84,11 @@ export default function Validation() {
       <Card title="Observed outcomes by model" testid="outcomes-by-model">
         {Object.keys(data?.outcomes_by_model || {}).length === 0 ? <Empty>No snapshots yet. The confirmed 15-minute model logs its first confirmed LONG/SHORT and each confirmed direction change; the original six-factor model logs only when complete.</Empty> :
           Object.entries(data.outcomes_by_model).map(([m, o]) => { const w = o["TARGET FIRST"] || 0, l = o["STOP FIRST"] || 0; return (
-            <div key={m} className="border-b border-[#1e2a4a]/40 py-2.5"><div className="mb-1.5 flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-amber-300">{m}</span><span className="ml-auto font-mono text-xs">{w + l ? `hit rate ${pct(w / (w + l), 0)} of ${w + l} resolved` : "no resolved outcomes yet"}</span></div>
-              <OutcomeBar counts={o} order={[...OUTCOME_ORDER, ...Object.keys(o).filter((k) => !OUTCOME_ORDER.includes(k))]} colors={new Proxy(OUTCOME_COLORS, { get: (t, k) => t[k] || "#64748b" })} testid={`outcome-${m}`} /></div>); })}
+            <div key={m} className="border-b border-line/40 py-2.5"><div className="mb-1.5 flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-amber-300">{m}</span><span className="ml-auto font-mono text-xs">{w + l ? `hit rate ${pct(w / (w + l), 0)} of ${w + l} resolved` : "no resolved outcomes yet"}</span></div>
+              <OutcomeBar counts={o} order={[...OUTCOME_ORDER, ...Object.keys(o).filter((k) => !OUTCOME_ORDER.includes(k))]} colors={new Proxy(OUTCOME_COLORS, { get: (t, k) => t[k] || "#6c7581" })} testid={`outcome-${m}`} /></div>); })}
       </Card>
       <Card title="Rule backtest evidence (30 days)" testid="backtest-card"><Backtest bt={data?.backtest} /></Card>
-      <Card title="Snapshots" sub={data?.note} testid="snapshots-card" right={<div className="flex gap-2"><div className="w-48"><Select data-testid="snap-model-filter" value={model} onChange={(e) => { setModel(e.target.value); setPage(1); }} options={[{ value: "", label: "All models" }, { value: "FIVE_PILLAR_CONFIRMED_V2", label: "Confirmed 15m model (v2)" }, "FIVE_PILLAR_LIVE", "ORIGINAL_SIX_FACTOR", "MANUAL"]} /></div>{isAdmin && <Btn data-testid="snap-new" onClick={() => setForm("new")}>Manual snapshot</Btn>}{isAdmin && <a data-testid="export-validation" className="rounded border border-[#1e2a4a] px-3 py-1.5 text-xs" href={`${API}/export/validation`}>Export CSV</a>}</div>}>
+      <Card title="Snapshots" sub={data?.note} testid="snapshots-card" right={<div className="flex gap-2"><div className="w-48"><Select data-testid="snap-model-filter" value={model} onChange={(e) => { setModel(e.target.value); setPage(1); }} options={[{ value: "", label: "All models" }, { value: "FIVE_PILLAR_CONFIRMED_V2", label: "Confirmed 15m model (v2)" }, "FIVE_PILLAR_LIVE", "ORIGINAL_SIX_FACTOR", "MANUAL"]} /></div>{isAdmin && <Btn data-testid="snap-new" onClick={() => setForm("new")}>Manual snapshot</Btn>}{isAdmin && <a data-testid="export-validation" className="rounded border border-line px-3 py-1.5 text-xs" href={`${API}/export/validation`}>Export CSV</a>}</div>}>
         {form && <div className="mb-3 rounded border border-amber-500/30 p-3"><SnapForm snap={form === "new" ? null : form} onDone={() => { setForm(null); reload(); }} /></div>}
         {!data?.items?.length ? <Empty>No snapshots.</Empty> : (
           <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>ID</th><th>Model</th><th>Captured / quote</th><th>Dir</th><th>Score</th><th>Entry / Stop / Target</th><th>Stop frac · R</th><th>Outcome</th><th>Observed at</th><th /></tr></thead>

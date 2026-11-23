@@ -1,41 +1,44 @@
-import React, { useEffect } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { installAlertSound } from "@/lib/sound";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { DeskProvider, useDesk } from "@/context/DeskContext";
 import Layout from "@/components/desk/Layout";
 import Login from "@/pages/Login";
-import Register from "@/pages/auth/Register";
-import { Forgot, Reset, VerifyEmail } from "@/pages/auth/Recovery";
 import Disclaimer from "@/pages/Disclaimer";
-import Account from "@/pages/Account";
-import AdminUsers from "@/pages/AdminUsers";
-import Dashboard from "@/pages/Dashboard";
-import Market from "@/pages/Market";
-import StrategyPage from "@/pages/StrategyPage";
-import Pillars from "@/pages/Pillars";
-import Scanner from "@/pages/Scanner";
-import Intel from "@/pages/Intel";
-import News from "@/pages/News";
-import Journal from "@/pages/Journal";
-import Validation from "@/pages/Validation";
-import SettingsPage from "@/pages/SettingsPage";
-import Audit from "@/pages/Audit";
-import Upgrades from "@/pages/Upgrades";
-import PlanA from "@/pages/PlanA";
-import RegimeJournal from "@/pages/RegimeJournal";
-import FlushShort from "@/pages/FlushShort";
-import CandleRuns from "@/pages/CandleRuns";
-import DeltaTop3 from "@/pages/DeltaTop3";
-import EliteEdge from "@/pages/EliteEdge";
-import ServerHealth from "@/pages/ServerHealth";
-import OptionPicks from "@/pages/OptionPicks";
-import StrategyObserver from "@/pages/StrategyObserver";
-import AutoTrade from "@/pages/AutoTrade";
+import { Forgot, Reset, VerifyEmail } from "@/pages/auth/Recovery";
+// Every page is loaded only when it is opened (smaller first download, faster start).
+const Register = lazy(() => import("@/pages/auth/Register"));
+const Account = lazy(() => import("@/pages/Account"));
+const AdminUsers = lazy(() => import("@/pages/AdminUsers"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Market = lazy(() => import("@/pages/Market"));
+const StrategyPage = lazy(() => import("@/pages/StrategyPage"));
+const Pillars = lazy(() => import("@/pages/Pillars"));
+const Scanner = lazy(() => import("@/pages/Scanner"));
+const Intel = lazy(() => import("@/pages/Intel"));
+const News = lazy(() => import("@/pages/News"));
+const Journal = lazy(() => import("@/pages/Journal"));
+const Validation = lazy(() => import("@/pages/Validation"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
+const Audit = lazy(() => import("@/pages/Audit"));
+const Upgrades = lazy(() => import("@/pages/Upgrades"));
+const PlanA = lazy(() => import("@/pages/PlanA"));
+const RegimeJournal = lazy(() => import("@/pages/RegimeJournal"));
+const FlushShort = lazy(() => import("@/pages/FlushShort"));
+const CandleRuns = lazy(() => import("@/pages/CandleRuns"));
+const DeltaTop3 = lazy(() => import("@/pages/DeltaTop3"));
+const EliteEdge = lazy(() => import("@/pages/EliteEdge"));
+const ServerHealth = lazy(() => import("@/pages/ServerHealth"));
+const OptionPicks = lazy(() => import("@/pages/OptionPicks"));
+const StrategyObserver = lazy(() => import("@/pages/StrategyObserver"));
+const AutoTrade = lazy(() => import("@/pages/AutoTrade"));
+const DataHealth = lazy(() => import("@/pages/DataHealth"));
 
 function Public() {
   const loc = useLocation();
   return (
+    <Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -45,12 +48,17 @@ function Public() {
       <Route path="/disclaimer" element={<Disclaimer />} />
       <Route path="*" element={<Navigate to="/login" replace state={{ from: loc.pathname }} />} />
     </Routes>
+    </Suspense>
   );
+}
+
+function PageLoading() {
+  return <div className="grid min-h-[40vh] place-items-center font-mono text-[12px] text-slate-500">Loading…</div>;
 }
 
 function Gate() {
   const { user, isAdmin } = useDesk();
-  if (user === null) return <div className="grid min-h-screen place-items-center font-mono text-sm text-slate-500">Checking session…</div>;
+  if (user === null) return <div className="grid min-h-screen place-items-center font-mono text-[12px] text-slate-500">Checking session…</div>;
   if (!user) return <Public />;
   return (
     <Routes>
@@ -84,6 +92,7 @@ function Gate() {
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/users" element={isAdmin ? <AdminUsers /> : <Navigate to="/" replace />} />
         <Route path="/server" element={isAdmin ? <ServerHealth /> : <Navigate to="/" replace />} />
+        <Route path="/data-health" element={isAdmin ? <DataHealth /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
@@ -98,7 +107,7 @@ export default function App() {
   return (
     <DeskProvider>
       <BrowserRouter><Gate /></BrowserRouter>
-      <Toaster theme="dark" position="bottom-right" toastOptions={{ style: { background: "#131c35", border: "1px solid #1e2a4a", color: "#e2e8f0" } }} />
+      <Toaster theme="dark" position="bottom-right" toastOptions={{ style: { background: "#11151b", border: "1px solid #313945", color: "#e8ebef", borderRadius: 4, fontFamily: "IBM Plex Sans" } }} />
     </DeskProvider>
   );
 }

@@ -26,14 +26,14 @@ export function SoundPicker() {
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {GROUPS.map(([g, label]) => (
-          <fieldset key={g} className="rounded-lg border border-[#1e2a4a] p-2">
+          <fieldset key={g} className="rounded-lg border border-line p-2">
             <legend className="px-1 text-[12px] font-semibold text-slate-300">{label}</legend>
             {SOUNDS.filter((s) => s.group === g).map((s) => (
               <div key={s.id} className={`flex items-center gap-2 rounded px-2 py-1.5 ${p.id === s.id ? "bg-amber-500/10" : ""}`}>
                 <input type="radio" name="alert-sound" id={`snd-${s.id}`} checked={p.id === s.id} onChange={() => choose(s.id)} className="h-4 w-4 accent-amber-500" />
                 <label htmlFor={`snd-${s.id}`} className="flex-1 cursor-pointer text-[13px] text-slate-200">{s.name}</label>
                 <button type="button" onClick={() => preview(s.id)} aria-label={`${playing === s.id ? "Stop" : "Play"} ${s.name}`} data-testid={`play-${s.id}`}
-                  className="rounded border border-[#1e2a4a] px-2 py-0.5 text-[12px] text-slate-200 hover:border-amber-500/50">{playing === s.id ? "■ Stop" : "▶ Play"}</button>
+                  className="rounded border border-line px-2 py-0.5 text-[12px] text-slate-200 hover:border-amber-500/50">{playing === s.id ? "■ Stop" : "▶ Play"}</button>
                 <a href={s.file} download className="text-[11.5px] text-sky-300 underline-offset-2 hover:underline" aria-label={`Download ${s.name}`}>Save</a>
               </div>
             ))}

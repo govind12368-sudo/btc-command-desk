@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, CrosshairMode } from "lightweight-charts";
 
 const IST = 19800; // the chart shows India time
-const UP = "#2dd4bf", DOWN = "#f87171";
+const UP = "#2fcb84", DOWN = "#ff5f6d";
 
 /** Candles, volume, EMA 20/50/200 and the nearest support / resistance zones (TradingView Lightweight Charts). */
 export default function IntelChart({ data, height = 380 }) {
@@ -12,9 +12,9 @@ export default function IntelChart({ data, height = 380 }) {
   useEffect(() => {
     const chart = createChart(box.current, {
       height, autoSize: true,
-      layout: { background: { color: "transparent" }, textColor: "#94a3b8", fontFamily: "JetBrains Mono, monospace", fontSize: 11 },
-      grid: { vertLines: { color: "rgba(30,42,74,0.5)" }, horzLines: { color: "rgba(30,42,74,0.5)" } },
-      rightPriceScale: { borderColor: "#1e2a4a" }, timeScale: { borderColor: "#1e2a4a", timeVisible: true, secondsVisible: false },
+      layout: { background: { color: "transparent" }, textColor: "#9099a5", fontFamily: "JetBrains Mono, monospace", fontSize: 11 },
+      grid: { vertLines: { color: "rgba(35,41,51,0.6)" }, horzLines: { color: "rgba(35,41,51,0.6)" } },
+      rightPriceScale: { borderColor: "#232933" }, timeScale: { borderColor: "#232933", timeVisible: true, secondsVisible: false },
       crosshair: { mode: CrosshairMode.Normal },
     });
     const candles = chart.addSeries(CandlestickSeries, { upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN, priceFormat: { type: "price", precision: 1, minMove: 0.5 } });
@@ -30,7 +30,7 @@ export default function IntelChart({ data, height = 380 }) {
     if (!a || !data?.bars?.length) return;
     const t = (b) => b.t + IST;
     a.candles.setData(data.bars.map((b) => ({ time: t(b), open: b.o, high: b.h, low: b.l, close: b.c })));
-    a.volume.setData(data.bars.map((b) => ({ time: t(b), value: b.v, color: b.c >= b.o ? "rgba(45,212,191,0.35)" : "rgba(248,113,113,0.35)" })));
+    a.volume.setData(data.bars.map((b) => ({ time: t(b), value: b.v, color: b.c >= b.o ? "rgba(47,203,132,0.35)" : "rgba(255,95,109,0.35)" })));
     for (const k of ["ema20", "ema50", "ema200"]) {
       const s = data.overlays?.[k] || [];
       a[k].setData(data.bars.map((b, i) => (s[i] == null ? null : { time: t(b), value: s[i] })).filter(Boolean));

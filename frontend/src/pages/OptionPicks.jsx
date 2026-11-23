@@ -14,7 +14,7 @@ const usd0 = (v) => `$${n(v, 0)}`;
 
 function Stat({ label, value, sub, cls = "text-slate-50" }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5">
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${cls}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -107,7 +107,7 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel }) {
           <table className="desk-table">
             <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Max DD</th></tr></thead>
             <tbody>{b.yearly.map((y) => (
-              <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-[#2a3a66] font-semibold" : ""}>
+              <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
                 <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pct(y.win_rate)}</td><td className={`num ${tone(y.gross)}`}>{signedUsd(y.gross, 0)}</td>
                 <td className="num">{signedUsd(-y.fees, 0)}</td><td className={`num font-semibold ${tone(y.net)}`}>{signedUsd(y.net, 0)}</td><td className="num text-red-300">{signedUsd(-y.max_dd, 0)}</td>
               </tr>))}</tbody>
@@ -116,7 +116,7 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel }) {
         <Card title="Monthly" sub="Newest first. Losing months are red.">
           <div className="max-h-[330px] overflow-auto scroll-thin">
             <table className="desk-table">
-              <thead className="sticky top-0 bg-[#0b1224]"><tr><th>Month</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Net</th><th className="num">Cumulative</th></tr></thead>
+              <thead className="sticky top-0 bg-panel2"><tr><th>Month</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Net</th><th className="num">Cumulative</th></tr></thead>
               <tbody>{[...b.monthly].reverse().map((m) => (
                 <tr key={m.month} className={m.net < 0 ? "bg-red-500/10" : ""}><td className={`font-mono ${m.net < 0 ? "text-red-300" : ""}`}>{m.month}</td><td className="num">{m.trades}</td>
                   <td className="num">{pct(m.win_rate)}</td><td className={`num font-semibold ${m.net < 0 ? "text-red-400" : tone(m.net)}`}>{signedUsd(m.net, 0)}</td><td className={`num ${tone(m.cumulative)}`}>{signedUsd(m.cumulative, 0)}</td></tr>))}</tbody>
@@ -155,7 +155,7 @@ function Live({ d }) {
           const s = d.strategies.find((x) => x.key === k);
           const ls = d.live_stats[k] || {};
           return (
-            <div key={k} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5 text-[12px]" data-testid="opt-live-status">
+            <div key={k} className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5 text-[12px]" data-testid="opt-live-status">
               <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name}</div>
               <div className="text-slate-400">Next paper entry: {d.next_entry[k] || "—"}</div>
               <div className="text-slate-300">Paper: {ls.trades || 0} closed · {ls.wins || 0} won · net <span className={tone(ls.net)}>{signedUsd(ls.net || 0)}</span> · balance {usd0(s.capital + (ls.net || 0))} from {usd0(s.capital)}</div>
@@ -164,7 +164,7 @@ function Live({ d }) {
         })}
       </div>
       <Card title="Live paper trades" sub={`Size: ${d.size_label} · about ${usd0(d.order_notional)} sold per order`} testid="opt-live">
-        <p className="-mt-1 mb-2 text-[11.5px] text-slate-500">Opened at the live Delta mark at the end of the entry minute; each leg stopped on the 1-minute mark; settled at Delta's official settlement index. No orders are sent.</p>
+        <Note tone="plain">Opened at the live Delta mark at the end of the entry minute; each leg stopped on the 1-minute mark; settled at Delta's official settlement index. No orders are sent.</Note>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Expiry</th><th>Status</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Qty per leg</th><th>Legs</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th>Note</th></tr></thead>
@@ -199,7 +199,7 @@ export default function OptionPicks() {
   useEffect(() => { document.title = "Option Picks"; }, []);
   if (error && !d) return <Note tone="red">Could not load Option Picks: {String(error)}</Note>;
   if (!d) return <div className="text-sm text-slate-400">Loading Option Picks…</div>;
-  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
+  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   const s = d.strategies[0];
   const z = d.sizing;
   const same = z.put_capital === z.call_capital && z.put_leverage === z.call_leverage;
@@ -212,7 +212,7 @@ export default function OptionPicks() {
       {d.error && <Note tone="red">Last update failed: {d.error}</Note>}
       {s && d.backtest[s.key] && <RealData rows={d.backtest[s.key].realdata} notChecked={d.not_checked} />}
       {s && (
-        <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2 text-[12px]">
+        <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2 text-[12px]">
           <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name} <span className="font-mono text-[11px] font-normal text-slate-500">{s.code}</span></div>
           <div className="text-slate-300">Sell the ATM put and ATM call (same strike, nearest to BTC futures) at the close of the 17:00 IST minute, filled {s.live_entry_ist} IST, at mark − max($0.10, 1%). Skip the day if the put mark is below $20 or BTC is up more than 2% since 17:31 IST yesterday. Each leg is bought back when its 1-minute mark high reaches 2× its sell price; the other leg stays open; otherwise both settle at 17:30 IST.</div>
         </div>

@@ -38,18 +38,18 @@ export default function Pillars() {
         <Card title="Original four-factor model" sub="Weights 0.25 / 0.25 / 0.30 / 0.20 · missing inputs stay unavailable (never neutral)" testid="four-factor"
           right={<Chip status={ff.complete ? (ff.score > 0 ? "BULLISH" : ff.score < 0 ? "BEARISH" : "NEUTRAL") : "UNAVAILABLE"} label={ff.complete ? `${ff.band} ${sgn(ff.score)}` : "INCOMPLETE"} testid="four-factor-status" />}>
           {Object.entries(ff.factors).map(([k, f]) => (
-            <div key={k} className="py-2 border-b border-[#1e2a4a]/50">
+            <div key={k} className="py-2 border-b border-line/50">
               <div className="flex items-center justify-between"><span className="text-sm">{FACTOR_NAMES[k]} <span className="font-mono text-[10.5px] text-slate-500">w {f.weight}</span></span><Chip status={f.valid ? (f.score > 0 ? "BULLISH" : f.score < 0 ? "BEARISH" : "NEUTRAL") : "UNAVAILABLE"} label={f.valid ? sgn(f.score, 0) : "UNAVAILABLE"} /></div>
               <p className="mt-1 font-mono text-[11px] text-slate-400">{f.detail}</p>
             </div>
           ))}
-          <p className="mt-2 text-[11px] text-slate-500">Thresholds (inclusive): USD 1m ≤ −1% / ≥ +1%; 2Y 5-obs ≤ −10 / ≥ +10 bps; Brent ≤ $70 / ≥ $85; ETF ≥ +$300m / ≤ −$300m; funding ≤ −5% / ≥ +15%; F&G ≤ 45 / ≥ 70. Bands ±0.2 directional, ±0.5 strong.</p>
+          <Note tone="plain">Thresholds (inclusive): USD 1m ≤ −1% / ≥ +1%; 2Y 5-obs ≤ −10 / ≥ +10 bps; Brent ≤ $70 / ≥ $85; ETF ≥ +$300m / ≤ −$300m; funding ≤ −5% / ≥ +15%; F&G ≤ 45 / ≥ 70. Bands ±0.2 directional, ±0.5 strong.</Note>
         </Card>
         <Card title="Original six-factor model" sub="Money Flow 0.20 · Liquidity 0.15 · Positioning 0.15 · Macro 0.20 · Technical 0.20 · four-factor 0.10" testid="six-factor"
           right={<Chip status={sx.complete ? sx.direction : "UNAVAILABLE"} label={sx.complete ? `${sx.direction} ${sx.strength}` : "UNAVAILABLE"} testid="six-factor-status" />}>
           {sx.complete ? <KV k="Score" v={sgn(sx.score, 3)} /> : <Note tone="amber">Every contribution must be current. Missing: {sx.missing.join("; ")}. A partial observation is never used to complete this model or its validation log.</Note>}
           <div className="mt-2">{Object.entries(sx.contributions || {}).map(([k, v]) => <KV key={k} k={PILLAR_NAMES[k] || "Four-factor score"} v={sgn(v, 2)} />)}</div>
-          <p className="mt-2 text-[11px] text-slate-500">Strength: |score| ≥ 0.70 very strong, ≥ 0.45 strong, ≥ 0.15 moderate, otherwise low.</p>
+          <Note tone="plain">Strength: |score| ≥ 0.70 very strong, ≥ 0.45 strong, ≥ 0.15 moderate, otherwise low.</Note>
         </Card>
       </div>
       {isAdmin && <WorkbookPillarFields />}

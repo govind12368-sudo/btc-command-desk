@@ -16,7 +16,7 @@ const hold = (h) => (h === 168 ? "7 days" : `${h} h`);
 
 function Stat({ label, value, tone = "text-slate-50", sub, testid }) {
   return (
-    <div className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2.5" data-testid={testid}>
+    <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5" data-testid={testid}>
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${tone}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
@@ -47,7 +47,7 @@ function StratTable({ j, strategies }) {
         <tbody>{all.map((s) => {
           const st = strategies.find((x) => x.key === s.key);
           return (
-            <tr key={s.key} className={s.key === "all" ? "border-t-2 border-[#2a3a66] font-semibold" : ""}>
+            <tr key={s.key} className={s.key === "all" ? "border-t-2 border-line2 font-semibold" : ""}>
               <td className="font-mono">{st ? st.priority : "—"}</td>
               <td>{s.wb}<div className="text-[11px] font-normal text-slate-500">{st ? st.name : s.name}{s.key === "pl5" && s.trades === 0 ? " · never trades: P&L #1 fires on the same candle and wins the tie" : ""}</div></td>
               <td className="num">{s.trades}</td><td className="num">{s.wins}</td><td className="num">{s.losses}</td><td className="num">{pctTxt(s.win_rate)}</td>
@@ -67,7 +67,7 @@ function YearTable({ rows, wbs }) {
       <table className="desk-table" data-testid="elite-yearly">
         <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Max DD</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
         <tbody>{rows.map((y) => (
-          <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-[#2a3a66] font-semibold" : ""}>
+          <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
             <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pctTxt(y.win_rate)}</td>
             <td className={`num ${pnlTone(y.gross)}`}>{signedUsd(y.gross, 0)}</td><td className="num">{signedUsd(-y.fees, 0)}</td>
             <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td><td className="num text-red-300">{signedUsd(y.max_dd, 0)}</td>
@@ -84,7 +84,7 @@ function MonthTable({ rows, wbs }) {
   return (
     <div className="max-h-[520px] overflow-auto scroll-thin">
       <table className="desk-table" data-testid="elite-monthly">
-        <thead className="sticky top-0 bg-[#0b1224]"><tr><th>Month</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
+        <thead className="sticky top-0 bg-panel2"><tr><th>Month</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
         <tbody>{[...rows].reverse().map((m) => (
           <tr key={m.month} className={m.net < 0 ? "bg-red-500/10" : ""}>
             <td className={`font-mono ${m.net < 0 ? "text-red-300" : ""}`}>{m.month}</td><td className="num">{m.trades}</td><td className="num">{pctTxt(m.win_rate)}</td>
@@ -183,7 +183,7 @@ function RealMoney({ lv, act, busy }) {
         <li>One completed Elite Testnet trade (needed before Live): {yes(rm.testnet_trade_done)}</li>
         <li>Auto-Trade is not in the same mode (both bots use the same Delta account): Auto-Trade is in {rm.autotrade_mode || "—"}{rm.autotrade_mode === "LIVE" ? <span className="text-amber-300"> – Elite cannot go Live until Auto-Trade leaves Live</span> : ""}</li>
       </ul>
-      <p className="mt-2 text-[11.5px] text-slate-400">Keys pasted on the Auto-Trade page are never used here. Each switch checks the key from this server, that the account is flat, that 10x leverage is set and that the margin for one trade (about $1,000) is there.</p>
+      <Note tone="plain">Keys pasted on the Auto-Trade page are never used here. Each switch checks the key from this server, that the account is flat, that 10x leverage is set and that the margin for one trade (about $1,000) is there.</Note>
     </Card>
   );
 }
@@ -213,9 +213,9 @@ function Live({ lv, isAdmin, reload }) {
         <Stat label="Open trades" value={t ? "1 of 1" : "0 of 1"} tone={t ? "text-sky-300" : "text-slate-300"} sub="one trade at a time" />
         <Stat label="BTC (Delta)" value={lv.price ? n(lv.price, 1) : "—"} sub={`live since ${ist(lv.live_start)}`} />
       </div>
-      <div className="rounded border border-[#1e2a4a] bg-[#0f172a]/60 p-3">
+      <div className="rounded border border-line bg-panel2/60 p-3">
         <div className="mb-1 flex justify-between text-[11.5px] text-slate-400"><span>Drawdown used</span><span>{signedUsd(b.drawdown)} of {signedUsd(b.limit, 0)}</span></div>
-        <div className="h-2.5 rounded bg-[#1e2a4a]"><div className={`h-2.5 rounded ${ddPct > 75 ? "bg-red-500" : ddPct > 40 ? "bg-amber-400" : "bg-teal-400"}`} style={{ width: `${ddPct}%` }} /></div>
+        <div className="h-2.5 rounded bg-line"><div className={`h-2.5 rounded ${ddPct > 75 ? "bg-red-500" : ddPct > 40 ? "bg-amber-400" : "bg-teal-400"}`} style={{ width: `${ddPct}%` }} /></div>
         <div className="mt-1 text-[11px] text-slate-500">Measured on closed + open P&L from its highest point. At {signedUsd(b.limit, 0)} the open trade is closed and all trading stops.</div>
       </div>
 
@@ -226,7 +226,7 @@ function Live({ lv, isAdmin, reload }) {
               {[["Side", <span className={t.side === "LONG" ? "text-teal-300" : "text-red-300"}>{t.side} {t.size.toFixed(3)} BTC</span>], ["Entry", `${n(t.entry, 1)} at ${t.entry_ist}`],
                 ["Stop loss", n(t.sl, 1)], ["Target", `${n(t.tp, 1)} (1:${t.rr})`], ["Live P&L (after fees)", <span className={pnlTone(t.unrealized)}>{signedUsd(t.unrealized)}</span>],
                 ["Time exit in", `${t.time_left_h} h`], ["Market", `${t.market}${t.chg30 != null ? ` ${(t.chg30 * 100).toFixed(1)}%` : ""}`], ["Orders", t.mode === "PAPER" ? "paper" : t.bracket_confirmed ? "stop + target confirmed" : "checking stop + target"]]
-                .map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-[#1e2a4a]/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
+                .map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
               <div className="col-span-2 pt-1 text-[11.5px] text-slate-400">Why: {t.reason}</div>
             </div>
           ) : <div className="text-[12.5px] text-slate-400">Signals are checked at every 1h close (Row 9) and every 4h close (P&L #1, P&L #5, Row 18: 01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST).</div>}
@@ -250,7 +250,7 @@ function Live({ lv, isAdmin, reload }) {
       <Card title="Signals" sub="Every signal since the live start: taken, or skipped with the reason." testid="elite-signals">
         <div className="max-h-[420px] overflow-auto scroll-thin">
           <table className="desk-table">
-            <thead className="sticky top-0 bg-[#0b1224]"><tr><th>Candle close (IST)</th><th>Strategy</th><th>Side</th><th>Market</th><th>Status</th><th>Reason</th></tr></thead>
+            <thead className="sticky top-0 bg-panel2"><tr><th>Candle close (IST)</th><th>Strategy</th><th>Side</th><th>Market</th><th>Status</th><th>Reason</th></tr></thead>
             <tbody>{lv.signals.map((s) => (
               <tr key={s.id} title={s.why}><td className="font-mono">{s.ist}</td><td>{s.wb}</td><td className={s.side === "LONG" ? "text-teal-300" : "text-red-300"}>{s.side}</td>
                 <td>{s.market}</td><td className={s.status === "TAKEN" ? "text-teal-300" : "text-slate-400"}>{s.status}</td><td className="text-[12px]">{s.reason || s.why}</td></tr>))}
@@ -285,7 +285,7 @@ function Live({ lv, isAdmin, reload }) {
         </div>
         <div className="max-h-[420px] overflow-auto scroll-thin">
           <table className="desk-table">
-            <thead className="sticky top-0 bg-[#0b1224]"><tr><th>Candle close</th><th>Strategy</th><th>Side</th><th>Live</th><th className="num">Live entry</th><th className="num">Live net</th><th>Backtest</th><th className="num">BT entry</th><th className="num">BT net</th></tr></thead>
+            <thead className="sticky top-0 bg-panel2"><tr><th>Candle close</th><th>Strategy</th><th>Side</th><th>Live</th><th className="num">Live entry</th><th className="num">Live net</th><th>Backtest</th><th className="num">BT entry</th><th className="num">BT net</th></tr></thead>
             <tbody>{c.rows.map((r) => (
               <tr key={`${r.wb}-${r.ist}`}><td className="font-mono">{r.ist}</td><td>{r.wb}</td><td>{r.side}</td>
                 <td className={r.live_status === "TAKEN" ? "text-teal-300" : "text-slate-400"} title={r.live_reason}>{r.live_status === "TAKEN" ? (r.live_result || "Open") : "Skipped"}</td>
@@ -296,12 +296,12 @@ function Live({ lv, isAdmin, reload }) {
           </table>
           {!c.rows.length && <div className="p-4 text-center text-xs text-slate-500">Nothing to compare yet.</div>}
         </div>
-        <p className="mt-2 text-[11.5px] text-slate-400">The two can take different trades: live paper started flat at {ist(lv.live_start)}, while the backtest may still have been in a trade then (so it skips signals the live book takes). Hover Skipped for the reason.</p>
+        <Note tone="plain">The two can take different trades: live paper started flat at {ist(lv.live_start)}, while the backtest may still have been in a trade then (so it skips signals the live book takes). Hover Skipped for the reason.</Note>
       </Card>
 
       <Card title="Event log" sub="Starts, entries, exits, skips, controls and errors." testid="elite-events">
         <div className="max-h-[300px] overflow-auto scroll-thin text-[12px]">
-          {lv.events.map((e, i) => <div key={i} className={`border-b border-[#1e2a4a]/60 py-1 ${e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-300"}`}><span className="font-mono text-slate-500">{ist(e.at)}</span> {e.text}</div>)}
+          {lv.events.map((e, i) => <div key={i} className={`border-b border-line/60 py-1 ${e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-300"}`}><span className="font-mono text-slate-500">{ist(e.at)}</span> {e.text}</div>)}
         </div>
       </Card>
     </div>
@@ -316,7 +316,7 @@ export default function EliteEdge() {
   if (!d) return <div className="text-sm text-slate-400">Loading Elite 4 Edge…</div>;
   const lv = lvd?.live || d.live;
   const strategies = d.strategies || [];
-  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-[#1e2a4a] text-slate-300 hover:text-white"}`;
+  const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   const aNote = (
     <Note>Real code: the site's own Elite 4 Edge code run on Binance BTCUSDT 5-minute candles until 31 Jan 2024 and Delta BTCUSD from 1 Feb 2024 (to signals before 1 Oct 2026), then on this server's Delta candles. These are backtest trades, not live trades.</Note>
   );
@@ -327,7 +327,7 @@ export default function EliteEdge() {
       {d.error && <Note tone="red">Last update failed: {d.error}. It retries every 20 seconds.</Note>}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="elite-rules">
         {strategies.map((s) => (
-          <div key={s.key} className="rounded-lg border border-[#1e2a4a] bg-[#0f172a]/60 px-3 py-2 text-[12px]">
+          <div key={s.key} className="rounded-lg border border-line bg-panel2/60 px-3 py-2 text-[12px]">
             <div className="font-semibold text-slate-100">{s.priority}. {s.wb} <span className="font-normal text-slate-400">· {s.name}</span></div>
             <div className="text-slate-400">checked at each {s.tf} close · stop 2 x ATR(14) · time exit {hold(s.hold_h)}</div>
             <div className="text-slate-300">{s.rule}</div>
