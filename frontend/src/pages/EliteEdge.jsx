@@ -7,6 +7,11 @@ import { Btn, Field, Input } from "@/components/desk/forms";
 import { n, signedUsd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
 
+// P&L #5 stays in the engine (owner, 23 Nov 2026) but is not shown here: it fires on exactly the same candle as P&L #1,
+// which has priority, so it never takes a trade and every total is unchanged without it.
+const HIDDEN = new Set(["pl5"]);
+const hidden = (x) => HIDDEN.has(x?.key) || HIDDEN.has(x?.strategy) || x?.wb === "P&L #5";
+
 const pnlTone = (v) => (v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-slate-300");
 const pctTxt = (v) => (v == null ? "—" : `${Math.round(v * 100)}%`);
 const RESULT_TONE = { Target: "text-teal-300", Stop: "text-red-300", "Time exit": "text-amber-300", Open: "text-sky-300" };
@@ -39,7 +44,7 @@ function Totals({ s, testid }) {
 }
 
 function StratTable({ j, strategies }) {
-  const all = [...(j.per_strategy || []), { key: "all", wb: "Combined", name: "One trade at a time", ...j.combined }];
+  const all = [...(j.per_strategy || []).filter((s) => !hidden(s)), { key: "all", wb: "Combined", name: "One trade at a time", ...j.combined }];
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table">
@@ -49,7 +54,7 @@ function StratTable({ j, strategies }) {
           return (
             <tr key={s.key} className={s.key === "all" ? "border-t-2 border-line2 font-semibold" : ""}>
               <td className="font-mono">{st ? st.priority : "—"}</td>
-              <td>{s.wb}<div className="text-[11px] font-normal text-slate-500">{st ? st.name : s.name}{s.key === "pl5" && s.trades === 0 ? " · never trades: P&L #1 fires on the same candle and wins the tie" : ""}</div></td>
+              <td>{s.wb}<div className="text-[11px] font-normal text-slate-500">{st ? st.name : s.name}</div></td>
               <td className="num">{s.trades}</td><td className="num">{s.wins}</td><td className="num">{s.losses}</td><td className="num">{pctTxt(s.win_rate)}</td>
               <td className={`num ${pnlTone(s.gross)}`}>{signedUsd(s.gross)}</td><td className="num">{signedUsd(-s.fees)}</td>
               <td className={`num font-semibold ${pnlTone(s.net)}`}>{signedUsd(s.net)}</td><td className={`num ${pnlTone(s.per_trade)}`}>{signedUsd(s.per_trade)}</td>
@@ -104,7 +109,7 @@ function TradeTable({ rows, limit, more }) {
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="elite-trades">
         <thead><tr><th>Entry (IST)</th><th>Strategy</th><th>Side</th><th>Market</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th>Exit (IST)</th><th className="num">Exit</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th></tr></thead>
-        <tbody>{rows.slice(0, limit).map((r) => (
+        <tbody>{rows.filter((r) => !hidden(r)).slice(0, limit).map((r) => (
           <tr key={`${r.strategy}-${r.signal_t}`} title={r.reason}>
             <td className="font-mono">{r.entry_ist}</td><td>{r.wb}<div className="text-[11px] text-slate-500">{r.period === "Backtest history" ? "backtest" : "server candles"}</div></td>
             <td className={r.side === "LONG" ? "text-teal-300" : "text-red-300"}>{r.side}</td><td>{r.market}{r.chg30 != null ? ` ${(r.chg30 * 100).toFixed(1)}%` : ""}</td>
@@ -229,7 +234,7 @@ function Live({ lv, isAdmin, reload }) {
                 .map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
               <div className="col-span-2 pt-1 text-[11.5px] text-slate-400">Why: {t.reason}</div>
             </div>
-          ) : <div className="text-[12.5px] text-slate-400">Signals are checked at every 1h close (Row 9) and every 4h close (P&L #1, P&L #5, Row 18: 01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST).</div>}
+          ) : <div className="text-[12.5px] text-slate-400">Signals are checked at every 1h close (Row 9) and every 4h close (P&L #1, Row 18: 01:30, 05:30, 09:30, 13:30, 17:30, 21:30 IST).</div>}
         </Card>
         {isAdmin && (
           <Card title="Controls" sub="Stop all closes the open trade at market, cancels orders and stops new trades." testid="elite-controls">
@@ -251,7 +256,7 @@ function Live({ lv, isAdmin, reload }) {
         <div className="max-h-[420px] overflow-auto scroll-thin">
           <table className="desk-table">
             <thead className="sticky top-0 bg-panel2"><tr><th>Candle close (IST)</th><th>Strategy</th><th>Side</th><th>Market</th><th>Status</th><th>Reason</th></tr></thead>
-            <tbody>{lv.signals.map((s) => (
+            <tbody>{lv.signals.filter((s) => !hidden(s)).map((s) => (
               <tr key={s.id} title={s.why}><td className="font-mono">{s.ist}</td><td>{s.wb}</td><td className={s.side === "LONG" ? "text-teal-300" : "text-red-300"}>{s.side}</td>
                 <td>{s.market}</td><td className={s.status === "TAKEN" ? "text-teal-300" : "text-slate-400"}>{s.status}</td><td className="text-[12px]">{s.reason || s.why}</td></tr>))}
             </tbody>
@@ -264,7 +269,7 @@ function Live({ lv, isAdmin, reload }) {
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Mode</th><th>Entry (IST)</th><th>Strategy</th><th>Side</th><th className="num">Entry</th><th className="num">SL</th><th className="num">TP</th><th>Result</th><th>Exit (IST)</th><th className="num">Exit</th><th className="num">Fees</th><th className="num">Net</th></tr></thead>
-            <tbody>{lv.trades.map((r) => (
+            <tbody>{lv.trades.filter((r) => !hidden(r)).map((r) => (
               <tr key={r.id} title={r.reason}><td>{r.mode}</td><td className="font-mono">{r.entry_ist}</td><td>{r.wb}</td><td className={r.side === "LONG" ? "text-teal-300" : "text-red-300"}>{r.side}</td>
                 <td className="num">{n(r.entry, 1)}</td><td className="num">{n(r.sl, 1)}</td><td className="num">{n(r.tp, 1)}</td>
                 <td className={RESULT_TONE[r.result] || "text-sky-300"}>{r.result || "Open"}</td><td className="font-mono">{r.exit_ist || "—"}</td>
@@ -286,7 +291,7 @@ function Live({ lv, isAdmin, reload }) {
         <div className="max-h-[420px] overflow-auto scroll-thin">
           <table className="desk-table">
             <thead className="sticky top-0 bg-panel2"><tr><th>Candle close</th><th>Strategy</th><th>Side</th><th>Live</th><th className="num">Live entry</th><th className="num">Live net</th><th>Backtest</th><th className="num">BT entry</th><th className="num">BT net</th></tr></thead>
-            <tbody>{c.rows.map((r) => (
+            <tbody>{c.rows.filter((r) => !hidden(r)).map((r) => (
               <tr key={`${r.wb}-${r.ist}`}><td className="font-mono">{r.ist}</td><td>{r.wb}</td><td>{r.side}</td>
                 <td className={r.live_status === "TAKEN" ? "text-teal-300" : "text-slate-400"} title={r.live_reason}>{r.live_status === "TAKEN" ? (r.live_result || "Open") : "Skipped"}</td>
                 <td className="num">{n(r.live_entry, 1)}</td><td className={`num ${pnlTone(r.live_net)}`}>{signedUsd(r.live_net)}</td>
@@ -301,7 +306,7 @@ function Live({ lv, isAdmin, reload }) {
 
       <Card title="Event log" sub="Starts, entries, exits, skips, controls and errors." testid="elite-events">
         <div className="max-h-[300px] overflow-auto scroll-thin text-[12px]">
-          {lv.events.map((e, i) => <div key={i} className={`border-b border-line/60 py-1 ${e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-300"}`}><span className="font-mono text-slate-500">{ist(e.at)}</span> {e.text}</div>)}
+          {lv.events.filter((e) => !String(e.text || "").startsWith("P&L #5 ")).map((e, i) => <div key={i} className={`border-b border-line/60 py-1 ${e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-300"}`}><span className="font-mono text-slate-500">{ist(e.at)}</span> {e.text}</div>)}
         </div>
       </Card>
     </div>
@@ -315,17 +320,17 @@ export default function EliteEdge() {
   useEffect(() => { document.title = "Elite 4 Edge"; }, []);
   if (!d) return <div className="text-sm text-slate-400">Loading Elite 4 Edge…</div>;
   const lv = lvd?.live || d.live;
-  const strategies = d.strategies || [];
+  const strategies = (d.strategies || []).filter((s) => !hidden(s)).map((s, i) => ({ ...s, priority: i + 1 }));
   const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
   const aNote = (
     <Note>Real code: the site's own Elite 4 Edge code run on Binance BTCUSDT 5-minute candles until 31 Jan 2024 and Delta BTCUSD from 1 Feb 2024 (to signals before 1 Oct 2026), then on this server's Delta candles. These are backtest trades, not live trades.</Note>
   );
   return (
     <div className="space-y-4" data-testid="elite-page">
-      <PageHead title="Elite 4 Edge" sub={`Four strategies, one trade at a time for the whole account. $10,000 at 10x, stop 2 x ATR(14), Delta fees. Journals updated ${ist(d.computed_at)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`}
+      <PageHead title="Elite 4 Edge" sub={`One trade at a time for the whole account. $10,000 at 10x, stop 2 x ATR(14), Delta fees. Journals updated ${ist(d.computed_at)}${d.last_candle_ist ? ` · last 5m candle ${d.last_candle_ist}` : ""}`}
         right={<span className="flex items-center gap-2"><Chip status={MODE_CHIP[lv.mode]} label={`${MODE_NAME[lv.mode].toUpperCase()}`} testid="elite-mode" /><Chip status={lv.halt ? "BLOCKED" : "PASS"} label={lv.halt ? "STOPPED" : lv.open_trade ? "IN TRADE" : "WAITING FOR SIGNAL"} testid="elite-status" /></span>} />
       {d.error && <Note tone="red">Last update failed: {d.error}. It retries every 20 seconds.</Note>}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="elite-rules">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="elite-rules">
         {strategies.map((s) => (
           <div key={s.key} className="rounded-lg border border-line bg-panel2/60 px-3 py-2 text-[12px]">
             <div className="font-semibold text-slate-100">{s.priority}. {s.wb} <span className="font-normal text-slate-400">· {s.name}</span></div>
