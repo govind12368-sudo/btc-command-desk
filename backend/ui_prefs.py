@@ -36,6 +36,13 @@ async def set_user(user, pages):
     return await config(user)
 
 
+async def global_hidden():
+    """Pages hidden for all users (the server refuses their data to non-admins: see viewer.py)."""
+    return clean(((await db.site_ui.find_one({"_id": "pages"})) or {}).get("hidden"))
+
+
 async def set_global(user, pages):
     await db.site_ui.update_one({"_id": "pages"}, {"$set": {"hidden": clean(pages), "by": user["email"], "at": iso(now_utc())}}, upsert=True)
+    import viewer
+    viewer.forget_cache()
     return await config(user)

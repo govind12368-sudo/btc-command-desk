@@ -63,6 +63,12 @@
 .desk-table td { padding: 0.32rem 0.6rem; border-bottom: 1px solid rgb(var(--c-line) / 0.55); vertical-align: top; }
 .desk-table tbody tr:hover td { background: rgb(var(--c-raised) / 0.7); }
 .desk-table td.num, .desk-table td .num { font-family: "JetBrains Mono", monospace; }
+.desk-table td.font-mono { white-space: nowrap; }
+/* A sideways-scrolling table shows a soft edge on phones so it is clear there is more to the right. */
+@media (max-width: 640px) {
+  .desk-table td, .desk-table th { padding-left: 0.5rem; padding-right: 0.5rem; }
+  .overflow-x-auto.scroll-thin { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+}
 .fade-up { animation: fadeUp 0.25s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 .pulse-dot { animation: pulseDot 1.8s ease-in-out infinite; }

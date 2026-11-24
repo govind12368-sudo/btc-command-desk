@@ -48,6 +48,7 @@ import desk
 import support
 import broker_keys
 import fundmgr
+import viewer
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -108,7 +109,7 @@ async def candles(tf: str = "5m", u=Depends(current_user)):
 
 
 @api.get("/market")
-async def market(u=Depends(current_user)):
+async def market(u=Depends(viewer.page("/market"))):
     p = REGISTRY["delta_product"]
     p.active_until = now_utc() + timedelta(seconds=60)
     live = WS["status"] == "connected" and WS.get("book")
@@ -123,7 +124,7 @@ async def market(u=Depends(current_user)):
 
 
 @api.get("/oi-history")
-async def oi_history(hours: int = Query(24, ge=1, le=168), venue: str = "OKX", u=Depends(current_user)):
+async def oi_history(hours: int = Query(24, ge=1, le=168), venue: str = "OKX", u=Depends(viewer.page("/market"))):
     """Stored OI/funding snapshots for charts (oldest first, at most ~300 points)."""
     since = iso(now_utc() - timedelta(hours=hours))
     rows = [x async for x in db.oi_history.find({"venue": venue, "t": {"$gte": since}}, {"_id": 0, "t": 1, "oi_btc": 1, "oi_usd": 1, "funding_fraction": 1}).sort("t", 1)]
@@ -313,7 +314,7 @@ async def ev_delete(eid: str, u=Depends(admin_user)):
 
 # ---------------- swing plans ----------------
 @api.get("/plans")
-async def plans(u=Depends(current_user)):
+async def plans(u=Depends(viewer.page("/scalping", "/swing"))):
     return {"active": [clean(x) async for x in db.swing_plans.find()],
             "archive": [clean(x) async for x in db.plan_archive.find().sort("archived_at", -1).limit(100)]}
 
@@ -352,7 +353,7 @@ async def signals(page: int = 1, size: int = 25, day: str = "", playbook: str = 
 
 
 @api.get("/switch-support")
-async def switch_support(u=Depends(current_user)):
+async def switch_support(u=Depends(viewer.page("/journal", "/plan-a"))):
     """Support snapshots saved when signals fired (information only)."""
     return {"items": await support.all_snaps()}
 
@@ -1006,7 +1007,7 @@ def _plan_a_token():
 
 
 @api.get("/regime-journal")
-async def regime_journal_get(u=Depends(current_user)):
+async def regime_journal_get(u=Depends(viewer.page("/regime"))):
     """Regime Strategy paper journal + its reverse book (paper only; no orders are ever sent)."""
     st = regime.STATE
     if st["data"] is None and plan_a.STATE.get("rows"):
@@ -1015,23 +1016,24 @@ async def regime_journal_get(u=Depends(current_user)):
 
 
 @api.get("/flush-short")
-async def flush_short_get(u=Depends(current_user)):
-    """Flush Short v2 paper journal (paper only; no orders are ever sent)."""
+async def flush_short_get(u=Depends(viewer.page("/flush-short"))):
+    """Flush Short v2 paper journal (paper only; no orders are ever sent). Users get trades and results only (viewer.py)."""
     st = flush.STATE
     if st["data"] is None and plan_a.STATE.get("rows"):
         await flush.compute()
-    return {**(st["data"] or {"name": flush.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
+    out = {**(st["data"] or {"name": flush.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"], "is_admin": viewer.is_admin(u)}
+    return out if viewer.is_admin(u) else viewer.flush_view(out)
 
 
 @api.get("/candle-runs")
-async def candle_runs_get(u=Depends(current_user)):
+async def candle_runs_get(u=Depends(viewer.page("/candle-runs"))):
     """Candle Runs: 5 paper strategies from the owner's backtest workbook (paper only, no alerts, no orders)."""
     st = runs.STATE
     return {**(st["data"] or {"name": runs.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
 
 
 @api.get("/delta-top3")
-async def delta_top3_get(u=Depends(current_user)):
+async def delta_top3_get(u=Depends(viewer.page("/delta-top3"))):
     """Delta Top 3: 3 paper strategies from the owner's Top20 sheet (paper only, no alerts, no orders, not used by Auto-Trade)."""
     st = trio.STATE
     return {**(st["data"] or {"name": trio.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"]}
@@ -1072,8 +1074,9 @@ async def ws_stream(ws: WebSocket):
 
 # ---------------- Option Picks (BTC daily options on Delta India; paper only, no orders, no alerts) ----------------
 @api.get("/option-picks")
-async def option_picks_get(u=Depends(current_user)):
-    return {**await optpicks.dashboard(), "is_admin": u["role"] == "admin"}
+async def option_picks_get(u=Depends(viewer.page("/option-picks"))):
+    out = {**await optpicks.dashboard(), "is_admin": u["role"] == "admin"}
+    return out if viewer.is_admin(u) else viewer.optpicks_view(out)
 
 
 class OptSizingIn(BaseModel):
@@ -1095,7 +1098,7 @@ async def option_picks_sizing(body: OptSizingIn, request: Request, u=Depends(adm
 
 
 @api.get("/option-picks/trades.csv")
-async def option_picks_csv(key: Literal["IFLY", "SP16", "SSTR", "BPS", "BCS"], u=Depends(current_user)):
+async def option_picks_csv(key: Literal["IFLY", "SP16", "SSTR", "BPS", "BCS"], u=Depends(admin_user)):
     return PlainTextResponse(optpicks.trades_csv(key), media_type="text/csv",
                              headers={"Content-Disposition": f'attachment; filename="option_picks_{key}_backtest.csv"'})
 
@@ -1128,9 +1131,10 @@ class FundControlIn(BaseModel):
 
 
 @api.get("/fund")
-async def fund_get(u=Depends(current_user)):
+async def fund_get(u=Depends(viewer.page("/fund-manager"))):
     """Fund Manager: a paper fund over Elite 4 Edge, Option Picks and Flush Short. No order is ever sent from here."""
-    return await fundmgr.dashboard(u["role"] == "admin")
+    out = await fundmgr.dashboard(u["role"] == "admin")
+    return out if viewer.is_admin(u) else viewer.fund_view(out)
 
 
 @api.put("/fund/settings")
@@ -1157,20 +1161,16 @@ async def fund_control(body: FundControlIn, request: Request, u=Depends(admin_us
 
 
 @api.get("/elite")
-async def elite_get(u=Depends(current_user)):
+async def elite_get(u=Depends(viewer.page("/elite-4-edge"))):
     out = await elite.dashboard()
     out["is_admin"] = u["role"] == "admin"
-    if u["role"] != "admin":
-        out["live"].pop("real_money", None)
-    return out
+    return out if viewer.is_admin(u) else viewer.elite_view(out)
 
 
 @api.get("/elite/live")
-async def elite_live_get(u=Depends(current_user)):
+async def elite_live_get(u=Depends(viewer.page("/elite-4-edge"))):
     out = await elite.dashboard(journals=False)
-    if u["role"] != "admin":
-        out["live"].pop("real_money", None)
-    return out
+    return out if viewer.is_admin(u) else viewer.elite_view(out)
 
 
 @api.post("/elite/control")
@@ -1198,7 +1198,7 @@ async def elite_mode(body: EliteModeIn, request: Request, u=Depends(admin_user))
 
 
 @api.get("/observer")
-async def observer_get(u=Depends(current_user)):
+async def observer_get(u=Depends(viewer.page("/observer"))):
     """Strategy Observer: every page and journal compared, recent vs 26 months (read-only)."""
     st = observer.STATE
     if st["data"] is None and plan_a.STATE.get("rows"):
@@ -1207,7 +1207,7 @@ async def observer_get(u=Depends(current_user)):
 
 
 @api.get("/plan-a")
-async def plan_a_get(request: Request, u=Depends(current_user)):
+async def plan_a_get(request: Request, u=Depends(viewer.page("/plan-a", "/journal"))):
     st = plan_a.STATE
     out = {"computed_at": st["computed_at"], "summary": st["summary"], "rows": st["rows"][-300:], "error": st["error"],
            "live_price": st["live_price"], "fees": plan_a.FEES,
@@ -1283,16 +1283,17 @@ async def desk_summary(u=Depends(current_user)):
         now_sup = support.now_view(daytype.public(), I, read, soon, cascade)
     except Exception:
         pass
-    return desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"), auto, snaps, now_sup)
+    out = desk.summary(engine.STATE, scanner.STATE["result"] or scanner.compute(engine.STATE), intel.STATE, ev, plan_a.STATE.get("books"), plan_a.STATE.get("rows"), auto, snaps, now_sup)
+    return out if viewer.is_admin(u) else viewer.desk_view(out)
 
 
 @api.get("/intel")
-async def intel_get(u=Depends(current_user)):
+async def intel_get(u=Depends(viewer.page("/intel"))):
     return intel.public()
 
 
 @api.get("/intel/chart")
-async def intel_chart(tf: str = "1h", u=Depends(current_user)):
+async def intel_chart(tf: str = "1h", u=Depends(viewer.page("/intel"))):
     if tf not in intel.TF:
         raise HTTPException(422, "Unknown timeframe")
     return intel.chart(tf)
@@ -1331,7 +1332,7 @@ async def strategy_audit(u=Depends(admin_user)):
 
 
 @api.get("/scanner")
-async def scanner_get(u=Depends(current_user)):
+async def scanner_get(u=Depends(viewer.page("/scanner"))):
     return await scanner.public(engine.STATE)
 
 

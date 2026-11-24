@@ -197,7 +197,7 @@ export default function Dashboard() {
           ))}
         </div>} />
       <DecisionHero s={s} />
-      <SwitchFocus d={sum} />
+      {isAdmin && <SwitchFocus d={sum} />}
       <DayTypeCard day={s.day_type} compact />
       <MarketRead d={sum} />
       <NextSetup scalp={s.scalp} swing={s.swing} isAdmin={isAdmin} />

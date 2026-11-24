@@ -174,8 +174,8 @@ function Ticker() {
   const cell = "hidden items-baseline gap-1.5 border-l border-line px-3 xl:flex";
   return (
     <div className="flex h-full items-center" data-testid="ticker">
-      <div className="flex items-baseline gap-2 px-3">
-        <span className="font-mono text-[11px] text-slate-500">BTCUSD</span>
+      <div className="flex items-baseline gap-1.5 whitespace-nowrap px-1 sm:gap-2 sm:px-3">
+        <span className="hidden font-mono text-[11px] text-slate-500 sm:inline">BTCUSD</span>
         <span data-testid="header-price" className={`rounded-sm px-1 font-mono text-[15px] font-semibold text-slate-50 ${flash}`}>{f1(last)}</span>
         {chg != null && <span className={`font-mono text-[12px] font-semibold ${chg >= 0 ? "text-teal-300" : "text-red-300"}`}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
       </div>
@@ -277,8 +277,10 @@ export default function Layout() {
             <span className={`h-1.5 w-1.5 rounded-full ${streamOk ? "pulse-dot bg-teal-400" : "bg-slate-600"}`} />{streamOk ? "LIVE" : "POLL"}
           </span>
           <span className="hidden font-mono text-[10.5px] text-slate-500 lg:inline" data-testid="last-update">{ago(conn.lastOk)}</span>
-          <span title={connTitle}><Chip status={connTone} label={connStatus} testid="connection-status" /></span>
-          <Clock />
+          <span title={connTitle} className="hidden sm:inline"><Chip status={connTone} label={connStatus} testid="connection-status" /></span>
+          <span title={`${connStatus}. ${connTitle || ""}`} aria-label={`Connection: ${connStatus}`} data-testid="connection-dot"
+            className={`h-2.5 w-2.5 rounded-full sm:hidden ${connTone === "PASS" ? "bg-teal-400" : connTone === "WAIT" ? "bg-amber-400" : "bg-red-500"}`} />
+          <span className="hidden sm:inline"><Clock /></span>
           <button data-testid="refresh-button" onClick={refresh} className="rounded-sm border border-line p-1 text-slate-400 transition-colors hover:border-line2 hover:text-slate-100" title="Refresh now">
             <RefreshCw size={13} className={conn.loading ? "animate-spin" : ""} />
           </button>
