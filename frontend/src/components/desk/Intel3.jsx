@@ -50,14 +50,14 @@ function Score({ kind, title, s, bands, extra }) {
         : <p className="text-[12.5px] text-slate-500">None of the {kind === "crash" ? "warning" : "recovery"} signs is active.</p>}
       {hr && <p className="mt-3 text-[12px] text-slate-400">History: on days when the backtested part of this score ({s.tested_score}) was in the <b className="text-slate-200">{NAME[hr.band]}</b> band, a 10% {word} within 7 days followed on {rate(hr.train)} in training, {rate(hr.validation)} in validation and {rate(hr.test)} in the test period.</p>}
       <Expand label="All supporting indicators" testid={`intel-${kind}-indicators`}>
-        <table className="desk-table">
+        <div className="overflow-x-auto scroll-thin"><table className="desk-table">
           <thead><tr><th>Group</th><th>Status</th><th className="num">Points</th><th>Indicators</th></tr></thead>
           <tbody>{s.groups.map((g) => (
             <tr key={g.key}><td className="whitespace-nowrap font-semibold">{g.label}{!g.tested && <div className="text-[10.5px] font-normal text-slate-500">live only, not backtested</div>}</td>
               <td className={`whitespace-nowrap ${g.status === "CONFIRMING" ? "text-amber-300" : "text-slate-400"}`}>{g.status === "CONFIRMING" ? "● Agrees" : g.status === "QUIET" ? "○ Quiet" : "— No data"}</td>
               <td className="num font-mono">{g.points} / {g.weight}</td>
               <td><ul className="space-y-0.5">{g.items.map((x) => <li key={x.name} className={x.on ? "text-slate-100" : "text-slate-500"}>{x.on == null ? "—" : x.on ? "✓" : "✗"} <b>{x.name}</b> ({x.max}): {x.text}</li>)}</ul></td></tr>))}</tbody>
-        </table>
+        </table></div>
       </Expand>
     </div>
   );

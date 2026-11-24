@@ -41,10 +41,10 @@ export default function LongTest({ lt }) {
         </section>
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Trade management (same entries)</h3>
-          <table className="desk-table">
+          <div className="overflow-x-auto scroll-thin"><table className="desk-table">
             <thead><tr><th>Rule</th><th className="num">Win rate</th><th className="num">Net (bps)</th></tr></thead>
             <tbody>{lt.management.map(([nm, w, b]) => <tr key={nm}><td>{nm}</td><td className="num font-mono">{w}%</td><td className={`num font-mono ${tone(b)}`}>{b}</td></tr>)}</tbody>
-          </table>
+          </table></div>
           <Note tone="plain">bps = 0.01% of the position; fees are about 6–12 bps a round trip.</Note>
         </section>
         <section>

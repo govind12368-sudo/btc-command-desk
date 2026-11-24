@@ -40,13 +40,13 @@ export default function EdgeSearch({ e }) {
         </section>
       </div>
       <Expand label="Every setup: best version, and best version with 50% or more wins" testid="edge-search-table">
-        <table className="desk-table">
+        <div className="overflow-x-auto scroll-thin"><table className="desk-table">
           <thead><tr><th>Setup</th><th>Version</th><th>Training</th><th>Validation</th></tr></thead>
           <tbody>{e.families.flatMap((f) => [
             <tr key={f.name}><td className="font-semibold">{f.name}</td><td className="text-[11.5px] text-slate-400">Best result: {exit(f.best)}</td><td>{cell(f.best.train)}</td><td>{cell(f.best.val)}</td></tr>,
             <tr key={f.name + "50"}><td /><td className="text-[11.5px] text-slate-400">{f.best_50 ? `Best with 50%+ wins: ${exit(f.best_50)}` : "No version reached 50% wins"}</td><td>{f.best_50 ? cell(f.best_50.train) : "—"}</td><td>{f.best_50 ? cell(f.best_50.val) : "—"}</td></tr>,
           ])}</tbody>
-        </table>
+        </table></div>
         <p className="mt-2">R is the average result per trade as a share of the amount risked, after fees. Positive in training but not in validation means it did not hold up.</p>
       </Expand>
       <Note tone="plain">{e.rules} Pass mark: {e.pass_mark} Periods: training {e.splits.train}; validation {e.splits.validation}; test {e.splits.test}. Past results do not promise future results.</Note>

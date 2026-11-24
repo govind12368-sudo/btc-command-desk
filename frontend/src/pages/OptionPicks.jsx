@@ -100,14 +100,14 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
       )}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="Yearly" sub="Net after fees">
-          <table className="desk-table">
+          <div className="overflow-x-auto scroll-thin"><table className="desk-table">
             <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th></tr></thead>
             <tbody>{b.yearly.map((y) => (
               <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
                 <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pct(y.win_rate)}</td><td className={`num ${tone(y.gross)}`}>{signedUsd(y.gross, 0)}</td>
                 <td className="num">{signedUsd(-y.fees, 0)}</td><td className={`num font-semibold ${tone(y.net)}`}>{signedUsd(y.net, 0)}</td>
               </tr>))}</tbody>
-          </table>
+          </table></div>
         </Card>
         <Card title="Monthly" sub="Newest first. Losing months are red.">
           <div className="max-h-[330px] overflow-auto scroll-thin">
@@ -200,12 +200,12 @@ export default function OptionPicks() {
   const viewer = !d.is_admin;   // users see trades and results only (the server also removes the rest from their data)
   const z = d.sizing || {};
   const same = z.put_capital === z.call_capital && z.put_leverage === z.call_leverage;
-  const sub = viewer ? "Paper trading journal, net after fees" : `Pick 5: short ATM BTC straddle at 17:00 IST on Delta Exchange India (expiry 17:30 IST) · ${same
+  const sub = viewer ? "Backtest journal, net after fees" : `Pick 5: short ATM BTC straddle at 17:00 IST on Delta Exchange India (expiry 17:30 IST) · ${same
     ? `$${n(z.put_capital, 0)} × ${z.put_leverage}x per leg (put + call), about $${n(z.put_capital * z.put_leverage, 0)} of BTC per leg` : d.size_label} · paper only`;
   return (
     <div className="space-y-4" data-testid="option-picks-page">
       <PageHead title="Option Picks" sub={sub} />
-      <Note>Paper only: no orders are sent and no alerts.</Note>
+      <Note>{viewer ? "Backtest trades, not live trades. No orders are sent." : "Paper only: no orders are sent and no alerts."}</Note>
       {d.error && <Note tone="red">{viewer ? "The latest update is delayed. It retries automatically." : `Last update failed: ${d.error}`}</Note>}
       {s && d.backtest[s.key] && <RealData rows={d.backtest[s.key].realdata} notChecked={d.not_checked} viewer={viewer} />}
       {s && !viewer && (
@@ -215,11 +215,14 @@ export default function OptionPicks() {
         </div>
       )}
       {d.is_admin && <Sizing d={d} reload={reload} />}
-      <div className="flex flex-wrap gap-2">
-        <button className={btn(tab === "live")} onClick={() => setTab("live")} data-testid="opt-tab-live">Live paper trading</button>
-        {s && <button className={btn(tab === s.key)} onClick={() => setTab(s.key)} data-testid={`opt-tab-${s.key}`}>Backtest journal</button>}
-      </div>
-      {tab === "live" ? <Live d={d} viewer={viewer} /> : s && <StrategyBacktest s={s} b={d.backtest[s.key]} historyTo={d.history_to} sizeLabel={d.size_label} viewer={viewer} />}
+      {!viewer && (
+        <div className="flex flex-wrap gap-2">
+          <button className={btn(tab === "live")} onClick={() => setTab("live")} data-testid="opt-tab-live">Live paper trading</button>
+          {s && <button className={btn(tab === s.key)} onClick={() => setTab(s.key)} data-testid={`opt-tab-${s.key}`}>Backtest journal</button>}
+        </div>
+      )}
+      {/* Users get the backtest journal only; live paper trading is not sent to them. */}
+      {tab === "live" && !viewer ? <Live d={d} viewer={viewer} /> : s && <StrategyBacktest s={s} b={d.backtest[s.key]} historyTo={d.history_to} sizeLabel={d.size_label} viewer={viewer} />}
     </div>
   );
 }

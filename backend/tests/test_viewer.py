@@ -19,7 +19,8 @@ def test_flush_view_keeps_trades_and_drops_rules_and_skipped_signals():
          "settings": {"rsi_max": 30, "atr_min": 0.6, "market": "BTC down more than 5% over 30 days"}, "evidence": {"period": "26-month replay", "note": "RSI below 30"},
          "market_now": {"type": "Down", "chg30": -0.21, "active": True}, "all": {"trades": 1, "net": 57.6}, "live": {"trades": 0},
          "daily": [{"date": "2026-11-18", "trades": 1, "signals": 5, "net": 57.6}],
-         "rows": [{"signal_id": "a", "time_ist": "2026-11-18 21:20", "status": "CLOSED", "rule": "Flush short", "result": "Target", "trade_side": "SHORT", "entry": 63031.5, "sl": 63347,
+         "live_start_ist": "2026-11-21 17:30",
+         "rows": [{"signal_id": "a", "time_ist": "2026-11-18 21:20", "period": "Before live", "status": "CLOSED", "rule": "Flush short", "result": "Target", "trade_side": "SHORT", "entry": 63031.5, "sl": 63347,
                    "tp": 62637.1, "net": 57.6, "rsi": 22.1, "stop_atr": 0.7, "t15": "Down", "t1h": "Down", "t4h": "Down", "chg30": -0.23, "market": "Down", "day_type": "Trend",
                    "reason": "all six rules agree", "d": 315.5, "mfe": 1.3, "mae": 0.2},
                   {"signal_id": "b", "time_ist": "2026-11-22 10:50", "status": "SKIPPED", "rule": "No trade", "rsi": 22.6, "reason": "stop is only 0.49x the hourly ATR (needs 0.6x)"}]}
@@ -29,6 +30,7 @@ def test_flush_view_keeps_trades_and_drops_rules_and_skipped_signals():
     assert [r["signal_id"] for r in v["rows"]] == ["a"] and v["rows"][0]["net"] == 57.6 and v["rows"][0]["sl"] == 63347
     assert set(v["rows"][0]) <= set(viewer.FLUSH_ROW) and v["market_now"] == {"active": True} and v["all"] == d["all"] and v["viewer"] is True
     assert "settings" not in v and "evidence" not in v and "signals_checked" not in v and "signals" not in v["daily"][0]
+    assert "live" not in v and "live_start_ist" not in v and "period" not in v["rows"][0]            # one journal only: all since 3 Nov
     assert not any(w in _text(v) for w in ("RSI", "ATR", "rsi", "0.6x", "six rules", "5%"))
 
 
@@ -50,14 +52,11 @@ def test_elite_view_shows_codes_and_results_only():
     before = _text(out)
     v = viewer.elite_view(out)
     assert _text(out) == before
-    assert v["strategies"] == [{"key": "pl1", "wb": "P&L #1", "priority": 1}] and v["settings"] == {"paper_capital": 5000}
+    assert v["strategies"] == [{"key": "pl1", "wb": "P&L #1", "priority": 1}] and "settings" not in v
     assert v["A"]["combined"] == {"net": 23611.18} and v["A"]["trades"][0]["net"] == -442.9 and "reason" not in v["A"]["trades"][0] and "name" not in v["A"]["per_strategy"][0]
-    lv = v["live"]
-    assert "real_money" not in lv and lv["events"] == [] and lv["compare"] is None and [s["id"] for s in lv["signals"]] == ["s1"] and "reason" not in lv["signals"][0]
-    assert lv["book"] == {"pnl": 112.0, "realized": 112.0, "unrealized": 0} and lv["halt"] == {"at": "t", "reason": "stopped by the desk"}
-    assert lv["open_trade"]["sl"] == 62000 and "time_left_h" not in lv["open_trade"] and "order_id" not in lv["trades"][0]
-    assert not any(w in _text(v) for w in ("candles in a row", "Range market", "No filter", "dd_limit", "-4000", "drawdown"))
-    assert viewer.elite_view({"name": "x", "live": out["live"]})["live"]["compare"] is None      # the 3-second live endpoint goes through the same view
+    assert "live" not in v and "B" not in v and v["is_admin"] is False and v["viewer"] is True      # journal A only: no live tab, no journal B
+    assert v["A"]["combined"] == {"net": 23611.18}                                                  # totals (max drawdown included when present) stay
+    assert not any(w in _text(v) for w in ("candles in a row", "Range market", "No filter", "dd_limit", "-4000", "PAPER", "real_money"))
 
 
 def test_optpicks_view_hides_the_strategy_definition():
@@ -79,15 +78,13 @@ def test_optpicks_view_hides_the_strategy_definition():
     v = viewer.optpicks_view(out)
     assert _text(out) == before
     assert v["strategies"] == [{"key": "SSTR", "pick": 5, "capital": 4000, "enabled": True, "name": "Pick 5"}]
-    assert all(k not in v for k in ("sizing", "size_label", "not_checked", "next_entry"))
+    assert all(k not in v for k in ("sizing", "size_label", "not_checked", "next_entry", "live", "live_stats", "compare", "enabled", "order_notional"))
     b = v["backtest"]["SSTR"]
-    assert b["stats"]["net"] == 12281.74 and "view2_net" not in b["stats"] and b["trades"][0]["net"] == 44.34 and "net_v2" not in b["trades"][0]
+    assert b["stats"] == {"net": 12281.74} and b["trades"][0]["net"] == 44.34 and "net_v2" not in b["trades"][0]      # no max drawdown, worst trade or worse-fills figure
     assert "stop" not in b["trades"][0]["legs"][0] and b["trades"][0]["legs"][0]["fill"] == 54.9 and "verdict" not in b["realdata"][0] and "size" not in b["realdata"][0]
-    assert [x["id"] for x in v["live"]] == ["SSTR-2026-11-23"] and "view2_net" not in v["live_stats"]["SSTR"] and "bt_reason" not in v["compare"][0]
+    assert b["realdata"][0] == {"period": "1 Jan 2024 – 23 Nov 2026", "net": 12281.74, "years": {"2024": 2874.86}}
     assert not any(w in _text(v) for w in ("straddle", "SL2X", "2x sell", "below $20", "25x", "Sensitive"))
-    out2 = {**out, "error": "ProxyError: 403 host api.india.delta.exchange", "compare": out["compare"] + [{"day": "2026-11-24", "key": "SSTR", "live_status": "MISSED", "live_reason": "server restart"}]}
-    v2 = viewer.optpicks_view(out2)
-    assert v2["error"] == "delayed" and [c["day"] for c in v2["compare"]] == ["2026-11-23"]     # no raw error text, no missed/skipped days
+    assert viewer.optpicks_view({**out, "error": "ProxyError: 403 host api.india.delta.exchange"})["error"] == "delayed"     # no raw error text
 
 
 def test_desk_and_fund_views():
@@ -137,10 +134,10 @@ def test_server_refuses_hidden_pages_to_users_and_sends_them_the_reduced_view(mo
         r = c.get("/api/flush-short")                                       # a page the user can open
         assert r.status_code == 200 and r.json()["viewer"] is True and "settings" not in r.json() and r.json()["is_admin"] is False
         e = c.get("/api/elite")
-        assert e.status_code == 200 and e.json()["viewer"] is True and all(set(s) <= {"key", "wb", "priority"} for s in e.json()["strategies"]) and "real_money" not in e.json()["live"]
-        assert c.get("/api/elite/live").json()["live"]["compare"] is None
+        assert e.status_code == 200 and e.json()["viewer"] is True and all(set(s) <= {"key", "wb", "priority"} for s in e.json()["strategies"]) and "live" not in e.json() and "B" not in e.json()
+        assert c.get("/api/elite/live").status_code == 403                                 # live paper trading is admin-only
         o = c.get("/api/option-picks")
-        assert o.status_code == 200 and o.json()["viewer"] is True and "sizing" not in o.json() and o.json()["strategies"][0]["name"].startswith("Pick ")
+        assert o.status_code == 200 and o.json()["viewer"] is True and "sizing" not in o.json() and "live" not in o.json() and o.json()["strategies"][0]["name"].startswith("Pick ")
         assert c.get("/api/option-picks/trades.csv?key=SSTR").status_code == 403           # the full trade file is admin-only
         monkeypatch.setitem(live_viewer._CACHE, "hidden", frozenset({"/plan-a"}))          # the Trade Journal still uses this data, so it stays open
         assert c.get("/api/plan-a").status_code != 403 and c.get("/api/candle-runs").status_code == 200
@@ -149,6 +146,6 @@ def test_server_refuses_hidden_pages_to_users_and_sends_them_the_reduced_view(mo
         assert c.get("/api/candle-runs").status_code == 200 and c.get("/api/fund").status_code == 200
         a = c.get("/api/elite").json()
         assert "viewer" not in a and a["is_admin"] is True and "rule" in a["strategies"][0] and "dd_limit" in a["settings"]
-        assert "sizing" in c.get("/api/option-picks").json()
+        assert "sizing" in c.get("/api/option-picks").json() and "live" in c.get("/api/option-picks").json() and c.get("/api/elite/live").status_code == 200
     finally:
         server.app.dependency_overrides.clear()

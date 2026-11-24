@@ -42,7 +42,7 @@ function Detail({ p }) {
       <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
         {kv.map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-line/60 py-1"><span className="text-slate-400">{k}</span><span className="font-mono text-slate-200">{v}</span></div>)}
       </div>
-      <table className="desk-table">
+      <div className="overflow-x-auto scroll-thin"><table className="desk-table">
         <thead><tr><th>Part</th><th className="num">Share</th><th className="num">Size</th><th className="num">Target</th><th>Result</th><th>Exit</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">If traded alone ($10,000)</th></tr></thead>
         <tbody>{p.parts.map((x) => (
           <tr key={x.wb}><td>{x.wb} · 1:{x.rr}</td><td className="num">{Math.round(x.share * 100)}%</td><td className="num">{x.size} BTC</td><td className="num">{n(x.tp, 1)}</td>
@@ -50,7 +50,7 @@ function Detail({ p }) {
             <td className={`num ${pnlTone(x.gross)}`}>{signedUsd(x.gross)}</td><td className="num">{signedUsd(-x.fees)}</td><td className={`num font-semibold ${pnlTone(x.net)}`}>{signedUsd(x.net)}</td>
             <td className={`num ${pnlTone(x.full_net)}`}>{signedUsd(x.full_net)}</td></tr>))}
         </tbody>
-      </table>
+      </table></div>
       <div className="text-slate-300">Why: {p.reason}</div>
     </div>
   );

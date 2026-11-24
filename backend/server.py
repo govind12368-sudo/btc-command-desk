@@ -1168,9 +1168,9 @@ async def elite_get(u=Depends(viewer.page("/elite-4-edge"))):
 
 
 @api.get("/elite/live")
-async def elite_live_get(u=Depends(viewer.page("/elite-4-edge"))):
-    out = await elite.dashboard(journals=False)
-    return out if viewer.is_admin(u) else viewer.elite_view(out)
+async def elite_live_get(u=Depends(admin_user)):
+    """Live paper trading (tab C) is for admins; users get journal A only."""
+    return await elite.dashboard(journals=False)
 
 
 @api.post("/elite/control")

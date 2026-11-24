@@ -138,7 +138,7 @@ function Journal({ j, title, strategies, note, viewer }) {
       {note}
       <Totals s={j.combined} testid="elite-journal-totals" />
       {open && <Note>The backtest has an open {open.wb} {open.side} from {open.entry_ist} at {n(open.entry, 1)} (now {signedUsd(open.net)}). Open trades are not in the totals.</Note>}
-      <Card title={`${title}: by strategy`} sub="One trade at a time for the whole account. The strategy rows add up to the combined row.">
+      <Card title={`${title}: by strategy`} sub={viewer ? "The strategy rows add up to the combined row." : "One trade at a time for the whole account. The strategy rows add up to the combined row."}>
         <StratTable j={j} strategies={strategies} />
       </Card>
       <Card title="Yearly" sub="By entry date (IST). Net after fees.">
@@ -315,10 +315,26 @@ function Live({ lv, isAdmin, reload }) {
 
 export default function EliteEdge() {
   const { data: d } = useFetch("/elite", 120000);
-  const { data: lvd, reload } = useFetch("/elite/live", 3000);
-  const [tab, setTab] = useState("C");
   useEffect(() => { document.title = "Elite 4 Edge"; }, []);
   if (!d) return <div className="text-sm text-slate-400">Loading Elite 4 Edge…</div>;
+  return d.is_admin ? <EliteAdmin d={d} /> : <EliteUser d={d} />;
+}
+
+// Users: journal A only (1 Jan 2023 → today). No journal B, no live paper trading, no rules (the server does not send them).
+function EliteUser({ d }) {
+  const strategies = (d.strategies || []).filter((s) => !hidden(s)).map((s, i) => ({ ...s, priority: i + 1 }));
+  return (
+    <div className="space-y-4" data-testid="elite-page">
+      <PageHead title="Elite 4 Edge" sub={`Backtest journal, 1 Jan 2023 → today, net after fees. Updated ${ist(d.computed_at)}`} />
+      {d.error && <Note tone="red">The latest update is delayed. It retries automatically.</Note>}
+      <Journal j={d.A} title="1 Jan 2023 → today" strategies={strategies} viewer note={<Note>Backtest trades, not live trades. Net results are after fees.</Note>} />
+    </div>
+  );
+}
+
+function EliteAdmin({ d }) {
+  const { data: lvd, reload } = useFetch("/elite/live", 3000);
+  const [tab, setTab] = useState("C");
   const lv = lvd?.live || d.live;
   const strategies = (d.strategies || []).filter((s) => !hidden(s)).map((s, i) => ({ ...s, priority: i + 1 }));
   const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;

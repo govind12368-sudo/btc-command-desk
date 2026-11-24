@@ -74,10 +74,10 @@ function Forecast({ f }) {
         </section>
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Live score card</h3>
-          <table className="desk-table">
+          <div className="overflow-x-auto scroll-thin"><table className="desk-table">
             <thead><tr><th>Period</th><th className="num">Forecasts checked</th><th className="num">Most likely outcome was right</th><th className="num">Lean was right</th></tr></thead>
             <tbody>{rows.map((r) => { const c = card[r.horizon] || {}; return <tr key={r.horizon}><td>{H_NAME[r.horizon]}</td><td className="num font-mono">{c.checked || 0}</td><td className="num font-mono">{c.checked ? `${Math.round((100 * c.top_hit) / c.checked)}%` : "—"}</td><td className="num font-mono">{c.lean_n ? `${Math.round((100 * c.lean_hit) / c.lean_n)}% of ${c.lean_n}` : "—"}</td></tr>; })}</tbody>
-          </table>
+          </table></div>
           <Note tone="plain">A forecast is saved every 15 minutes and checked when its period ends. Starts empty.</Note>
         </section>
       </div>

@@ -71,10 +71,12 @@ export default function FlushShort() {
       <PageHead title="Flush Short v3 – Journal" sub={`Paper trades only (no real orders). ${viewer ? "" : "Takes a SHORT breakdown signal only in a down market, when all six rules agree. "}Updated ${ist(d.computed_at)} · BTC ${n(d.live_price, 1)}`} />
       {d.error && <Note tone="red">{viewer ? "The latest update is delayed. It retries automatically." : `Last update failed: ${d.error}. It retries every 2 minutes.`}</Note>}
       {!d.rows && !d.error && <Note>Working out the journal… this takes a couple of minutes after a restart.</Note>}
-      <div className="flex flex-wrap items-center gap-2">
-        <button className={btn(period === "all")} onClick={() => setPeriod("all")}>All since 3 Nov</button>
-        <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live from {d.live_start_ist?.slice(5) || "start"}</button>
-      </div>
+      {viewer ? <div className="font-mono text-[11.5px] text-slate-400">All trades since 3 Nov</div> : (
+        <div className="flex flex-wrap items-center gap-2">
+          <button className={btn(period === "all")} onClick={() => setPeriod("all")}>All since 3 Nov</button>
+          <button className={btn(period === "live")} onClick={() => setPeriod("live")}>Live from {d.live_start_ist?.slice(5) || "start"}</button>
+        </div>
+      )}
       {d.market_now && viewer && (
         <div className={`rounded-lg border px-4 py-3 ${d.market_now.active ? "border-teal-500/40 bg-teal-950/20" : "border-slate-600 bg-panel2/60"}`} data-testid="flush-market">
           <div className="text-[13px] font-semibold text-slate-50">{d.market_now.active ? "Flush Short is active: it is watching for its next trade." : "Flush Short is standing aside: market conditions do not suit it right now."}</div>
@@ -113,7 +115,7 @@ export default function FlushShort() {
                   <React.Fragment key={r.signal_id}>
                     <tr className={`cursor-pointer ${traded ? "" : "opacity-60"}`} onClick={() => setOpen(open === r.signal_id ? null : r.signal_id)}>
                       <td className="font-mono">{r.time_ist.slice(0, 10)}</td><td className="font-mono">{r.time_ist.slice(11, 16)}</td>
-                      <td>{r.rule}<div className="text-[11px] text-slate-500">{viewer ? (r.period === "Before live" ? "before live" : "") : <>{r.market ? `${r.market} market` : "market ?"}{r.chg30 != null ? ` (${(r.chg30 * 100).toFixed(1)}%)` : ""}{r.period === "Before live" ? " · before live" : ""}</>}</div></td>
+                      <td>{r.rule}<div className="text-[11px] text-slate-500">{viewer ? "" : <>{r.market ? `${r.market} market` : "market ?"}{r.chg30 != null ? ` (${(r.chg30 * 100).toFixed(1)}%)` : ""}{r.period === "Before live" ? " · before live" : ""}</>}</div></td>
                       <td className={r.trade_side ? "text-red-300" : "text-slate-500"}>{r.trade_side || "—"}</td>
                       <td className="num">{n(r.entry, 1)}</td><td className="num">{r.sl ? n(r.sl, 1) : "—"}</td><td className="num">{r.tp ? n(r.tp, 2) : "—"}</td>
                       <td className={RESULT_TONE[r.result] || "text-slate-400"}>{r.result || (r.rule === "Not filled" ? "Not filled" : "Skipped")}</td>

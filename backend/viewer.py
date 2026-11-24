@@ -68,13 +68,14 @@ def desk_view(out):
 
 
 # ---------------------------------------------------------------- Flush Short
-FLUSH_ROW = ("signal_id", "time_ist", "period", "rule", "status", "result", "trade_side", "entry", "sl", "tp", "size", "fill_ist", "exit_ist", "exit_price",
+FLUSH_ROW = ("signal_id", "time_ist", "rule", "status", "result", "trade_side", "entry", "sl", "tp", "size", "fill_ist", "exit_ist", "exit_price",
              "mark", "gross", "fees", "net", "r", "running_total")
 
 
 def flush_view(d):
-    """Trades and results only: no skipped signals, no RSI / ATR / trend readings, no reasons, no settings, no evidence text."""
-    out = _drop(d, ("settings", "evidence", "signals_checked"))
+    """The "All since 3 Nov" journal only: trades and results. No separate live view, no skipped signals, no RSI / ATR / trend
+    readings, no reasons, no settings, no evidence text."""
+    out = _drop(d, ("settings", "evidence", "signals_checked", "live", "live_start_ist"))
     if d.get("rows") is not None:
         out["rows"] = [_keep(r, FLUSH_ROW) for r in d["rows"] if r.get("status") in ("OPEN", "CLOSED")]
     if d.get("market_now"):
@@ -99,32 +100,12 @@ def _elite_journal(j):
     return out
 
 
-def elite_live_view(lv):
-    if not lv:
-        return lv
-    out = _drop(lv, ("real_money", "events", "compare", "signals"))
-    out["events"], out["compare"] = [], None
-    out["signals"] = [_keep(s, ("id", "t", "ist", "key", "strategy", "wb", "side", "status", "market")) for s in lv.get("signals") or [] if s.get("status") in ("TAKEN", "TAKING")]
-    out["trades"] = [_drop(t, ELITE_TRADE_DROP + ("exchange", "order_id", "sl_order_id", "tp_order_id")) for t in lv.get("trades") or []]
-    if lv.get("open_trade"):
-        out["open_trade"] = _drop(lv["open_trade"], ELITE_TRADE_DROP + ("time_left_h", "time_exit_t", "exchange", "order_id", "sl_order_id", "tp_order_id"))
-    if lv.get("book"):
-        out["book"] = _drop(lv["book"], ("drawdown", "peak", "limit"))
-    if lv.get("halt"):
-        out["halt"] = {"at": lv["halt"].get("at"), "reason": "stopped by the desk"}
-    return out
-
-
 def elite_view(out):
-    """Journals and live trades with the strategies' short codes only: no rule cards, names, filters, reasons, settings or logs."""
-    res = dict(out)
+    """Journal A (1 Jan 2023 → today) only, with the strategies' short codes: no journal B, no live paper trading, no rule cards,
+    names, filters, reasons, settings or logs."""
+    res = _keep(out, ("name", "computed_at", "error", "is_admin"))
     res["strategies"] = [_keep(s, ("key", "wb", "priority")) for s in out.get("strategies") or []]
-    res["settings"] = _keep(out.get("settings") or {}, ("paper_capital",))
-    for k in ("A", "B"):
-        if k in out:
-            res[k] = _elite_journal(out[k])
-    if "live" in out:
-        res["live"] = elite_live_view(out["live"])
+    res["A"] = _elite_journal(out.get("A"))
     res["viewer"] = True
     return _quiet(res)
 
@@ -141,9 +122,13 @@ def _opt_trade(t):
     return out
 
 
+OPT_STAT_DROP = ("max_dd", "max_dd_pct", "lowest_balance", "worst", "best", "view2_net")
+
+
 def optpicks_view(out):
-    """Paper and backtest trades and totals: no strategy name, code, entry / stop rule, verdict, sizing formula or method notes."""
-    res = _drop(out, ("not_checked", "sizing", "size_label", "next_entry"))
+    """The backtest journal only: trades and totals. No live paper trading, no strategy name, code, entry / stop rule, verdict,
+    sizing formula or method notes, and no max drawdown, worst trade or worse-fills figures."""
+    res = _keep(out, ("name", "computed_at", "error", "paper_only", "history_to", "is_admin"))
     res["strategies"] = [{**_keep(s, ("key", "pick", "capital", "enabled")), "name": f"Pick {s.get('pick')}"} for s in out.get("strategies") or []]
     bt = {}
     for k, b in (out.get("backtest") or {}).items():
@@ -152,14 +137,12 @@ def optpicks_view(out):
             continue
         x = dict(b)
         x["trades"] = [_opt_trade(t) for t in b.get("trades") or []]
-        x["realdata"] = [_drop(r, ("verdict", "size", "view2_net")) for r in b.get("realdata") or []]
+        x["realdata"] = [_drop(r, ("verdict", "size") + OPT_STAT_DROP) for r in b.get("realdata") or []]
+        x["yearly"] = [_drop(y, ("max_dd",)) for y in b.get("yearly") or []]
         if b.get("stats"):
-            x["stats"] = _drop(b["stats"], ("view2_net",))
+            x["stats"] = _drop(b["stats"], OPT_STAT_DROP)
         bt[k] = x
     res["backtest"] = bt
-    res["live"] = [_opt_trade(t) for t in out.get("live") or [] if t.get("status") in ("OPEN", "CLOSED")]
-    res["live_stats"] = {k: _drop(v, ("view2_net",)) for k, v in (out.get("live_stats") or {}).items()}
-    res["compare"] = [_drop(c, ("bt_reason", "live_reason")) for c in out.get("compare") or [] if c.get("live_status") in ("OPEN", "CLOSED")]
     res["viewer"] = True
     return _quiet(res)
 

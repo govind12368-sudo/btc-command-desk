@@ -148,9 +148,9 @@ function Places({ title, rows }) {
   return (
     <div>
       <div className="mb-1.5 text-sm font-semibold text-slate-200">{title}</div>
-      <table className="desk-table"><thead><tr><th>Trade</th><th>When</th><th className="num">Trades</th><th className="num">Targets</th><th className="num">After fees</th><th className="num">Before fees</th></tr></thead>
+      <div className="overflow-x-auto scroll-thin"><table className="desk-table"><thead><tr><th>Trade</th><th>When</th><th className="num">Trades</th><th className="num">Targets</th><th className="num">After fees</th><th className="num">Before fees</th></tr></thead>
         <tbody>{(rows || []).map((r, i) => <tr key={i}><td>{r.leg}</td><td>{r.factor}: <b>{r.bucket}</b></td><td className="num">{r.n}</td><td className="num">{pc(r.win)}</td><td className={`num ${ink(r.avg_r)}`}>{rr(r.avg_r)}</td><td className={`num ${ink(r.avg_r_gross)}`}>{rr(r.avg_r_gross)}</td></tr>)}</tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

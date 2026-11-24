@@ -121,12 +121,12 @@ function Checks({ integ }) {
       <Note tone="plain">Checked again every 4 minutes on this server: candle data without gaps, every candle close scanned, live signals against the rules run again, paper results against the backtest. Last check {ago(integ.summary?.at)}.</Note>
       {GROUPS.map(([g, title]) => (
         <Card key={g} title={title} right={<span className="font-mono text-[11px] text-slate-400">{(integ[g] || []).filter((c) => c.status === "OK").length} of {(integ[g] || []).length} pass</span>} pad={false} testid={`fund-checks-${g}`}>
-          <table className="desk-table">
+          <div className="overflow-x-auto scroll-thin"><table className="desk-table">
             <tbody>{(integ[g] || []).map((c) => (
               <tr key={c.name} title={c.more || ""}><td className="w-[250px] text-slate-200">{c.name}</td><td className="w-[72px]"><Chip status={c.status === "WAIT" ? "PENDING" : c.status} label={c.status === "WAIT" ? "WAITING" : undefined} /></td>
                 <td className="whitespace-normal text-[12px] text-slate-300">{c.detail}{c.more && <div className="text-[11px] text-slate-500">{c.more}</div>}</td></tr>))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       ))}
     </div>
@@ -184,12 +184,12 @@ function History({ h }) {
         </Card>
       </div>
       <Card title="By strategy in this view" pad={false} testid="fund-history-by">
-        <table className="desk-table">
+        <div className="overflow-x-auto scroll-thin"><table className="desk-table">
           <thead><tr><th>Strategy</th><th className="num">Net for the fund</th><th className="num">Its deepest fall</th><th className="num">Trades taken</th><th className="num">Not taken</th></tr></thead>
           <tbody>{["elite", "optpicks", "flush"].map((k) => (
             <tr key={k}><td>{NAMES[k]}</td><td className={`num ${tone(v.by[k].net)}`}>{signedUsd(v.by[k].net, 0)}</td><td className="num text-red-300">{usd0(v.by[k].max_dd)}</td><td className="num">{v.by[k].taken}</td><td className="num">{v.by[k].skipped}</td></tr>))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
       <Note>This is a backtest of your plan, not live trading. Open trades run to their own exit after a stop, so a month can end below the month stop. {view === "stress" ? "Worse option fills = every option sold 5% cheaper and bought back 5% dearer, with double fees. " : ""}{h.flush_note}</Note>
     </div>

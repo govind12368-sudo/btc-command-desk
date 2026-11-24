@@ -34,14 +34,14 @@ function Share({ rows, total, unit }) {
       <div className="flex h-4 w-full overflow-hidden rounded bg-line">
         {rows.map((r) => <div key={r.name} title={`${r.name}: ${r.txt}`} style={{ width: `${Math.max(0, (r.v || 0) / total * 100)}%`, background: r.color }} className="border-r-2 border-panel2 last:border-r-0" />)}
       </div>
-      <table className="desk-table mt-2">
+      <div className="overflow-x-auto scroll-thin"><table className="desk-table mt-2">
         <thead><tr><th>Part of the site</th><th className="num">Now</th><th className="num">Share of the server</th><th>What it is</th></tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.name}><td><span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-middle" style={{ background: r.color }} />{r.name}</td>
             <td className="num">{r.txt}</td><td className="num">{pct((r.v || 0) / total * 100, 1)}</td><td className="text-[12px] text-slate-400">{r.what}</td></tr>))}
           <tr className="border-t-2 border-line2 font-semibold"><td>Free</td><td className="num">{unit(total - sum)}</td><td className="num">{pct((total - sum) / total * 100, 1)}</td><td /></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }
