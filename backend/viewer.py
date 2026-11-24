@@ -82,6 +82,8 @@ def flush_view(d):
         out["market_now"] = {"active": bool(d["market_now"].get("active"))}
     if d.get("daily") is not None:
         out["daily"] = [_drop(x, ("signals",)) for x in d["daily"]]
+    if d.get("all"):
+        out["all"] = _drop(d["all"], ("max_drawdown",))
     out["viewer"] = True
     return _quiet(out)
 
@@ -95,14 +97,16 @@ def _elite_journal(j):
         return j
     out = dict(j)
     out["trades"] = [_drop(r, ELITE_TRADE_DROP) for r in j.get("trades") or []]
-    out["per_strategy"] = [_drop(s, ("name", "rule", "signal_rule")) for s in j.get("per_strategy") or []]
+    out["per_strategy"] = [_drop(s, ("name", "rule", "signal_rule", "max_dd")) for s in j.get("per_strategy") or []]
+    out["combined"] = _drop(j.get("combined"), ("max_dd",))          # no max drawdown for users (owner, 24 Nov 2026)
+    out["yearly"] = [_drop(y, ("max_dd",)) for y in j.get("yearly") or []]
     out.pop("backtest_skips", None)
     return out
 
 
 def elite_view(out):
     """Journal A (1 Jan 2023 → today) only, with the strategies' short codes: no journal B, no live paper trading, no rule cards,
-    names, filters, reasons, settings or logs."""
+    names, filters, reasons, settings, logs or max drawdown figures."""
     res = _keep(out, ("name", "computed_at", "error", "is_admin"))
     res["strategies"] = [_keep(s, ("key", "wb", "priority")) for s in out.get("strategies") or []]
     res["A"] = _elite_journal(out.get("A"))

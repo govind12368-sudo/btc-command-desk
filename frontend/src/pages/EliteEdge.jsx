@@ -29,26 +29,26 @@ function Stat({ label, value, tone = "text-slate-50", sub, testid }) {
   );
 }
 
-function Totals({ s, testid }) {
+function Totals({ s, testid, viewer }) {
   if (!s) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid={testid}>
+    <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${viewer ? "lg:grid-cols-5" : "lg:grid-cols-6"}`} data-testid={testid}>
       <Stat label="Trades (closed)" value={s.trades} sub={`${s.wins} won · ${s.losses} lost`} />
       <Stat label="Win ratio" value={pctTxt(s.win_rate)} sub="net after fees > 0" />
       <Stat label="Gross P&L" value={signedUsd(s.gross)} tone={pnlTone(s.gross)} sub="before fees" />
       <Stat label="Fees" value={signedUsd(-s.fees)} tone="text-slate-300" sub="0.05% each side + 18% GST" />
       <Stat label="Net P&L" value={signedUsd(s.net)} tone={pnlTone(s.net)} sub={s.per_trade != null ? `${signedUsd(s.per_trade)} a trade` : null} />
-      <Stat label="Max drawdown" value={signedUsd(s.max_dd)} tone="text-red-300" sub="closed trades, from the peak" />
+      {!viewer && <Stat label="Max drawdown" value={signedUsd(s.max_dd)} tone="text-red-300" sub="closed trades, from the peak" />}
     </div>
   );
 }
 
-function StratTable({ j, strategies }) {
+function StratTable({ j, strategies, viewer }) {
   const all = [...(j.per_strategy || []).filter((s) => !hidden(s)), { key: "all", wb: "Combined", name: "One trade at a time", ...j.combined }];
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table">
-        <thead><tr><th>Priority</th><th>Strategy</th><th className="num">Trades</th><th className="num">Won</th><th className="num">Lost</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Per trade</th><th className="num">Max DD</th></tr></thead>
+        <thead><tr><th>Priority</th><th>Strategy</th><th className="num">Trades</th><th className="num">Won</th><th className="num">Lost</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Per trade</th>{!viewer && <th className="num">Max DD</th>}</tr></thead>
         <tbody>{all.map((s) => {
           const st = strategies.find((x) => x.key === s.key);
           return (
@@ -58,7 +58,7 @@ function StratTable({ j, strategies }) {
               <td className="num">{s.trades}</td><td className="num">{s.wins}</td><td className="num">{s.losses}</td><td className="num">{pctTxt(s.win_rate)}</td>
               <td className={`num ${pnlTone(s.gross)}`}>{signedUsd(s.gross)}</td><td className="num">{signedUsd(-s.fees)}</td>
               <td className={`num font-semibold ${pnlTone(s.net)}`}>{signedUsd(s.net)}</td><td className={`num ${pnlTone(s.per_trade)}`}>{signedUsd(s.per_trade)}</td>
-              <td className="num text-red-300">{signedUsd(s.max_dd)}</td>
+              {!viewer && <td className="num text-red-300">{signedUsd(s.max_dd)}</td>}
             </tr>);
         })}</tbody>
       </table>
@@ -66,16 +66,16 @@ function StratTable({ j, strategies }) {
   );
 }
 
-function YearTable({ rows, wbs }) {
+function YearTable({ rows, wbs, viewer }) {
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="elite-yearly">
-        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Max DD</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
+        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{!viewer && <th className="num">Max DD</th>}{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
         <tbody>{rows.map((y) => (
           <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
             <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pctTxt(y.win_rate)}</td>
             <td className={`num ${pnlTone(y.gross)}`}>{signedUsd(y.gross, 0)}</td><td className="num">{signedUsd(-y.fees, 0)}</td>
-            <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td><td className="num text-red-300">{signedUsd(y.max_dd, 0)}</td>
+            <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td>{!viewer && <td className="num text-red-300">{signedUsd(y.max_dd, 0)}</td>}
             {wbs.map((w) => <td key={w} className={`num ${pnlTone(y.by_strategy[w])}`}>{signedUsd(y.by_strategy[w], 0)}</td>)}
             <td className={`num ${pnlTone(y.cumulative)}`}>{signedUsd(y.cumulative, 0)}</td>
           </tr>))}
@@ -136,13 +136,13 @@ function Journal({ j, title, strategies, note, viewer }) {
   return (
     <div className="space-y-4">
       {note}
-      <Totals s={j.combined} testid="elite-journal-totals" />
+      <Totals s={j.combined} testid="elite-journal-totals" viewer={viewer} />
       {open && <Note>The backtest has an open {open.wb} {open.side} from {open.entry_ist} at {n(open.entry, 1)} (now {signedUsd(open.net)}). Open trades are not in the totals.</Note>}
       <Card title={`${title}: by strategy`} sub={viewer ? "The strategy rows add up to the combined row." : "One trade at a time for the whole account. The strategy rows add up to the combined row."}>
-        <StratTable j={j} strategies={strategies} />
+        <StratTable j={j} strategies={strategies} viewer={viewer} />
       </Card>
       <Card title="Yearly" sub="By entry date (IST). Net after fees.">
-        <YearTable rows={j.yearly} wbs={wbs} />
+        <YearTable rows={j.yearly} wbs={wbs} viewer={viewer} />
       </Card>
       {curve.length > 1 && (
         <Card title="Cumulative net P&L" sub="Closed trades, after fees">

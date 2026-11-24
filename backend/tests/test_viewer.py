@@ -17,7 +17,7 @@ def _text(x):
 def test_flush_view_keeps_trades_and_drops_rules_and_skipped_signals():
     d = {"name": "Flush Short", "computed_at": "t", "live_price": 61000, "signals_checked": 3, "is_admin": False,
          "settings": {"rsi_max": 30, "atr_min": 0.6, "market": "BTC down more than 5% over 30 days"}, "evidence": {"period": "26-month replay", "note": "RSI below 30"},
-         "market_now": {"type": "Down", "chg30": -0.21, "active": True}, "all": {"trades": 1, "net": 57.6}, "live": {"trades": 0},
+         "market_now": {"type": "Down", "chg30": -0.21, "active": True}, "all": {"trades": 1, "net": 57.6, "max_drawdown": -58.1}, "live": {"trades": 0},
          "daily": [{"date": "2026-11-18", "trades": 1, "signals": 5, "net": 57.6}],
          "live_start_ist": "2026-11-21 17:30",
          "rows": [{"signal_id": "a", "time_ist": "2026-11-18 21:20", "period": "Before live", "status": "CLOSED", "rule": "Flush short", "result": "Target", "trade_side": "SHORT", "entry": 63031.5, "sl": 63347,
@@ -28,7 +28,7 @@ def test_flush_view_keeps_trades_and_drops_rules_and_skipped_signals():
     v = viewer.flush_view(d)
     assert _text(d) == before                                             # the engine's own data is never changed
     assert [r["signal_id"] for r in v["rows"]] == ["a"] and v["rows"][0]["net"] == 57.6 and v["rows"][0]["sl"] == 63347
-    assert set(v["rows"][0]) <= set(viewer.FLUSH_ROW) and v["market_now"] == {"active": True} and v["all"] == d["all"] and v["viewer"] is True
+    assert set(v["rows"][0]) <= set(viewer.FLUSH_ROW) and v["market_now"] == {"active": True} and v["all"] == {"trades": 1, "net": 57.6} and v["viewer"] is True
     assert "settings" not in v and "evidence" not in v and "signals_checked" not in v and "signals" not in v["daily"][0]
     assert "live" not in v and "live_start_ist" not in v and "period" not in v["rows"][0]            # one journal only: all since 3 Nov
     assert not any(w in _text(v) for w in ("RSI", "ATR", "rsi", "0.6x", "six rules", "5%"))
@@ -37,8 +37,8 @@ def test_flush_view_keeps_trades_and_drops_rules_and_skipped_signals():
 def test_elite_view_shows_codes_and_results_only():
     tr = {"strategy": "pl1", "wb": "P&L #1", "signal_t": 1, "entry_t": 2, "side": "SHORT", "entry": 61000, "sl": 62000, "tp": 58000, "d": 1000, "rr": 3, "chg30": -0.2,
           "market": "Down", "reason": "4 red 4h candles in a row", "net": -442.9, "status": "CLOSED"}
-    out = {"name": "Elite 4 Edge", "is_admin": False, "A": {"combined": {"net": 23611.18}, "per_strategy": [{"key": "pl1", "wb": "P&L #1", "name": "4 candles in a row, follow · 1:3", "net": 1.0}],
-                                                            "trades": [tr], "monthly": [], "yearly": []},
+    out = {"name": "Elite 4 Edge", "is_admin": False, "A": {"combined": {"net": 23611.18, "max_dd": -2700.97}, "per_strategy": [{"key": "pl1", "wb": "P&L #1", "name": "4 candles in a row, follow · 1:3", "net": 1.0, "max_dd": -3812.95}],
+                                                            "trades": [tr], "monthly": [], "yearly": [{"year": "2024", "net": 8090.0, "max_dd": -2701.0}]},
            "B": None, "strategies": [{"key": "pl1", "wb": "P&L #1", "name": "4 candles in a row, follow · 1:3", "tf": "4h", "rr": 3, "hold_h": 168, "priority": 1, "rule": "No filter",
                                       "signal_rule": "4 candles in a row"}],
            "settings": {"notional": 10000, "leverage": 10, "paper_capital": 5000, "dd_limit": -4000, "priority": ["P&L #1"]},
@@ -55,7 +55,7 @@ def test_elite_view_shows_codes_and_results_only():
     assert v["strategies"] == [{"key": "pl1", "wb": "P&L #1", "priority": 1}] and "settings" not in v
     assert v["A"]["combined"] == {"net": 23611.18} and v["A"]["trades"][0]["net"] == -442.9 and "reason" not in v["A"]["trades"][0] and "name" not in v["A"]["per_strategy"][0]
     assert "live" not in v and "B" not in v and v["is_admin"] is False and v["viewer"] is True      # journal A only: no live tab, no journal B
-    assert v["A"]["combined"] == {"net": 23611.18}                                                  # totals (max drawdown included when present) stay
+    assert v["A"]["combined"] == {"net": 23611.18} and v["A"]["yearly"] == [{"year": "2024", "net": 8090.0}] and "max_dd" not in _text(v)     # no max drawdown anywhere
     assert not any(w in _text(v) for w in ("candles in a row", "Range market", "No filter", "dd_limit", "-4000", "PAPER", "real_money"))
 
 
