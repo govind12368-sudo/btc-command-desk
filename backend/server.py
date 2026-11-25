@@ -49,6 +49,7 @@ import support
 import broker_keys
 import fundmgr
 import viewer
+import real_account
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1158,6 +1159,43 @@ async def fund_control(body: FundControlIn, request: Request, u=Depends(admin_us
         raise HTTPException(400, str(e))
     await SEC.log_event("fund_control", request, u["email"], detail=f"{body.action} {body.strategy or ''}".strip())
     return await fundmgr.dashboard(True)
+
+
+# ---------------- Real Account Tested (admin only) ----------------
+class RealTradeIn(BaseModel):
+    entry_ist: str
+    side: str
+    entry: float
+    sl: float
+    tp: float
+    result: str
+    exit: float
+
+
+@api.get("/real-account")
+async def real_account_get(u=Depends(admin_user)):
+    """Trades from the owner's real Delta Exchange account, entered by an admin; balances and P&L worked out from them."""
+    return await real_account.dashboard()
+
+
+@api.post("/real-account/trades")
+async def real_account_add(body: RealTradeIn, request: Request, u=Depends(admin_user)):
+    try:
+        await real_account.add(body.model_dump(), u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("real_trade_add", request, u["email"], detail=f"{body.entry_ist} {body.side}")
+    return await real_account.dashboard()
+
+
+@api.delete("/real-account/trades/{trade_id}")
+async def real_account_remove(trade_id: str, request: Request, u=Depends(admin_user)):
+    try:
+        await real_account.remove(trade_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    await SEC.log_event("real_trade_remove", request, u["email"], detail=trade_id)
+    return await real_account.dashboard()
 
 
 @api.get("/elite")
