@@ -14,6 +14,15 @@ For every scalp signal with model entry E and model stop S:  D = |E − S| × st
   skip if price is already more than the slippage guard beyond E; exit on stop, target, 6-hour time exit,
   a daily limit, or "Close everything now".
 
+Slippage protection (admin request, 25 Nov 2026)
+  sizing     every trade is sized as if its stop fills stop_slip_pct % of price worse than the stop, so a bad
+             stop fill still stays inside the daily loss limit.
+  news       no new trade from news_before_min before to news_after_min after a high-impact US release
+             (CPI, jobs report, FOMC, GDP, PCE, PPI, JOLTS, ECI from the official BLS/BEA/Fed calendars, plus
+             HIGH/CRITICAL events added on the News & Events page); an open trade is closed news_close_min before it.
+  tracking   every fill stores the price expected and the price got; Auto-Trade pauses itself when one trade
+             slips more than the sizing allowance, or the recent average is above slip_pause_avg_pts.
+
 Everything is stored in MongoDB, so a restart continues where it stopped; real modes first reconcile with
 Delta (position + orders) and never place a second entry for a signal (signal ID = client order ID).
 """
@@ -25,7 +34,7 @@ from datetime import timedelta
 
 from pymongo.errors import DuplicateKeyError
 
-from core import db, now_utc, iso, parse_iso, ist_date, age_sec, APP_NAME
+from core import db, now_utc, iso, parse_iso, ist_date, age_sec, APP_NAME, IST
 import support
 
 log = logging.getLogger("autotrade")
@@ -35,11 +44,13 @@ MODES = ("PAPER", "TESTNET", "LIVE")
 
 DEFAULTS = {"margin_inr": 40000.0, "leverage": 10, "daily_loss_usd": 84.0, "daily_target_usd": 225.0, "max_contracts": 100,
             "entry_window_min": 10.0, "slippage_pts": 40.0, "time_exit_min": 360.0, "rr": 2.0, "stop_mult": 1.0,
-            "usd_inr": 85.0, "buffer_inr": 5000.0, "paper_balance_inr": 45000.0, "tp_limit": 0, "direction_mode": 2}
+            "usd_inr": 85.0, "buffer_inr": 5000.0, "paper_balance_inr": 45000.0, "tp_limit": 0, "direction_mode": 2,
+            "stop_slip_pct": 0.5, "news_before_min": 30.0, "news_after_min": 30.0, "news_close_min": 15.0, "slip_pause_avg_pts": 30.0}
 RANGES = {"margin_inr": (1000, 5_000_000), "leverage": (1, 100), "daily_loss_usd": (1, 100_000), "daily_target_usd": (1, 1_000_000),
           "max_contracts": (1, 5000), "entry_window_min": (1, 60), "slippage_pts": (0, 2000), "time_exit_min": (5, 2880),
           "rr": (0.25, 10), "stop_mult": (0.25, 5), "usd_inr": (50, 200), "buffer_inr": (0, 1_000_000),
-          "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1), "direction_mode": (0, 2)}
+          "paper_balance_inr": (1000, 100_000_000), "tp_limit": (0, 1), "direction_mode": (0, 2),
+          "stop_slip_pct": (0, 5), "news_before_min": (0, 240), "news_after_min": (0, 240), "news_close_min": (0, 240), "slip_pause_avg_pts": (0, 2000)}
 _INTS = ("leverage", "max_contracts", "tp_limit", "direction_mode")
 DAY_TYPE_ONLY = True  # admin request, 16 Nov 2026: Auto-Trade takes Day-type switch trades only (direction_mode is held at 2)
 PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal", "FLUSH": "Flush Short", "RUNS": "Candle Runs"}
@@ -48,6 +59,8 @@ PLAN_NAME = {"PLAN_A": "Plan A (reverse)", "FOLLOW": "Follow the signal", "FLUSH
 SOURCE = "strategies"
 RUNS_ENTRY_WINDOW_MIN = 30     # a Candle Runs position is entered at market within 30 min of its entry candle
 RUNS_SLIP_FRAC = 0.2           # ... and only while price is within 20% of the stop distance of the page's entry (or the slippage setting, if larger)
+SLIP_WINDOW, SLIP_MIN_TRADES = 10, 5   # average slippage brake: last 10 trades, needs at least 5
+NEWS_CACHE_SEC = 60
 
 
 
@@ -94,15 +107,83 @@ def fee(price, contracts, kind):
 
 def size(price, stop, cfg, available_inr, realized_today):
     """Contracts for a new trade: ₹ margin × leverage, capped by free balance, max contracts and the
-    room left under today's loss limit (stop distance + entry and exit taker fees)."""
+    room left under today's loss limit (stop distance + a stop-slippage allowance + entry and exit taker fees)."""
     margin_inr = min(cfg["margin_inr"], max(0.0, available_inr - cfg["buffer_inr"]))
     by_margin = math.floor(margin_inr / cfg["usd_inr"] * cfg["leverage"] / (price * CV) + 1e-9)
-    per = abs(price - stop) * CV + fee(price, 1, "taker") + fee(stop, 1, "taker")
+    slip = slip_allowance(price, cfg)
+    per = (abs(price - stop) + slip) * CV + fee(price, 1, "taker") + fee(stop, 1, "taker")
     room = cfg["daily_loss_usd"] + realized_today
     by_loss = math.floor(room / per + 1e-9) if room > 0 and per > 0 else 0
     n = max(0, min(by_margin, by_loss, int(cfg["max_contracts"])))
-    return n, {"by_margin": by_margin, "by_loss_room": by_loss, "worst_per_contract": per, "loss_room": room,
+    return n, {"by_margin": by_margin, "by_loss_room": by_loss, "worst_per_contract": per, "loss_room": room, "slip_allowance_pts": slip,
                "limited_by": "daily loss room" if n == by_loss and by_loss < by_margin else "max contracts" if n == int(cfg["max_contracts"]) and n < by_margin else "margin"}
+
+
+def slip_allowance(price, cfg):
+    """Points a stop is assumed to fill beyond its price, for sizing (0 = off)."""
+    return price * float(cfg.get("stop_slip_pct") or 0) / 100
+
+
+def adverse(side, expected, got):
+    """Slippage in points, positive = worse for us. side = 'buy' or 'sell' (the order that filled)."""
+    if expected is None or got is None:
+        return 0.0
+    return (got - expected) if side == "buy" else (expected - got)
+
+
+def _ist_hm(t):
+    return parse_iso(t).astimezone(IST).strftime("%d %b %H:%M IST")
+
+
+# ---------------- big news (point 3) ----------------
+_NEWS = {"at": 0.0, "events": [], "calendar_ok": False}
+
+
+async def news_events(now):
+    """High-impact US releases from the official calendars plus HIGH/CRITICAL events added by hand (cached a minute)."""
+    if now.timestamp() - _NEWS["at"] < NEWS_CACHE_SEC and _NEWS["at"]:
+        return _NEWS["events"], _NEWS["calendar_ok"]
+    events, ok = [], False
+    try:
+        from sources import REGISTRY
+        cal = REGISTRY.get("bls")
+        ok = cal is not None and cal.health() == "ok"
+        for ev in ((cal.data or {}).get("events") or []) if cal is not None else []:
+            if ev.get("impact") == "HIGH" and ev.get("time"):
+                events.append({"title": ev["title"], "time": ev["time"], "publisher": ev.get("publisher") or "official calendar"})
+    except Exception as e:  # the calendar is optional: trading goes on, the page shows it as unavailable
+        log.warning("auto-trade news calendar unavailable: %s", e)
+    try:
+        async for ev in db.manual_events.find({"impact": {"$in": ["HIGH", "CRITICAL"]}}):
+            if ev.get("scheduled_utc"):
+                events.append({"title": ev.get("title") or "Event", "time": ev["scheduled_utc"], "publisher": "added on News & Events"})
+    except Exception as e:
+        log.warning("auto-trade manual events unavailable: %s", e)
+    events.sort(key=lambda e: e["time"])
+    _NEWS.update(at=now.timestamp(), events=events, calendar_ok=ok)
+    return events, ok
+
+
+def forget_news():
+    _NEWS["at"] = 0.0
+
+
+async def news_state(now, cfg):
+    """block: no new entries now · close: close an open trade now · next: the next event still ahead or running."""
+    events, ok = await news_events(now)
+    before, after, close = (float(cfg.get(k) or 0) for k in ("news_before_min", "news_after_min", "news_close_min"))
+    out = {"block": None, "close": None, "next": None, "calendar_ok": ok, "before_min": before, "after_min": after, "close_min": close}
+    for ev in events:
+        t = parse_iso(ev["time"])
+        if now > t + timedelta(minutes=after):
+            continue
+        item = {**ev, "time_ist": _ist_hm(ev["time"])}
+        out["next"] = out["next"] or item
+        if (before or after) and t - timedelta(minutes=before) <= now <= t + timedelta(minutes=after):
+            out["block"] = out["block"] or item
+        if close and t - timedelta(minutes=close) <= now <= t + timedelta(minutes=after):
+            out["close"] = out["close"] or item
+    return out
 
 
 # ---------------- settings / state ----------------
@@ -253,6 +334,10 @@ def default_broker(mode):
     return delta_broker.get(mode)
 
 
+def _news_reason(ev):
+    return f"skipped – big news: {ev['title']} at {ev['time_ist']} ({ev['publisher']}); no new trades around it"
+
+
 # ---------------- engine ----------------
 class Engine:
     def __init__(self, broker_factory=None, clock=now_utc, alert=None):
@@ -263,6 +348,7 @@ class Engine:
         self.lock = asyncio.Lock()
         self.last_price = None
         self._close_err = None
+        self.news = {}
 
     # ---- helpers
     async def event(self, kind, text, sid=None, level="info", alert=None, mode=None):
@@ -294,6 +380,7 @@ class Engine:
             self.last_price = price
             now = self.clock()
             st, cfg = await get_state(now), await settings()
+            self.news = await news_state(now, cfg)
             broker = self.broker_factory(st["mode"])
             if not self.reconciled:
                 await self._reconcile(st, cfg, broker, price, now)
@@ -362,6 +449,8 @@ class Engine:
                 doc.update(status="SKIPPED", reason=f"skipped – {st['halt']['reason']}")
             elif st.get("paused"):
                 doc.update(status="SKIPPED", reason="skipped – paused")
+            elif self.news.get("block"):
+                doc.update(status="SKIPPED", reason=_news_reason(self.news["block"]))
             elif now.timestamp() >= c["window_end_t"]:
                 doc.update(status="NOT FILLED", reason="entry window was already over when the trade was read")
             else:
@@ -426,6 +515,10 @@ class Engine:
 
     async def _try_enter(self, st, cfg, broker, price, hi, lo, now):
         armed = [a async for a in db.autotrade_signals.find({"status": "ARMED"}).sort("captured_at", 1)]
+        if armed and self.news.get("block"):
+            for a in armed:
+                await self._mark(a["_id"], "SKIPPED", _news_reason(self.news["block"]), "skipped")
+            return
         for a in armed:
             sid, up = a["_id"], a["model_dir"] == "SHORT"  # the signal's own limit fills when price comes UP to a SHORT entry / DOWN to a LONG entry
             if SOURCE == "strategies" and a.get("plan") not in ("FLUSH", "RUNS"):
@@ -467,7 +560,7 @@ class Engine:
         trade = {"_id": sid, "signal_id": sid, "mode": st["mode"], "status": "PENDING", "model_dir": a["model_dir"], "bot_dir": a["bot_dir"],
                  "captured_at": a["captured_at"], "trigger_entry": a["entry"], "stop": a["stop"], "target": a["target"], "contracts": n,
                  "coid": coid, "created_at": iso(now), "size_note": info["limited_by"], "plan": a.get("plan") or "PLAN_A", "day_type": a.get("day_type"),
-                 "time_exit_min": a.get("time_exit_min")}
+                 "time_exit_min": a.get("time_exit_min"), "sent_price": price, "slip_allowance_pts": info.get("slip_allowance_pts")}
         try:
             await db.autotrade_trades.insert_one(trade)  # written BEFORE the order: a crash can never cause a second entry
         except DuplicateKeyError:
@@ -494,8 +587,10 @@ class Engine:
             await db.autotrade_trades.delete_one({"_id": sid, "status": "PENDING"})
             await self._mark(sid, "SKIPPED", "entry order did not fill", "error", "error")
             return False
+        sent = trade.get("sent_price") or price
         upd = {"status": "OPEN", "entry": r["price"], "contracts": filled, "fill_time": iso(now), "entry_fee": fee(r["price"], filled, "taker"),
-               "margin_usd": r["price"] * filled * CV / cfg["leverage"], "bracket_confirmed": False}
+               "margin_usd": r["price"] * filled * CV / cfg["leverage"], "bracket_confirmed": False,
+               "sent_price": sent, "entry_slip_pts": adverse("buy" if trade["bot_dir"] == "LONG" else "sell", sent, r["price"])}
         await db.autotrade_trades.update_one({"_id": sid}, {"$set": upd})
         trade = {**trade, **upd}
         await db.autotrade_signals.update_one({"_id": sid}, {"$set": {"status": "ENTERED", "reason": "trade opened", "done_at": iso(now)}})
@@ -530,6 +625,11 @@ class Engine:
         if ex:
             await self._finish(t, ex["reason"], ex["price"], ex["role"], st, cfg, broker, now)
             return
+        ev = self.news.get("close")
+        if ev:
+            await self.event("news", f"{t['_id']}: closing before {ev['title']} at {ev['time_ist']} ({ev['publisher']}) – stops slip most around big news", t["_id"], "warn")
+            await self._close(t, "NEWS", st, cfg, broker, price, now)
+            return
         if now >= parse_iso(t["fill_time"]) + timedelta(minutes=t.get("time_exit_min") or cfg["time_exit_min"]):
             await self._close(t, "TIME", st, cfg, broker, price, now)
             return
@@ -550,21 +650,51 @@ class Engine:
             await broker.cancel_all()
         except Exception as e:
             await self.event("error", f"cancel-all after close failed: {e}", t["_id"], "error")
-        await self._finish(t, r.get("reason") or reason, r["price"], r["role"], st, cfg, broker, now)
+        await self._finish(t, r.get("reason") or reason, r["price"], r["role"], st, cfg, broker, now, expected=price)
         if halt:
             await self._halt(halt, st, broker, now)
 
-    async def _finish(self, t, reason, exit_price, role, st, cfg, broker, now):
+    async def _finish(self, t, reason, exit_price, role, st, cfg, broker, now, expected=None):
         n, sign = t["contracts"], 1 if t["bot_dir"] == "LONG" else -1
         gross = (exit_price - t["entry"]) * n * CV * sign
         fees = t["entry_fee"] + fee(exit_price, n, role)
         net = gross - fees
+        exp = t["stop"] if reason == "STOP" else t["target"] if reason == "TARGET" else expected if expected is not None else exit_price
+        x_slip = adverse("sell" if t["bot_dir"] == "LONG" else "buy", exp, exit_price)
+        e_slip = t.get("entry_slip_pts") or 0.0
+        slip = {"exit_expected": exp, "exit_slip_pts": x_slip, "slip_pts": e_slip + x_slip, "slip_usd": (e_slip + x_slip) * n * CV}
         await db.autotrade_trades.update_one({"_id": t["_id"]}, {"$set": {"status": "CLOSED", "exit_time": iso(now), "exit_price": exit_price, "exit_reason": reason,
-                                                                     "exit_role": role, "gross": gross, "fees": fees, "net_usd": net, "net_inr": net * cfg["usd_inr"], "day": ist_date(now)}})
+                                                                     "exit_role": role, "gross": gross, "fees": fees, "net_usd": net, "net_inr": net * cfg["usd_inr"], "day": ist_date(now), **slip}})
         if t["mode"] == "TESTNET" and t.get("bracket_confirmed"):
             await set_state(testnet_ok=True)
-        await self.event("exited", f"{t['_id']}: exit {reason} at {exit_price:.1f} – net {_usd(net)} ({'+' if net >= 0 else '−'}₹{abs(net) * cfg['usd_inr']:,.0f}), gross {_usd(gross)}, fees ${fees:.2f}", t["_id"], alert=f"Exit – {reason}")
+        await self.event("exited", f"{t['_id']}: exit {reason} at {exit_price:.1f} – net {_usd(net)} ({'+' if net >= 0 else '−'}₹{abs(net) * cfg['usd_inr']:,.0f}), gross {_usd(gross)}, fees ${fees:.2f}"
+                         f"; slippage {slip['slip_pts']:+.1f} points ({_usd(-slip['slip_usd'])})", t["_id"], alert=f"Exit – {reason}")
         await self._limit_check(st, cfg, broker, now)
+        await self._slip_check({**t, **slip}, st, cfg, broker, now)
+
+    async def _slip_check(self, t, st, cfg, broker, now):
+        """Point 7: pause new trades when one trade slipped more than the sizing allowance, or the recent average is too high."""
+        cur = await get_state(now)
+        if cur.get("paused"):
+            return
+        allow = float(t.get("slip_allowance_pts") or slip_allowance(t["entry"], cfg))
+        why = None
+        if allow > 0 and t["slip_pts"] > allow:
+            why = f"{t['_id']} slipped {t['slip_pts']:.0f} points, more than the {allow:.0f}-point allowance the trade was sized for"
+        lim = float(cfg.get("slip_pause_avg_pts") or 0)
+        if not why and lim > 0:
+            q = {"mode": t["mode"], "status": "CLOSED", "slip_pts": {"$exists": True}}
+            if cur.get("slip_reset_at"):
+                q["exit_time"] = {"$gt": cur["slip_reset_at"]}
+            rows = [x["slip_pts"] async for x in db.autotrade_trades.find(q, {"slip_pts": 1}).sort("exit_time", -1).limit(SLIP_WINDOW)]
+            if len(rows) >= SLIP_MIN_TRADES and sum(rows) / len(rows) > lim:
+                why = f"average slippage of the last {len(rows)} trades is {sum(rows) / len(rows):.1f} points (limit {lim:.0f})"
+        if not why:
+            return
+        await set_state(paused=True, pause_reason=f"Slippage: {why}")
+        for a in [x["_id"] async for x in db.autotrade_signals.find({"status": "ARMED"}, {"_id": 1})]:
+            await self._mark(a, "SKIPPED", "skipped – paused for slippage", "skipped")
+        await self.event("slippage", f"New trades paused – {why}. Check the fills, then press Resume.", t["_id"], "warn", alert="Paused – slippage")
 
     async def _limit_check(self, st, cfg, broker, now):
         """Stop for the day once realized P&L is at or beyond a limit."""
@@ -607,14 +737,14 @@ class Engine:
     # ---- controls (admin)
     async def pause(self, by):
         async with self.lock:
-            await set_state(paused=True)
+            await set_state(paused=True, pause_reason=None)
             for a in [x["_id"] async for x in db.autotrade_signals.find({"status": "ARMED"}, {"_id": 1})]:
                 await self._mark(a, "SKIPPED", "skipped – paused", "skipped")
             await self.event("control", f"New trades paused by {by}. An open trade stays under its stop and target.")
 
     async def resume(self, by):
         async with self.lock:
-            await set_state(paused=False)
+            await set_state(paused=False, pause_reason=None, slip_reset_at=iso(self.clock()))  # the average-slippage brake counts trades from here
             await self.event("control", f"Resumed by {by}")
 
     async def close_everything(self, by):
@@ -688,8 +818,13 @@ async def status():
         balance_inr = await PaperBroker().available_inr(cfg) if st["mode"] == "PAPER" else None
     except Exception:
         balance_inr = None
+    try:
+        news = await news_state(now, cfg)
+    except Exception:
+        news = {"calendar_ok": False}
     return {
-        "mode": st["mode"], "status": label, "paused": bool(st.get("paused")), "halt": st.get("halt"), "price": price, "server_time": iso(now),
+        "mode": st["mode"], "status": label, "paused": bool(st.get("paused")), "pause_reason": st.get("pause_reason"), "halt": st.get("halt"), "price": price, "server_time": iso(now),
+        "news": news, "slippage": await slip_stats(st, cfg),
         "settings": cfg, "ranges": RANGES, "source": SOURCE,
         "today": {"day": ist_date(now), "realized": real, "unrealized": unreal, "total": real + unreal,
                   "loss_limit": cfg["daily_loss_usd"], "target": cfg["daily_target_usd"], "usd_inr": cfg["usd_inr"]},
@@ -702,8 +837,24 @@ async def status():
     }
 
 
+async def slip_stats(st, cfg):
+    """Point 7: expected vs actual fills of the current mode's closed trades."""
+    rows = [x async for x in db.autotrade_trades.find({"mode": st["mode"], "status": "CLOSED", "slip_pts": {"$exists": True}},
+                                                         {"signal_id": 1, "exit_time": 1, "exit_reason": 1, "entry_slip_pts": 1, "exit_slip_pts": 1, "slip_pts": 1, "slip_usd": 1}).sort("exit_time", -1)]
+    recent = [r for r in rows if not st.get("slip_reset_at") or (r.get("exit_time") or "") > st["slip_reset_at"]][:SLIP_WINDOW]
+    stops = [r["exit_slip_pts"] for r in rows if r.get("exit_reason") == "STOP"]
+    avg = lambda xs: sum(xs) / len(xs) if xs else None  # noqa: E731
+    worst = max(rows, key=lambda r: r["slip_pts"]) if rows else None
+    return {"trades": len(rows), "avg_entry_pts": avg([r.get("entry_slip_pts") or 0 for r in rows]), "avg_exit_pts": avg([r.get("exit_slip_pts") or 0 for r in rows]),
+            "avg_stop_pts": avg(stops), "stop_exits": len(stops), "avg_pts": avg([r["slip_pts"] for r in rows]), "total_usd": sum(r.get("slip_usd") or 0 for r in rows),
+            "worst": {"signal_id": worst["signal_id"], "pts": worst["slip_pts"], "usd": worst.get("slip_usd")} if worst else None,
+            "recent_avg_pts": avg([r["slip_pts"] for r in recent]), "recent_n": len(recent), "window": SLIP_WINDOW, "min_trades": SLIP_MIN_TRADES,
+            "pause_avg_pts": cfg.get("slip_pause_avg_pts"), "allowance_pct": cfg.get("stop_slip_pct")}
+
+
 JOURNAL_COLS = ["signal_id", "mode", "plan", "day_type", "model_dir", "bot_dir", "captured_at", "fill_time", "entry", "stop", "target", "contracts",
-                "exit_time", "exit_reason", "exit_price", "gross", "fees", "net_usd", "net_inr"]
+                "exit_time", "exit_reason", "exit_price", "gross", "fees", "net_usd", "net_inr",
+                "sent_price", "entry_slip_pts", "exit_expected", "exit_slip_pts", "slip_pts", "slip_usd"]
 
 
 async def journal_csv():

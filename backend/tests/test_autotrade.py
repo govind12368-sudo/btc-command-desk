@@ -79,6 +79,7 @@ def env(monkeypatch):
     at = importlib.import_module("autotrade")
     at.DEFAULTS["direction_mode"] = 0   # these tests cover Plan A; the day-type modes are tested in test_daytype.py
     at.DAY_TYPE_ONLY = False
+    at.DEFAULTS["stop_slip_pct"] = 0.0  # these tests cover the original sizing; the slippage allowance is tested in test_autotrade_slippage.py
     at.SOURCE = "scalp"                 # these tests cover the scalp-signal path; Flush Short / Candle Runs are in test_autotrade_sources.py
     clock, alerts = Clock(), []
 

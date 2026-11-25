@@ -22,7 +22,7 @@ const pnlTone = (v) => (v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text
 const STATUS_CHIP = { Idle: "IDLE", Armed: "WAIT", "In trade": "PASS", Paused: "WAIT", "Limit hit": "BLOCKED" };
 const MODE_CHIP = { PAPER: "IDLE", TESTNET: "WAIT", LIVE: "BLOCKED" };
 const MODE_NAME = { PAPER: "Paper", TESTNET: "Testnet", LIVE: "Live" };
-const REASON_TONE = { TARGET: "text-teal-300", STOP: "text-red-300", TIME: "text-amber-300", "DAILY LIMIT": "text-amber-300", MANUAL: "text-slate-300", SAFETY: "text-red-300" };
+const REASON_TONE = { TARGET: "text-teal-300", STOP: "text-red-300", TIME: "text-amber-300", "DAILY LIMIT": "text-amber-300", MANUAL: "text-slate-300", SAFETY: "text-red-300", NEWS: "text-amber-300" };
 const LEVEL_TONE = { error: "text-red-300", warn: "text-amber-300", info: "text-slate-300" };
 
 const FIELDS = [
@@ -40,7 +40,74 @@ const FIELDS = [
   ["buffer_inr", "Balance kept free (₹)", "Never used as margin"],
   ["paper_balance_inr", "Paper starting balance (₹)", "Paper mode only"],
   ["tp_limit", "Take-profit order (0 or 1)", "0 = market order at target, 1 = limit order at target"],
+  ["stop_slip_pct", "Stop slippage allowance (% of price)", "Each trade is sized as if its stop fills this much worse. 0 = off"],
+  ["news_before_min", "No new trade before big news (minutes)", "US CPI, jobs report, FOMC, GDP, PCE … 0 = off"],
+  ["news_after_min", "No new trade after big news (minutes)", "Counted from the release time. 0 = off"],
+  ["news_close_min", "Close open trade before big news (minutes)", "0 = keep the trade open through the news"],
+  ["slip_pause_avg_pts", "Pause when average slippage is above (points)", "Average of the last 10 trades (needs 5). 0 = off"],
 ];
+
+const pts = (v) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${n(Math.abs(v), 1)}`);
+const slipTone = (v) => (v > 0.05 ? "text-red-300" : v < -0.05 ? "text-teal-300" : "text-slate-200");
+
+function SlipCard({ d }) {
+  const cfg = d.settings, nw = d.news || {}, s = d.slippage || {};
+  const allowPts = d.price ? (d.price * cfg.stop_slip_pct) / 100 : null;
+  const room = allowPts != null ? allowPts * 0.001 : null;
+  const newsOn = cfg.news_before_min > 0 || cfg.news_after_min > 0;
+  return (
+    <Card title="Slippage protection" sub="Slippage = the gap between the price a trade should fill at and the price it really filled at. Positive points = worse for you." testid="autotrade-slippage">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div data-testid="autotrade-slip-sizing">
+          <div className="mb-1 text-[12px] font-semibold text-slate-200">1. Sized for a bad stop fill</div>
+          {cfg.stop_slip_pct > 0 ? (
+            <p className="text-[12px] text-slate-300">
+              Every trade is sized as if its stop fills <span className="font-mono text-slate-50">{n(cfg.stop_slip_pct, 2)}%</span> worse than the stop
+              {allowPts != null && <> (about <span className="font-mono text-slate-50">{n(allowPts, 0)}</span> points now, ${n(room, 2)} per contract)</>}.
+              A bad fill of that size still stays inside the daily loss limit of ${n(cfg.daily_loss_usd, 0)}.
+            </p>
+          ) : <p className="text-[12px] text-amber-300">Off. Trades are sized as if the stop always fills exactly.</p>}
+        </div>
+        <div data-testid="autotrade-slip-news">
+          <div className="mb-1 text-[12px] font-semibold text-slate-200">2. Big US news</div>
+          {!newsOn ? <p className="text-[12px] text-amber-300">Off. Trades are taken and held through big news.</p> : (
+            <>
+              {nw.block
+                ? <p className="text-[12px] text-amber-300">No new trades now: {nw.block.title} at {nw.block.time_ist}.</p>
+                : <p className="text-[12px] text-slate-300">New trades are allowed now.</p>}
+              <p className="mt-1 text-[12px] text-slate-300">
+                {nw.next ? <>Next: <span className="text-slate-50">{nw.next.title}</span> at <span className="font-mono">{nw.next.time_ist}</span> <span className="text-slate-500">({nw.next.publisher})</span></> : nw.calendar_ok ? "No high-impact US release in the calendar's next 45 days." : "Next release: not known yet."}
+              </p>
+              <p className="mt-1 text-[11.5px] text-slate-400">
+                No new trade from {n(cfg.news_before_min, 0)} min before to {n(cfg.news_after_min, 0)} min after.{" "}
+                {cfg.news_close_min > 0 ? `An open trade is closed ${n(cfg.news_close_min, 0)} min before.` : "An open trade is kept open."}
+              </p>
+              {!nw.calendar_ok && <p className="mt-1 text-[11.5px] text-amber-300">The official calendar (BLS, BEA, Fed) is not fully loaded right now, so some releases may be missing. Events you add on News & Events still count.</p>}
+            </>
+          )}
+        </div>
+        <div data-testid="autotrade-slip-record">
+          <div className="mb-1 text-[12px] font-semibold text-slate-200">3. Slippage record ({MODE_NAME[d.mode]} mode)</div>
+          {s.trades ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Fig label="Average per trade" value={`${pts(s.avg_pts)} pts`} sub={`entry ${pts(s.avg_entry_pts)} · exit ${pts(s.avg_exit_pts)}`} tone={slipTone(s.avg_pts)} />
+                <Fig label="Stop exits" value={s.stop_exits ? `${pts(s.avg_stop_pts)} pts` : "—"} sub={`${s.stop_exits} stop${s.stop_exits === 1 ? "" : "s"}`} tone={slipTone(s.avg_stop_pts)} />
+                <Fig label="Cost of slippage" value={money(-s.total_usd)} sub={`${s.trades} trade${s.trades === 1 ? "" : "s"}`} tone={pnlTone(-s.total_usd)} />
+                <Fig label="Worst trade" value={`${pts(s.worst?.pts)} pts`} sub={s.worst?.signal_id} tone={slipTone(s.worst?.pts)} />
+              </div>
+              <p className="mt-2 text-[11.5px] text-slate-400">
+                Last {s.recent_n} trade{s.recent_n === 1 ? "" : "s"} since the last resume: {s.recent_n ? `${pts(s.recent_avg_pts)} points on average` : "none yet"}
+                {s.pause_avg_pts > 0 ? `; pauses above ${n(s.pause_avg_pts, 0)} (needs ${s.min_trades} trades).` : "; average brake off."}
+              </p>
+            </>
+          ) : <p className="text-[12px] text-slate-400">No closed trade with a slippage record yet. Each new trade stores the price expected and the price got.</p>}
+          <p className="mt-1 text-[11.5px] text-slate-400">Auto-Trade pauses itself if one trade slips more than the sizing allowance{s.pause_avg_pts > 0 ? ", or the average goes above the limit" : ""}.</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function useNow() {
   const [t, setT] = useState(Date.now());
@@ -188,7 +255,7 @@ export default function AutoTrade() {
       {d.mode === "PAPER" && <Note>Paper mode: trades are simulated from the live Delta price with the same rules, sizing and fees. No order is sent to the exchange.</Note>}
       {d.mode === "LIVE" && <Note tone="red">Live mode: real orders are placed on your Delta Exchange account.</Note>}
       {d.halt && <Note tone="amber">{d.halt.reason} ({money(d.halt.pnl)} at {ist(d.halt.at)}). No new trades until 00:00 IST.</Note>}
-      {d.paused && !d.halt && <Note tone="amber">New trades are paused. Press Resume to continue.</Note>}
+      {d.paused && !d.halt && <Note tone="amber">{d.pause_reason ? `New trades are paused. ${d.pause_reason}. Check the fills in the journal, then press Resume.` : "New trades are paused. Press Resume to continue."}</Note>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Today" sub={`Trading day ${d.today.day} (00:00–23:59 IST) · ${MODE_NAME[d.mode]} mode`} testid="autotrade-today">
@@ -236,6 +303,8 @@ export default function AutoTrade() {
           </div>
         </Card>
       </div>
+
+      <SlipCard d={d} />
 
       <DeltaKeys />
 
@@ -285,7 +354,7 @@ export default function AutoTrade() {
         <FilterSummary f={f} setF={setF} shown={journal.length} total={d.journal.length} what="closed trades" trades={journal.length} wins={journal.filter((r) => r.net_usd > 0).length} net={journal.reduce((a, r) => a + (r.net_usd || 0), 0)} basis="Auto-Trade's own fills" />
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Signal</th><th>Mode</th><th>Method and day type</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
+            <thead><tr><th>Signal</th><th>Mode</th><th>Method and day type</th><th>Signal dir</th><th>Bot dir</th><th>Captured</th><th>Filled</th><th>Entry</th><th>Stop</th><th>Target</th><th>Contracts</th><th>Exit time</th><th>Exit reason</th><th>Slippage (pts)</th><th>Gross $</th><th>Fees $</th><th>Net $</th><th>Net ₹</th></tr></thead>
             <tbody>
               {journal.map((r) => (
                 <tr key={r.signal_id}>
@@ -302,13 +371,14 @@ export default function AutoTrade() {
                   <td className="font-mono">{r.contracts}</td>
                   <td className="font-mono text-[11.5px]">{ist(r.exit_time)}</td>
                   <td className={`font-semibold ${REASON_TONE[r.exit_reason] || "text-slate-300"}`}>{r.exit_reason}</td>
+                  <td className="font-mono">{r.slip_pts == null ? "—" : <><span className={slipTone(r.slip_pts)}>{pts(r.slip_pts)}</span><span className="block text-[10.5px] text-slate-500">in {pts(r.entry_slip_pts)} · out {pts(r.exit_slip_pts)}</span></>}</td>
                   <td className="font-mono">{n(r.gross, 2)}</td>
                   <td className="font-mono">{n(r.fees, 2)}</td>
                   <td className={`font-mono ${pnlTone(r.net_usd)}`}>{money(r.net_usd)}</td>
                   <td className={`font-mono ${pnlTone(r.net_inr)}`}>{inr(r.net_inr)}</td>
                 </tr>
               ))}
-              {!journal.length && <tr><td colSpan={17} className="py-6 text-center text-slate-500">{isActive(f) ? "No closed trade matches this filter." : "No closed trades yet. They appear here as soon as a trade exits."}</td></tr>}
+              {!journal.length && <tr><td colSpan={18} className="py-6 text-center text-slate-500">{isActive(f) ? "No closed trade matches this filter." : "No closed trades yet. They appear here as soon as a trade exits."}</td></tr>}
             </tbody>
           </table>
         </div>
