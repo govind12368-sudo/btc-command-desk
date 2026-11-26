@@ -69,7 +69,8 @@ class _DB:
     """core.db on the website's loop, the bot thread's own Motor client inside the bot thread."""
 
     def __getattr__(self, name):
-        return getattr(getattr(_TLS, "db", None) or core.db, name)
+        mine = getattr(_TLS, "db", None)                 # compare with None: a Motor database refuses bool()
+        return getattr(core.db if mine is None else mine, name)
 
 
 db = _DB()

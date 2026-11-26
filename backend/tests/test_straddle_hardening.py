@@ -429,6 +429,20 @@ def test_order_adapter_keeps_one_connection_and_reads_positions_and_orders(env, 
     run(go())
 
 
+def test_database_proxy_never_asks_a_motor_database_for_its_truth_value(env):
+    class MotorLike:                                                                      # a real Motor database raises on bool(); mongomock does not
+        straddle_state = "the thread's own collection"
+
+        def __bool__(self):
+            raise NotImplementedError("Database objects do not implement truth value testing")
+    env.st._TLS.db = MotorLike()
+    try:
+        assert env.st.db.straddle_state == "the thread's own collection"
+    finally:
+        del env.st._TLS.db
+    assert env.st.db.straddle_state is not None                                           # back on the website's connection
+
+
 def test_bot_thread_runs_the_scheduler_with_its_own_loop_and_database(env, monkeypatch):
     import time
     st = env.st
