@@ -13,7 +13,7 @@ import { Chip } from "./ui";
 import { ago } from "@/lib/fmt";
 import { toast } from "sonner";
 
-export const ADMIN_ONLY = new Set(["/real-account", "/auto-trade", "/settings", "/audit", "/upgrades", "/account", "/users", "/server", "/data-health"]);
+export const ADMIN_ONLY = new Set(["/real-account", "/straddle-bot", "/auto-trade", "/settings", "/audit", "/upgrades", "/account", "/users", "/server", "/data-health"]);
 
 // Menu, grouped the way a trading desk works: look at the market, read signals, run strategies, trade, run the system.
 // Site name with "BTC" in the brand gold (the plain name if it has no "BTC" in it).
@@ -27,7 +27,7 @@ export const NAV_GROUPS = [
   ["Market", [["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scanner", "BTC Scanner", Radar], ["/intel", "Market Intelligence", Telescope], ["/news", "News & Events", Newspaper]]],
   ["Signals", [["/scalping", "Scalping Signal", Zap], ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/validation", "Trade Validation", ShieldCheck]]],
   ["Strategies", [["/plan-a", "Plan A – Live", FlaskConical], ["/flush-short", "Flush Short", TrendingDown], ["/candle-runs", "Candle Runs", Layers], ["/delta-top3", "Delta Top 3", Trophy],
-    ["/elite-4-edge", "Elite 4 Edge", Gem], ["/option-picks", "Option Picks", Target], ["/real-account", "Real Account Tested", BadgeCheck], ["/observer", "Strategy Observer", Telescope]]],
+    ["/elite-4-edge", "Elite 4 Edge", Gem], ["/option-picks", "Option Picks", Target], ["/real-account", "Real Account Tested", BadgeCheck], ["/straddle-bot", "Straddle Bot", Bot], ["/observer", "Strategy Observer", Telescope]]],
   ["Trading", [["/fund-manager", "Fund Manager", PieChart], ["/auto-trade", "Auto-Trade", Bot], ["/journal", "Trade Journal", BookOpen], ["/regime", "Regime Journal", BookOpen]]],
   ["System", [["/data-health", "Data Health", HeartPulse], ["/server", "Server", Server], ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope],
     ["/upgrades", "Upgrade Requests", Lightbulb], ["/account", "Account Settings", UserCircle], ["/users", "User Management", Users]]],

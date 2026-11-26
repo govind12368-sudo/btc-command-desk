@@ -50,6 +50,7 @@ import broker_keys
 import fundmgr
 import viewer
 import real_account
+import straddle
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1161,6 +1162,100 @@ async def fund_control(body: FundControlIn, request: Request, u=Depends(admin_us
     return await fundmgr.dashboard(True)
 
 
+# ---------------- Straddle bot (admin only; PAPER by default, real orders only after the admin types LIVE) ----------------
+class StraddleSettingsIn(BaseModel):
+    patch: dict
+
+
+class StraddleModeIn(BaseModel):
+    mode: Literal["PAPER", "TESTNET", "LIVE"]
+    confirm: Optional[str] = None
+
+
+class StraddleControlIn(BaseModel):
+    action: Literal["kill", "enable", "disable", "clear_halt"]
+
+
+@api.get("/straddle")
+async def straddle_get(u=Depends(admin_user)):
+    """Short ATM BTC straddle bot: state, today's trade, backtest vs live numbers, monthly tables and curves."""
+    return await straddle.dashboard()
+
+
+@api.get("/straddle/backtest")
+async def straddle_backtest(u=Depends(admin_user)):
+    return await straddle.backtest_view()
+
+
+@api.get("/straddle/journal")
+async def straddle_journal(src: str = "mark_fixed", offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), u=Depends(admin_user)):
+    try:
+        return await straddle.journal_page(src, offset, limit)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@api.get("/straddle/journal.csv")
+async def straddle_journal_csv(src: str = "mark_fixed", u=Depends(admin_user)):
+    try:
+        text = await straddle.journal_csv(src)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return PlainTextResponse(text, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="straddle_{src.lower()}_journal.csv"'})
+
+
+@api.post("/straddle/settings")
+async def straddle_settings(body: StraddleSettingsIn, request: Request, u=Depends(admin_user)):
+    try:
+        await straddle.save_settings(body.patch, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("straddle_settings", request, u["email"], detail=", ".join(sorted(body.patch))[:200])
+    return await straddle.dashboard()
+
+
+@api.post("/straddle/mode")
+async def straddle_mode(body: StraddleModeIn, request: Request, u=Depends(admin_user)):
+    try:
+        await straddle.ENGINE.set_mode(body.mode, body.confirm, u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Delta did not accept the {body.mode} key: {e}")
+    await SEC.log_event("straddle_mode", request, u["email"], detail=body.mode)
+    return await straddle.dashboard()
+
+
+@api.post("/straddle/control")
+async def straddle_control(body: StraddleControlIn, request: Request, u=Depends(admin_user)):
+    if body.action == "kill":
+        flat = await straddle.ENGINE.kill_switch(u["email"])
+        if not flat:
+            raise HTTPException(500, "Kill switch sent, but the position is not confirmed flat yet. Check Delta now.")
+    elif body.action == "clear_halt":
+        await straddle.set_state(halted=False, halt_reason=None)
+        await straddle.event(f"Trading halt cleared by {u['email']}", "warn")
+    else:
+        await straddle.set_state(enabled=body.action == "enable")
+        await straddle.event(f"Bot switched {'on' if body.action == 'enable' else 'off'} by {u['email']}", "warn")
+    await SEC.log_event("straddle_control", request, u["email"], detail=body.action)
+    return await straddle.dashboard()
+
+
+@api.post("/straddle/backtest/import")
+async def straddle_import(request: Request, u=Depends(admin_user)):
+    """Body = the .xlsx file itself (sheets J_Mark_Fixed and J_Trade_Fixed give the day facts; the rest is re-computed)."""
+    blob = await request.body()
+    if not blob or len(blob) > 20_000_000:
+        raise HTTPException(400, "Send one Excel file of at most 20 MB")
+    try:
+        out = await straddle.import_workbook(blob, (request.headers.get("x-filename") or "backtest.xlsx")[:120], u["email"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("straddle_import", request, u["email"], detail=out["source"][:200])
+    return {**out, "backtest": await straddle.backtest_view()}
+
+
 # ---------------- Real Account Tested (admin only) ----------------
 class RealTradeIn(BaseModel):
     entry_ist: str
@@ -1670,7 +1765,7 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), fundmgr.loop(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), fundmgr.loop(), straddle.loop(), straddle.watchdog(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
 
 
