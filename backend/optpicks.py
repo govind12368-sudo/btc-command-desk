@@ -64,6 +64,7 @@ ORDER = ["IFLY", "SP16", "SSTR", "BPS", "BCS"]
 ENABLED = [k for k in ORDER if STRATS[k]["enabled"]]
 HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "optpicks_history.json")
 HISTORY_TO = date(2026, 11, 22)                    # the history file covers expiries up to this day; the server backtests later days
+B_FROM = date(2026, 10, 1)                         # journal B: the server re-runs the same code on Delta's data from this day (owner, 26 Nov 2026)
 STATE = {"computed_at": None, "error": None, "data": None, "sizing": dict(SIZING_DEFAULT)}
 _HIST = {}
 
@@ -103,13 +104,18 @@ def scaled(key, sizing, equity):
 
 def price_seq(key, rows, sizing, start=None):
     """Prices trades in entry order. Fixed: every trade at the set size. Compounded: every trade sized from the equity after the
-    previous closed trade. Adds capital (used for the trade) and equity (after it) to each row."""
-    eq = capital_for(key, sizing) if start is None else start
+    previous closed trade. Adds capital (used for the trade) and equity (after it) to each row. The worse-fills view (net_v2)
+    compounds along its own balance, so its total is what that account would really have made."""
+    eq = eq2 = capital_for(key, sizing) if start is None else start
+    comp = compounding(sizing)
     out = []
     for t in sorted(rows, key=lambda r: (r.get("entry_ist") or r["day"], r["day"])):
         s = scaled(key, sizing, eq)
         p = price(t, s)
         p["capital"] = round(capital_for(key, s), 2)
+        if comp and p.get("net_v2") is not None:
+            p["net_v2"] = price(t, scaled(key, sizing, eq2))["net_v2"]
+            eq2 += p["net_v2"]
         if p.get("net") is not None:
             eq += p["net"]
             p["equity"] = round(eq, 2)
@@ -394,6 +400,11 @@ def tables(rows, capital, compound=False):
     return {"stats": tot, "yearly": years, "monthly": months}
 
 
+def curve(rows):
+    """Balance after every closed trade, oldest first (the page sends only the newest trades, so the chart needs its own series)."""
+    return [{"t": r["day"], "v": r["equity"]} for r in sorted(rows, key=lambda r: r["entry_ist"]) if r.get("equity") is not None]
+
+
 def realdata_rows(key, rows, sizing, period_from="2024-01-01", period_to=None):
     """The two rows of the real-data backtest table: the whole period and the last 13 months (from 30 Oct 2025).
     `rows` are trade facts (priced or not); each period is priced from the starting capital, so a compounded period starts fresh."""
@@ -507,14 +518,16 @@ def history():
 
 
 async def backtest_day(d):
-    """Backtest one finished expiry day on the server (same code as the history file) and store it."""
+    """Backtest one finished expiry day on the server (same code as the history file) and store it. Days the history file
+    covers (journal B only) are run for the enabled pick; later days for every pick. Returns True when a day was added."""
     if await db.opt_backtest.find_one({"_id": d.isoformat()}, {"_id": 1}):
-        return
-    D = await fetch_day(d, ORDER)
+        return False
+    keys = ORDER if d > HISTORY_TO else ENABLED
+    D = await fetch_day(d, keys)
     if not D["settle"]:
-        return                                        # not settled yet: try again later
+        return False                                  # not settled yet: try again later
     doc = {"_id": d.isoformat(), "at": iso(now_utc()), "trades": {}, "skips": {}}
-    for key in ORDER:
+    for key in keys:
         try:
             t, why = build_trade(key, D)
         except Exception as e:
@@ -524,6 +537,34 @@ async def backtest_day(d):
         else:
             doc["skips"][key] = why
     await db.opt_backtest.insert_one(doc)
+    return True
+
+
+def _facts(t):
+    """What must be equal for journal B to confirm journal A on a day: contracts, fills, exits, stop times, prices."""
+    if not t or t.get("skip"):
+        return None
+    return (round(float(t["price"]), 1), round(float(t.get("settle") or 0), 2),
+            tuple((l["sym"], round(l["fill"], 4), l.get("exit"), round(l.get("exit_price") or 0, 4), l.get("stop_ist")) for l in t.get("legs", [])))
+
+
+async def server_rows(key, since=B_FROM):
+    """Journal B: the server's own backtest of every expiry from `since` (trade facts, skips included)."""
+    out = []
+    async for doc in db.opt_backtest.find({"_id": {"$gte": since.isoformat()}}).sort("_id", 1):
+        if key in doc.get("trades", {}):
+            out.append({**doc["trades"][key], "day": doc["_id"], "source": "server"})
+        elif key in doc.get("skips", {}):
+            out.append({"day": doc["_id"], "skip": doc["skips"][key], "source": "server", "legs": []})
+    return out
+
+
+def match_a(key, rows_b):
+    """Days up to the end of the history file where journal B (server) and journal A (history file) agree."""
+    hist = {t["day"]: t for t in history().get("trades", {}).get(key, [])}
+    checked = [r for r in rows_b if r["day"] <= HISTORY_TO.isoformat()]
+    diff = [r["day"] for r in checked if _facts(r) != _facts(hist.get(r["day"]))]
+    return {"checked": len(checked), "same": len(checked) - len(diff), "differ": diff[:20], "to": HISTORY_TO.isoformat()}
 
 
 async def backtest_rows():
@@ -715,12 +756,18 @@ async def compute():
     rows = {k: price_seq(k, [r for r in raw.get(k, []) if not r.get("skip")], sizing) for k in ORDER}     # days the skip rules reject are not trades
     days = [doc["_id"] async for doc in db.opt_backtest.find({"_id": {"$gt": HISTORY_TO.isoformat()}}, {"_id": 1})]
     period_to = max(days + [HISTORY_TO.isoformat()])           # the last expiry checked (history file, then the server's own days)
-    per = {}
+    per, rows_b = {}, {}
     for k in ORDER:
         cap = capital_for(k, sizing)
         per[k] = {**tables(rows[k], cap, compounding(sizing)), "trades": sorted(rows[k], key=lambda r: r["entry_ist"], reverse=True),
-                  "realdata": realdata_rows(k, rows[k], sizing, history().get("from", "2024-01-01"), period_to)}
-    STATE["rows"] = rows
+                  "realdata": realdata_rows(k, rows[k], sizing, history().get("from", "2024-01-01"), period_to), "curve": curve(rows[k])}
+        if k in ENABLED:                                       # journal B: the server's own run from 1 Oct 2026, starting again from the set capital
+            raw_b = await server_rows(k)
+            rows_b[k] = price_seq(k, [r for r in raw_b if not r.get("skip")], sizing)
+            per[k]["B"] = {**tables(rows_b[k], cap, compounding(sizing)), "trades": sorted(rows_b[k], key=lambda r: r["entry_ist"], reverse=True), "curve": curve(rows_b[k]),
+                           "from": B_FROM.isoformat(), "to": raw_b[-1]["day"] if raw_b else None, "days": len(raw_b),
+                           "skipped": sum(1 for r in raw_b if r.get("skip")), "match": match_a(k, raw_b)}
+    STATE["rows"], STATE["rows_b"] = rows, rows_b
     STATE.update(data={"backtest": per, "sizing": sizing}, computed_at=iso(now_utc()), error=None)
 
 
@@ -735,12 +782,13 @@ async def loop():
             log.exception("option picks tick")
         if time.time() - last_bt > 900 or STATE["data"] is None:
             try:
-                today = datetime.now(IST).date()
-                start = HISTORY_TO + timedelta(days=1)
-                d = start
+                now_ist = datetime.now(IST)
+                today = now_ist.date()
+                trading = (16, 45) <= (now_ist.hour, now_ist.minute) < (17, 40)    # never delay the paper trade with the journal B back-fill
+                d = B_FROM if not trading else HISTORY_TO + timedelta(days=1)       # journal B from 1 Oct 2026; journal A uses the days after the history file
                 while d <= today:
-                    if time.time() >= settle_t(d) + 600:
-                        await backtest_day(d)
+                    if time.time() >= settle_t(d) + 600 and await backtest_day(d):
+                        await asyncio.sleep(0.3)              # a first run fills ~2 months: stay gentle with Delta's API
                     d += timedelta(days=1)
                 await compute()
             except Exception as e:
@@ -794,16 +842,19 @@ async def dashboard():
     return {"name": NAME, "computed_at": STATE.get("computed_at"), "error": STATE.get("error"), "paper_only": True,
             "strategies": [_strat_view(k, sizing) for k in ENABLED], "enabled": ENABLED,
             "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED},
+            "b_from": B_FROM.isoformat(),
             "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
             "sizing": sizing, "size_label": size_label(sizing), "order_notional": notional, "not_checked": NOT_CHECKED,
             "compounded": compounding(sizing), "recommended": RECOMMENDED}
 
 
-def trades_csv(key):
-    """All backtest trades of one strategy at the current size as CSV (newest first)."""
+def trades_csv(key, period="A"):
+    """All backtest trades of one strategy at the current size as CSV (newest first). period A = 1 Jan 2024 → today, B = the
+    server's own run from 1 Oct 2026."""
     import csv
     import io
-    rows = sorted([r for r in (STATE.get("rows") or {}).get(key, []) if r.get("net") is not None], key=lambda r: r["entry_ist"], reverse=True)
+    src = STATE.get("rows_b" if period == "B" else "rows") or {}
+    rows = sorted([r for r in src.get(key, []) if r.get("net") is not None], key=lambda r: r["entry_ist"], reverse=True)
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Strategy", "Size", "Expiry day", "Entry (IST)", "BTC futures at entry", "Qty per leg (BTC)", "Settlement index", "Exit", "Legs (sell fill -> exit)",

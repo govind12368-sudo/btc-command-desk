@@ -12,6 +12,7 @@ const tone = (v) => (v > 0 ? "text-teal-300" : v < 0 ? "text-red-300" : "text-sl
 const pct = (v, d = 1) => (v == null ? "—" : `${(v * 100).toFixed(d)}%`);
 const STATUS_TONE = { OPEN: "text-sky-300", CLOSED: "text-slate-200", SKIPPED: "text-slate-400", MISSED: "text-amber-300" };
 const usd0 = (v) => `$${n(v, 0)}`;
+const dmy = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—");
 
 function Stat({ label, value, sub, cls = "text-slate-50" }) {
   return (
@@ -19,6 +20,23 @@ function Stat({ label, value, sub, cls = "text-slate-50" }) {
       <div className="text-[11.5px] text-slate-400">{label}</div>
       <div className={`font-mono text-lg font-bold ${cls}`}>{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+    </div>
+  );
+}
+
+// The same totals strip as Elite 4 Edge: trades, win ratio, gross, fees, net and (admin) max drawdown.
+function Totals({ s, viewer, testid = "opt-totals" }) {
+  if (!s) return null;
+  const per = s.trades ? s.net / s.trades : null;
+  return (
+    <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${viewer ? "lg:grid-cols-5" : "lg:grid-cols-6"}`} data-testid={testid}>
+      <Stat label="Trades (closed)" value={s.trades} sub={`${s.wins} won · ${s.losses} lost`} />
+      <Stat label="Win ratio" value={pct(s.win_rate, 0)} sub="net after fees > 0" />
+      <Stat label="Gross P&L" value={signedUsd(s.gross)} cls={tone(s.gross)} sub="before fees" />
+      <Stat label="Fees" value={signedUsd(-s.fees)} cls="text-slate-300" sub="Delta option fees + 18% GST" />
+      <Stat label="Net P&L" value={signedUsd(s.net)} cls={tone(s.net)} sub={per != null ? `${signedUsd(per)} a trade` : null} />
+      {!viewer && <Stat label="Max drawdown" value={signedUsd(-(s.max_dd || 0))} cls={s.max_dd ? "text-red-300" : "text-slate-300"}
+        sub={`closed trades, from the peak${s.max_dd_pct ? ` · ${pct(s.max_dd_pct, 1)} of ${s.compounded ? "the peak" : "the capital"}` : ""}`} />}
     </div>
   );
 }
@@ -80,33 +98,30 @@ function Sizing({ d, reload }) {
   );
 }
 
-function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
+function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer, period = "A", from }) {
   const [limit, setLimit] = useState(60);
   if (!b) return <Note>Working out the backtest…</Note>;
   const st = b.stats;
+  const total = b.trades_total ?? b.trades.length;
   let eq = s.capital;
-  const curve = [...b.trades].filter((r) => r.net != null).reverse().map((r) => ({ t: r.day, v: (eq += r.net) }));
+  const curve = b.curve?.length ? b.curve : [...b.trades].filter((r) => r.net != null).reverse().map((r) => ({ t: r.day, v: (eq += r.net) }));
   const download = async () => {
     try {
-      const r = await api.get(`/option-picks/trades.csv?key=${s.key}`, { responseType: "blob" });
+      const r = await api.get(`/option-picks/trades.csv?key=${s.key}&period=${period}`, { responseType: "blob" });
       const u = URL.createObjectURL(r.data);
       const a = document.createElement("a");
-      a.href = u; a.download = `option_picks_${s.key}_backtest.csv`; a.click();
+      a.href = u; a.download = `option_picks_${s.key}_backtest_${period}.csv`; a.click();
       setTimeout(() => URL.revokeObjectURL(u), 2000);
     } catch (e) { toast.error(errText(e)); }
   };
   return (
     <div className="space-y-4">
-      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${viewer ? "lg:grid-cols-5" : "lg:grid-cols-6"}`}>
-        <Stat label="Trades" value={st.trades} sub={`${st.wins} won · ${st.losses} lost`} />
-        <Stat label="Win ratio" value={pct(st.win_rate)} sub="net after fees > 0" />
-        <Stat label="Gross P&L" value={signedUsd(st.gross, 0)} cls={tone(st.gross)} />
-        <Stat label="Fees + GST" value={signedUsd(-st.fees, 0)} cls="text-slate-300" />
-        <Stat label="Net P&L" value={signedUsd(st.net, 0)} cls={tone(st.net)} sub={`${pct(st.return, 0)} on ${usd0(s.capital)} · balance ${usd0(st.final_equity ?? s.capital + st.net)}`} />
-        {!viewer && <Stat label="With 5% worse fills + 2x fees" value={signedUsd(st.view2_net, 0)} cls={tone(st.view2_net)} sub={`real trades at fill on ${pct(st.real_fill, 0)} of days`} />}
+      <div className="text-[12px] text-slate-400" data-testid="opt-balance-line">
+        Balance {usd0(st.final_equity ?? s.capital + st.net)} from {usd0(s.capital)} ({st.return >= 0 ? "+" : ""}{pct(st.return, 0)})
+        {!viewer && st.view2_net != null && <> · with 5% worse fills and 2× fees: <span className={tone(st.view2_net)}>{signedUsd(st.view2_net, 0)}</span> · real trades at the fill price on {pct(st.real_fill, 0)} of days</>}
       </div>
       {curve.length > 1 && (
-        <Card title="Account balance" sub={viewer ? `From ${usd0(s.capital)}` : `From ${usd0(s.capital)} · ${sizeLabel} · backtest 1 Jan 2024 → ${historyTo}, then the server's own daily backtest`}>
+        <Card title="Account balance" sub={viewer ? `From ${usd0(s.capital)}` : `From ${usd0(s.capital)} · ${sizeLabel} · ${period === "B" ? `the server's own backtest from ${from}` : `backtest 1 Jan 2024 → ${historyTo}, then the server's own daily backtest`}`}>
           <LineChart series={[{ name: "Balance $", color: VIZ.s1, points: curve }]} xFmt={(v) => v} yFmt={(v) => n(v, 0)} unit=" $" height={150} />
         </Card>
       )}
@@ -133,7 +148,7 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
           </div>
         </Card>
       </div>
-      <Card title="Backtest trades" sub={`Newest first · ${b.trades_total} trades${viewer ? "" : ` · ${sizeLabel}`}`} right={viewer ? null : <Btn tone="ghost" onClick={download}>Download all (CSV)</Btn>}>
+      <Card title="Backtest trades" sub={`Newest first · ${total} trades${viewer ? "" : ` · ${sizeLabel}`}`} right={viewer ? null : <Btn tone="ghost" onClick={download}>Download all (CSV)</Btn>}>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Expiry</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Capital</th><th className="num">Qty per leg</th><th>Legs: sell fill → exit</th><th className="num">Settlement</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance after</th><th>Real fill</th></tr></thead>
@@ -157,8 +172,11 @@ function legLive(l) {
 
 function Live({ d, viewer }) {
   const live = d.live || [];
+  const k0 = d.enabled[0];
   return (
     <div className="space-y-4">
+      <Note>Paper trades on Delta's live prices: opened at the mark at the end of the entry minute, each leg stopped on the 1-minute mark, settled at Delta's official settlement index. No orders are sent.</Note>
+      <Totals s={d.live_stats[k0]} viewer={viewer} testid="opt-live-totals" />
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {d.enabled.map((k) => {
           const s = d.strategies.find((x) => x.key === k);
@@ -173,7 +191,6 @@ function Live({ d, viewer }) {
         })}
       </div>
       <Card title="Live paper trades" sub={viewer ? "Paper trades: no orders are sent." : `Size: ${d.size_label} · about ${usd0(d.order_notional)} sold per order`} testid="opt-live">
-        {!viewer && <Note tone="plain">Opened at the live Delta mark at the end of the entry minute; each leg stopped on the 1-minute mark; settled at Delta's official settlement index. No orders are sent.</Note>}
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Expiry</th><th>Status</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Capital</th><th className="num">Qty per leg</th><th>Legs</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance after</th>{!viewer && <th>Note</th>}</tr></thead>
@@ -203,9 +220,42 @@ function Live({ d, viewer }) {
   );
 }
 
+function JournalA({ d, s, viewer }) {
+  const b = d.backtest[s.key];
+  if (!b) return <Note>Working out the backtest…</Note>;
+  return (
+    <div className="space-y-4">
+      <Note>{viewer ? "Backtest trades, not live trades. Net results are after fees."
+        : `Real data: the site's own Option Picks code on Delta's mark prices, official settlement index and fee record from 1 Jan 2024 to ${dmy(d.history_to)}, then this server's own daily backtest. Backtest trades, not live trades.`}</Note>
+      <Totals s={b.stats} viewer={viewer} testid="opt-a-totals" />
+      <RealData rows={b.realdata} notChecked={d.not_checked} viewer={viewer} />
+      <StrategyBacktest s={s} b={b} historyTo={d.history_to} sizeLabel={d.size_label} viewer={viewer} period="A" />
+    </div>
+  );
+}
+
+function JournalB({ d, s }) {
+  const b = d.backtest[s.key]?.B;
+  if (!b) return <Note>Working out journal B…</Note>;
+  const m = b.match || {};
+  if (!b.days) return <Note>Journal B is being filled: the server is re-running every expiry from {dmy(d.b_from)} on Delta's data. This takes a few minutes after an update.</Note>;
+  const ok = m.checked && m.same === m.checked;
+  return (
+    <div className="space-y-4">
+      <Note>Same code on this server's Delta data from {dmy(b.from)}, starting again from {usd0(s.capital)}. Backtest trades, not live trades.</Note>
+      <Totals s={b.stats} testid="opt-b-totals" />
+      <div className="text-[12px] text-slate-400" data-testid="opt-b-check">
+        {m.checked ? <><span className={ok ? "text-teal-300" : "text-amber-300"}>Checked against journal A: the same trade on {m.same} of {m.checked} days</span> ({dmy(b.from)} – {dmy(m.to)}){m.differ?.length ? `; differs on ${m.differ.map(dmy).join(", ")}` : ""} · </> : null}
+        {b.days} expiries to {dmy(b.to)}, {b.skipped} skipped by the rules
+      </div>
+      <StrategyBacktest s={s} b={b} historyTo={d.history_to} sizeLabel={d.size_label} period="B" from={b.from} />
+    </div>
+  );
+}
+
 export default function OptionPicks() {
   const { data: d, error, reload } = useFetch("/option-picks", 30000);
-  const [tab, setTab] = useState("live");
+  const [tab, setTab] = useState("C");
   useEffect(() => { document.title = "Option Picks"; }, []);
   if (error && !d) return <Note tone="red">Could not load Option Picks: {String(error)}</Note>;
   if (!d) return <div className="text-sm text-slate-400">Loading Option Picks…</div>;
@@ -219,9 +269,8 @@ export default function OptionPicks() {
   return (
     <div className="space-y-4" data-testid="option-picks-page">
       <PageHead title="Option Picks" sub={sub} />
-      <Note>{viewer ? "Backtest trades, not live trades. No orders are sent." : <>This page is paper only: no orders are sent and no alerts. The same rules run as the <Link to="/straddle-bot?bot=op" className="text-amber-300 underline">Option Picks bot</Link> (paper by default; real orders only after its Live checklist and only when you switch them on).</>}</Note>
+      {!viewer && <Note>This page is paper only: no orders are sent and no alerts. The same rules run as the <Link to="/straddle-bot?bot=op" className="text-amber-300 underline">Option Picks bot</Link> (paper by default; real orders only after its Live checklist and only when you switch them on).</Note>}
       {d.error && <Note tone="red">{viewer ? "The latest update is delayed. It retries automatically." : `Last update failed: ${d.error}`}</Note>}
-      {s && d.backtest[s.key] && <RealData rows={d.backtest[s.key].realdata} notChecked={d.not_checked} viewer={viewer} />}
       {s && !viewer && (
         <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2 text-[12px]">
           <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name} <span className="font-mono text-[11px] font-normal text-slate-500">{s.code}</span>
@@ -232,12 +281,15 @@ export default function OptionPicks() {
       {d.is_admin && <Sizing d={d} reload={reload} />}
       {!viewer && (
         <div className="flex flex-wrap gap-2">
-          <button className={btn(tab === "live")} onClick={() => setTab("live")} data-testid="opt-tab-live">Live paper trading</button>
-          {s && <button className={btn(tab === s.key)} onClick={() => setTab(s.key)} data-testid={`opt-tab-${s.key}`}>Backtest journal</button>}
+          <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="opt-tab-C">C · Live paper trading</button>
+          <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="opt-tab-A">A · 1 Jan 2024 → today</button>
+          <button className={btn(tab === "B")} onClick={() => setTab("B")} data-testid="opt-tab-B">B · {d.b_from ? new Date(`${d.b_from}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "1 Oct 2026"} → today</button>
         </div>
       )}
-      {/* Users get the backtest journal only; live paper trading is not sent to them. */}
-      {tab === "live" && !viewer ? <Live d={d} viewer={viewer} /> : s && <StrategyBacktest s={s} b={d.backtest[s.key]} historyTo={d.history_to} sizeLabel={d.size_label} viewer={viewer} />}
+      {/* Users get journal A only (as Elite 4 Edge); live paper trading and journal B are not sent to them. */}
+      {s && (viewer || tab === "A") && <JournalA d={d} s={s} viewer={viewer} />}
+      {s && !viewer && tab === "B" && <JournalB d={d} s={s} />}
+      {!viewer && tab === "C" && <Live d={d} viewer={viewer} />}
     </div>
   );
 }

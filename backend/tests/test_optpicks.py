@@ -132,6 +132,10 @@ def test_compounded_sizing_from_equity(op):
     q2 = op.leg_qty("P", t["price"], {**SZ, "put_capital": eq / 2})
     assert comp[1]["legs"][0]["qty"] == pytest.approx(q2) and comp[1]["legs"][1]["qty"] == pytest.approx(q2)
     assert fixed[1]["capital"] == 4000.0 and fixed[1]["equity"] == pytest.approx(4000 + 2 * fixed[0]["net"], abs=0.02)
+    # the worse-fills view compounds along its own balance (not the normal one)
+    eq2 = 4000.0 + comp[0]["net_v2"]
+    assert comp[1]["net_v2"] == pytest.approx(op.price(t2, op.scaled("SSTR", SZC, eq2))["net_v2"])
+    assert fixed[1]["net_v2"] == pytest.approx(fixed[0]["net_v2"])
     # a loss shrinks the next size; equity at or below zero sizes nothing
     assert op.scaled("SSTR", SZC, 2000.0)["put_capital"] == 1000.0 and op.scaled("SSTR", SZC, -5.0)["call_capital"] == 0.0
     assert op.scaled("SSTR", SZ, 2000.0)["put_capital"] == 2000.0
@@ -249,4 +253,50 @@ def test_paper_trades_compound_and_the_comparison_is_like_for_like(op, monkeypat
         await op.set_sizing({"compound": False}, "owner")
         d = await op.dashboard()
         assert not d["compounded"] and all(r["capital"] == 4000.0 for r in d["backtest"]["SSTR"]["trades"])
+    run(go())
+
+
+def test_journal_b_is_the_servers_own_run_from_1_oct_checked_against_a(op, monkeypatch):
+    """Journal B (as Elite 4 Edge): the server re-runs the same code on Delta's data for every expiry from 1 Oct 2026, starts
+    again from the set capital, and is checked day by day against journal A (the history file). Users never get it."""
+    t, _ = op.build_trade("SSTR", straddle_day(op, settle=60010.0))
+    hist = ["2026-09-30", "2026-10-01", "2026-10-02", "2026-11-22"]
+    monkeypatch.setattr(op, "history", lambda: {"trades": {"SSTR": [{**t, "day": d, "entry_ist": f"{d} 17:00"} for d in hist]}})
+    day = lambda d, **kw: {**t, "day": d, "entry_ist": f"{d} 17:00", **kw}  # noqa: E731
+
+    async def go():
+        await op.db.opt_backtest.insert_many([
+            {"_id": "2026-10-01", "trades": {"SSTR": day("2026-10-01")}, "skips": {}},
+            {"_id": "2026-10-02", "trades": {"SSTR": day("2026-10-02", legs=[{**t["legs"][0], "fill": 98.0}, t["legs"][1]])}, "skips": {}},   # differs from A
+            {"_id": "2026-10-03", "trades": {}, "skips": {"SSTR": "no option chain for this expiry"}},
+            {"_id": "2026-11-22", "trades": {"SSTR": day("2026-11-22")}, "skips": {}},
+            {"_id": "2026-11-23", "trades": {"SSTR": day("2026-11-23")}, "skips": {}}])
+        await op.compute()
+        d = await op.dashboard()
+        a, b = d["backtest"]["SSTR"], d["backtest"]["SSTR"]["B"]
+        assert a["stats"]["trades"] == 5 and d["b_from"] == "2026-10-01"                 # A: the history file, then server days after 22 Nov only
+        assert b["stats"]["trades"] == 4 and (b["days"], b["skipped"], b["from"], b["to"]) == (5, 1, "2026-10-01", "2026-11-23")
+        assert b["match"] == {"checked": 4, "same": 3, "differ": ["2026-10-02"], "to": "2026-11-22"}
+        assert b["trades"][-1]["capital"] == 4000.0 and b["trades"][0]["capital"] > 4000.0          # starts again from the capital, then compounds
+        assert [p["t"] for p in b["curve"]] == ["2026-10-01", "2026-10-02", "2026-11-22", "2026-11-23"] and b["curve"][-1]["v"] == b["stats"]["final_equity"]
+        assert len(a["curve"]) == 5 and a["curve"][-1]["v"] == a["stats"]["final_equity"]             # the whole balance path, not only the trades sent
+        assert b["stats"]["max_dd"] >= 0 and "max_dd" in b["stats"]
+        assert len(op.trades_csv("SSTR", "B").splitlines()) == 5 and len(op.trades_csv("SSTR").splitlines()) == 6
+        import viewer
+        v = viewer.optpicks_view({**d, "is_admin": False})
+        assert "B" not in v["backtest"]["SSTR"] and "b_from" not in v and v["backtest"]["SSTR"]["stats"]["trades"] == 5
+    run(go())
+
+
+def test_server_backfill_runs_only_the_enabled_pick_on_history_days(op, monkeypatch):
+    calls = []
+
+    async def fake_fetch(d, keys):
+        calls.append((d, tuple(keys)))
+        return {"settle": None}
+    monkeypatch.setattr(op, "fetch_day", fake_fetch)
+
+    async def go():
+        assert await op.backtest_day(date(2026, 10, 5)) is False and await op.backtest_day(date(2026, 11, 24)) is False      # not settled: tried again later
+        assert calls == [(date(2026, 10, 5), ("SSTR",)), (date(2026, 11, 24), tuple(op.ORDER))]
     run(go())

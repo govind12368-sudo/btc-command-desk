@@ -140,6 +140,7 @@ def optpicks_view(out):
             bt[k] = b
             continue
         x = dict(b)
+        x.pop("B", None)                                   # users get journal A only (as Elite 4 Edge)
         x["trades"] = [_opt_trade(t) for t in b.get("trades") or []]
         x["realdata"] = [_drop(r, ("verdict", "size") + OPT_STAT_DROP) for r in b.get("realdata") or []]
         x["yearly"] = [_drop(y, ("max_dd",)) for y in b.get("yearly") or []]
