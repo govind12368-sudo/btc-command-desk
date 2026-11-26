@@ -19,7 +19,11 @@ worked out from the size settings, so changing a setting re-sizes every backtest
   qty per leg = floor(capital x leverage / reference price at entry / 0.001) x 0.001 BTC   (put legs use the put setting, calls the call)
   fees = Delta fee record (taker rate on notional, capped at a share of the premium) + 18% GST at entry, on a stop buy-back and at
          settlement (Delta's settlement fee is capped on the settlement value, so worthless legs pay none)
-Settings (admin, db.opt_settings): put_capital, put_leverage, call_capital, call_leverage; default $2,000 x 25 each (owner, 23 Nov 2026).
+Settings (admin, db.opt_settings): put_capital, put_leverage, call_capital, call_leverage; default $2,000 x 25 each (owner, 23 Nov 2026),
+and compound (owner, 26 Nov 2026: ★ Recommended = pick 5 with compounded capital, the default). Compounded: trades are priced in entry
+order and each leg's capital = its share of the starting capital x (equity after the previous closed trade ÷ starting capital); a period
+shown on its own (the last 13 months) starts again from the starting capital. The Straddle Bot page runs these rules as the
+"Option Picks bot" (straddle.py, bot "op"): paper by default, real orders only after its own Live checklist.
 """
 import asyncio
 import json
@@ -37,8 +41,9 @@ NAME = "Option Picks"
 IST = timezone(timedelta(hours=5, minutes=30))
 DELTA = "https://api.india.delta.exchange"
 GST = 0.18
-SIZING_DEFAULT = {"put_capital": 2000.0, "put_leverage": 25.0, "call_capital": 2000.0, "call_leverage": 25.0}
+SIZING_DEFAULT = {"put_capital": 2000.0, "put_leverage": 25.0, "call_capital": 2000.0, "call_leverage": 25.0, "compound": 1.0}
 SIZING_LIMITS = {"put_capital": (0, 1_000_000), "call_capital": (0, 1_000_000), "put_leverage": (1, 100), "call_leverage": (1, 100)}
+RECOMMENDED = {"key": "SSTR", "compound": True, "label": "★ Recommended: Option Picks · Compounded"}   # the owner's pick (26 Nov 2026)
 RECENT_FROM = "2025-10-30"
 NOT_CHECKED = "Not checked: Delta margin for $100,000 of short options on $4,000, and order-book depth at ~5× the original size"
 STRATS = {
@@ -74,11 +79,44 @@ def capital_for(key, sizing):
     return sum(sizing["put_capital"] if t == "P" else sizing["call_capital"] for t in set(typs))
 
 
+def compounding(sizing):
+    return bool(sizing.get("compound"))
+
+
 def size_label(sizing):
     p, c = sizing, sizing
     if p["put_capital"] == c["call_capital"] and p["put_leverage"] == c["call_leverage"]:
-        return f"${p['put_capital']:,.0f} × {p['put_leverage']:g}x per leg (put + call)"
-    return f"put ${p['put_capital']:,.0f} × {p['put_leverage']:g}x, call ${c['call_capital']:,.0f} × {c['call_leverage']:g}x"
+        lab = f"${p['put_capital']:,.0f} × {p['put_leverage']:g}x per leg (put + call)"
+    else:
+        lab = f"put ${p['put_capital']:,.0f} × {p['put_leverage']:g}x, call ${c['call_capital']:,.0f} × {c['call_leverage']:g}x"
+    return lab + (" · compounded" if compounding(sizing) else " · fixed")
+
+
+def scaled(key, sizing, equity):
+    """Compounded sizing: each leg gets its share of the current equity (shares = the starting put / call capital)."""
+    start = capital_for(key, sizing)
+    if not compounding(sizing) or not start or equity is None:
+        return sizing
+    f = max(equity, 0.0) / start
+    return {**sizing, "put_capital": sizing["put_capital"] * f, "call_capital": sizing["call_capital"] * f}
+
+
+def price_seq(key, rows, sizing, start=None):
+    """Prices trades in entry order. Fixed: every trade at the set size. Compounded: every trade sized from the equity after the
+    previous closed trade. Adds capital (used for the trade) and equity (after it) to each row."""
+    eq = capital_for(key, sizing) if start is None else start
+    out = []
+    for t in sorted(rows, key=lambda r: (r.get("entry_ist") or r["day"], r["day"])):
+        s = scaled(key, sizing, eq)
+        p = price(t, s)
+        p["capital"] = round(capital_for(key, s), 2)
+        if p.get("net") is not None:
+            eq += p["net"]
+            p["equity"] = round(eq, 2)
+        else:
+            p["equity"] = None
+        out.append(p)
+    return out
 
 
 def price(t, sizing):
@@ -125,6 +163,9 @@ async def set_sizing(values, by):
     s = await get_sizing()
     for k, v in values.items():
         if k not in SIZING_DEFAULT or v is None:
+            continue
+        if k == "compound":
+            s[k] = 1.0 if v in (True, 1, 1.0, "1", "true", "compounded") else 0.0
             continue
         lo, hi = SIZING_LIMITS[k]
         v = float(v)
@@ -306,55 +347,67 @@ def needs(key, D):
     return [x for _, sym in legs or [] for x in (("m1", sym, "MARK:" + sym, "1m", et - 300, st), ("t1", sym, sym, "1m", et - 300, et + 300))]
 
 
-def stats(rows, capital):
-    """Priced rows (net set) -> totals; equity, peak and drawdown start from `capital`."""
+def stats(rows, capital, compound=False):
+    """Priced rows (net set) -> totals; equity, peak and drawdown start from `capital`.
+    Compounded rows: drawdown % is of the peak equity (the size grows with the equity)."""
     rows = sorted([r for r in rows if r.get("net") is not None], key=lambda r: r["entry_ist"])
     n = len(rows)
     if not n:
         return {"trades": 0, "wins": 0, "losses": 0, "win_rate": None, "gross": 0.0, "fees": 0.0, "net": 0.0, "return": 0.0, "max_dd": 0.0, "max_dd_pct": 0.0,
-                "worst": None, "best": None, "view2_net": 0.0, "real_fill": None, "lowest_balance": capital, "capital": capital}
+                "worst": None, "best": None, "view2_net": 0.0, "real_fill": None, "lowest_balance": capital, "capital": capital,
+                "final_equity": capital, "compounded": bool(compound)}
     eq = pk = low = capital
-    dd = 0.0
+    dd = ddp = 0.0
     for r in rows:
         eq += r["net"]; pk = max(pk, eq); dd = max(dd, pk - eq); low = min(low, eq)
+        ddp = max(ddp, (pk - eq) / pk if pk > 0 else 0.0)
     w = sum(r["net"] > 0 for r in rows)
     net = sum(r["net"] for r in rows)
     return {"trades": n, "wins": w, "losses": n - w, "win_rate": w / n, "gross": round(sum(r["gross"] for r in rows), 2), "fees": round(sum(r["fees"] for r in rows), 2),
-            "net": round(net, 2), "return": net / capital if capital else None, "max_dd": round(dd, 2), "max_dd_pct": dd / capital if capital else None,
+            "net": round(net, 2), "return": net / capital if capital else None, "max_dd": round(dd, 2),
+            "max_dd_pct": ddp if compound else (dd / capital if capital else None), "final_equity": round(eq, 2), "compounded": bool(compound),
             "worst": round(min(r["net"] for r in rows), 2), "best": round(max(r["net"] for r in rows), 2),
             "view2_net": round(sum(r.get("net_v2") if r.get("net_v2") is not None else r["net"] for r in rows), 2),
             "real_fill": sum(1 for r in rows if r.get("real")) / n, "lowest_balance": round(low, 2), "capital": capital}
 
 
-def tables(rows, capital):
+def tables(rows, capital, compound=False):
+    """Yearly and monthly tables. Compounded: each period starts from the equity it began with (return = net ÷ that equity)."""
     rows = sorted([r for r in rows if r.get("net") is not None], key=lambda r: r["entry_ist"])
     by_y, by_m = defaultdict(list), defaultdict(list)
     for r in rows:
         by_y[r["day"][:4]].append(r); by_m[r["day"][:7]].append(r)
+    start_of = lambda sub: (sub[0]["equity"] - sub[0]["net"]) if compound and sub and sub[0].get("equity") is not None else capital
     cum, months = 0.0, []
     for m in sorted(by_m):
-        s = stats(by_m[m], capital); cum += s["net"]
-        months.append({"month": m, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net")}, "cumulative": round(cum, 2)})
+        s = stats(by_m[m], start_of(by_m[m]), compound); cum += s["net"]
+        months.append({"month": m, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net")}, "cumulative": round(cum, 2),
+                       "equity": s["final_equity"] if compound else round(capital + cum, 2)})
     cum, years = 0.0, []
     for y in sorted(by_y):
-        s = stats(by_y[y], capital); cum += s["net"]
-        years.append({"year": y, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": round(cum, 2)})
-    tot = stats(rows, capital)
-    years.append({"year": "Total till date", **{k: tot[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": tot["net"]})
+        s = stats(by_y[y], start_of(by_y[y]), compound); cum += s["net"]
+        years.append({"year": y, **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": round(cum, 2),
+                      "start_equity": round(s["capital"], 2) if compound else capital, "equity": s["final_equity"] if compound else round(capital + cum, 2)})
+    tot = stats(rows, capital, compound)
+    years.append({"year": "Total till date", **{k: tot[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd", "return")}, "cumulative": tot["net"],
+                  "start_equity": capital, "equity": tot["final_equity"]})
     return {"stats": tot, "yearly": years, "monthly": months}
 
 
 def realdata_rows(key, rows, sizing, period_from="2024-01-01", period_to=None):
-    """The two rows of the real-data backtest table: the whole period and the last 13 months (from 30 Oct 2025)."""
+    """The two rows of the real-data backtest table: the whole period and the last 13 months (from 30 Oct 2025).
+    `rows` are trade facts (priced or not); each period is priced from the starting capital, so a compounded period starts fresh."""
     cap = capital_for(key, sizing)
-    rows = [r for r in rows if r.get("net") is not None]
+    comp = compounding(sizing)
+    rows = [r for r in price_seq(key, rows, sizing) if r.get("net") is not None]
     if not rows:
         return []
     last = period_to or max(r["day"] for r in rows)
     fmt = lambda d: date.fromisoformat(d).strftime("%-d %b %Y")
     out = []
-    for lab, sub in ((f"{fmt(period_from)} – {fmt(last)}", rows), (f"{fmt(RECENT_FROM)} – {fmt(last)}", [r for r in rows if r["day"] >= RECENT_FROM])):
-        st = stats(sub, cap)
+    recent = [r for r in price_seq(key, [r for r in rows if r["day"] >= RECENT_FROM], sizing) if r.get("net") is not None]
+    for lab, sub in ((f"{fmt(period_from)} – {fmt(last)}", rows), (f"{fmt(RECENT_FROM)} – {fmt(last)}", recent)):
+        st = stats(sub, cap, comp)
         out.append({"size": size_label(sizing), "period": lab, **{k: st[k] for k in ("trades", "wins", "losses", "win_rate", "gross", "fees", "net", "return", "max_dd",
                                                                                      "max_dd_pct", "worst", "best", "view2_net", "real_fill")},
                     "years": {y: (round(sum(r["net"] for r in sub if r["day"][:4] == y), 2) if any(r["day"][:4] == y for r in sub) else None) for y in ("2024", "2025", "2026")},
@@ -659,13 +712,13 @@ async def compute():
     sizing = await get_sizing()
     raw = await backtest_rows()
     STATE["skips"] = {(k, r["day"]): r["skip"] for k in ORDER for r in raw.get(k, []) if r.get("skip")}
-    rows = {k: [price(r, sizing) for r in raw.get(k, []) if not r.get("skip")] for k in ORDER}     # days the skip rules reject are not trades
+    rows = {k: price_seq(k, [r for r in raw.get(k, []) if not r.get("skip")], sizing) for k in ORDER}     # days the skip rules reject are not trades
     days = [doc["_id"] async for doc in db.opt_backtest.find({"_id": {"$gt": HISTORY_TO.isoformat()}}, {"_id": 1})]
     period_to = max(days + [HISTORY_TO.isoformat()])           # the last expiry checked (history file, then the server's own days)
     per = {}
     for k in ORDER:
         cap = capital_for(k, sizing)
-        per[k] = {**tables(rows[k], cap), "trades": sorted(rows[k], key=lambda r: r["entry_ist"], reverse=True),
+        per[k] = {**tables(rows[k], cap, compounding(sizing)), "trades": sorted(rows[k], key=lambda r: r["entry_ist"], reverse=True),
                   "realdata": realdata_rows(k, rows[k], sizing, history().get("from", "2024-01-01"), period_to)}
     STATE["rows"] = rows
     STATE.update(data={"backtest": per, "sizing": sizing}, computed_at=iso(now_utc()), error=None)
@@ -702,7 +755,9 @@ def _strat_view(k, sizing):
     return {"key": k, "pick": s["pick"], "code": s["code"], "name": s["name"], "enabled": s["enabled"], "verdict": s["verdict"],
             "entry_ist": "%02d:%02d" % s["entry"] + (" (day before)" if s["entry"] > (17, 30) else ""),
             "live_entry_ist": time.strftime("%H:%M", time.gmtime(s["entry"][0] * 3600 + s["entry"][1] * 60 + s["bar"])),
-            "stop": "2x sell price (1-min mark high)" if s["kind"] == "stop" else "none (hold to 17:30 settlement)", "capital": capital_for(k, sizing)}
+            "stop": "2x sell price (1-min mark high)" if s["kind"] == "stop" else "none (hold to 17:30 settlement)", "capital": capital_for(k, sizing),
+            "recommended": RECOMMENDED["label"] if k == RECOMMENDED["key"] else None,
+            "recommended_active": k == RECOMMENDED["key"] and compounding(sizing) == RECOMMENDED["compound"]}
 
 
 async def dashboard():
@@ -710,20 +765,24 @@ async def dashboard():
     sizing = STATE.get("sizing") or dict(SIZING_DEFAULT)
     raw_live = [{k: v for k, v in x.items() if k != "_id"} | {"id": x["_id"]} async for x in db.opt_live.find({"key": {"$in": ENABLED}}).sort("created", -1).limit(400)]
     live = []
-    for t in raw_live:
-        if t.get("legs") and t.get("price") and t["status"] in ("OPEN", "CLOSED"):
-            live.append(price(t, sizing))
-        else:
-            live.append({**t, "gross": None, "fees": None, "net": None, "qty": None})
+    for k in ENABLED:            # paper trades priced in entry order: compounded sizing grows from the equity after each closed trade
+        mine = [t for t in raw_live if t["key"] == k]
+        tradable = [t for t in mine if t.get("legs") and t.get("price") and t["status"] in ("OPEN", "CLOSED")]
+        live += price_seq(k, tradable, sizing)
+        live += [{**t, "gross": None, "fees": None, "net": None, "qty": None, "capital": None, "equity": None} for t in mine if t not in tradable]
+    live.sort(key=lambda t: t.get("created") or t["day"], reverse=True)
     bt = data.get("backtest") or {}
     btmap = {(k, r["day"]): r for k in ORDER for r in (bt.get(k) or {}).get("trades", [])}
+    per_live = {k: stats([t for t in live if t["key"] == k and t["status"] == "CLOSED"], capital_for(k, sizing), compounding(sizing)) for k in ENABLED}
     cmp_rows = []
     for t in live:
         b = btmap.get((t["key"], t["day"]))
         bskip = (STATE.get("skips") or {}).get((t["key"], t["day"]))
+        if b is not None:      # like for like: the backtest trade of that day at the paper trade's own size (compounded backtests grow far larger)
+            eq = t.get("capital") or (per_live.get(t["key"]) or {}).get("final_equity") or capital_for(t["key"], sizing)
+            b = price(b, scaled(t["key"], sizing, eq))
         cmp_rows.append({"day": t["day"], "key": t["key"], "live_status": t["status"], "live_reason": t.get("reason"), "live_net": t.get("net"),
                          "bt_status": "TAKEN" if b else "SKIPPED" if bskip else "not yet", "bt_net": b["net"] if b else None, "bt_reason": bskip})
-    per_live = {k: stats([t for t in live if t["key"] == k and t["status"] == "CLOSED"], capital_for(k, sizing)) for k in ENABLED}
     now = time.time()
     today = datetime.fromtimestamp(now, IST).date()
     nxt = {}
@@ -736,7 +795,8 @@ async def dashboard():
             "strategies": [_strat_view(k, sizing) for k in ENABLED], "enabled": ENABLED,
             "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED},
             "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
-            "sizing": sizing, "size_label": size_label(sizing), "order_notional": notional, "not_checked": NOT_CHECKED}
+            "sizing": sizing, "size_label": size_label(sizing), "order_notional": notional, "not_checked": NOT_CHECKED,
+            "compounded": compounding(sizing), "recommended": RECOMMENDED}
 
 
 def trades_csv(key):
@@ -747,12 +807,14 @@ def trades_csv(key):
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Strategy", "Size", "Expiry day", "Entry (IST)", "BTC futures at entry", "Qty per leg (BTC)", "Settlement index", "Exit", "Legs (sell fill -> exit)",
-                "Gross P&L ($)", "Fees + GST ($)", "Net P&L ($)", "Net with 5% worse fills + 2x fees ($)", "Real trades on all legs at fill", "Source"])
+                "Capital used ($)", "Gross P&L ($)", "Fees + GST ($)", "Net P&L ($)", "Equity after ($)", "Net with 5% worse fills + 2x fees ($)",
+                "Real trades on all legs at fill", "Source"])
     lab = size_label(STATE.get("sizing") or SIZING_DEFAULT)
     for r in rows:
         legs = " ; ".join(f"{l['side']} {l['sym']} {l['qty']:.3f} BTC fill {l['fill']} -> {l['exit']} {l['exit_price']}" + (f" at {l['stop_ist']}" if l.get("stop_ist") else "")
                           for l in r.get("legs", []))
-        w.writerow([STRATS[key]["code"], lab, r["day"], r["entry_ist"], r.get("price"), r.get("qty"), r.get("settle"), r.get("exit"), legs, round(r["gross"], 4),
-                    round(r["fees"], 4), round(r["net"], 4), round(r["net_v2"], 4) if r.get("net_v2") is not None else "", "Yes" if r.get("real") else "No",
+        w.writerow([STRATS[key]["code"], lab, r["day"], r["entry_ist"], r.get("price"), r.get("qty"), r.get("settle"), r.get("exit"), legs, r.get("capital"),
+                    round(r["gross"], 4), round(r["fees"], 4), round(r["net"], 4), r.get("equity"),
+                    round(r["net_v2"], 4) if r.get("net_v2") is not None else "", "Yes" if r.get("real") else "No",
                     r.get("source", "backtest file")])
     return buf.getvalue()

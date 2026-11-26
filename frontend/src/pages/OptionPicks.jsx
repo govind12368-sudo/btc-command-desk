@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useFetch } from "@/hooks/useFetch";
 import { api, errText } from "@/lib/api";
@@ -54,16 +55,27 @@ function Sizing({ d, reload }) {
   useEffect(() => { setV(d.sizing); }, [d.sizing]);
   const save = async () => {
     setBusy(true);
-    try { await api.post("/option-picks/sizing", Object.fromEntries(Object.entries(v).map(([k, x]) => [k, Number(x)]))); toast.success("Size saved: every trade re-sized"); await reload(); }
-    catch (e) { toast.error(errText(e)); } finally { setBusy(false); }
+    try {
+      const body = Object.fromEntries(["put_capital", "put_leverage", "call_capital", "call_leverage"].map((k) => [k, Number(v[k])]));
+      await api.post("/option-picks/sizing", { ...body, compound: Number(v.compound) === 1 });
+      toast.success("Size saved: every trade re-sized"); await reload();
+    } catch (e) { toast.error(errText(e)); } finally { setBusy(false); }
   };
   const f = (k, label) => <Field label={label}><Input type="number" value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} className="w-28" data-testid={`opt-${k}`} /></Field>;
   return (
     <Card title="Size per leg (admin)" sub="Capital × leverage per leg. Saving re-sizes the backtest and every paper trade from their stored prices." testid="opt-sizing">
       <div className="flex flex-wrap items-end gap-3">
         {f("put_capital", "Put capital ($)")}{f("put_leverage", "Put leverage (x)")}{f("call_capital", "Call capital ($)")}{f("call_leverage", "Call leverage (x)")}
+        <Field label="Capital">
+          <select value={Number(v.compound) === 1 ? "1" : "0"} onChange={(e) => setV({ ...v, compound: Number(e.target.value) })} data-testid="opt-compound"
+            className="h-9 rounded-md border border-line bg-panel2 px-2 text-[13px] text-slate-100">
+            <option value="1">Compounded ★ Recommended</option>
+            <option value="0">Fixed</option>
+          </select>
+        </Field>
         <Btn tone="gold" disabled={busy} onClick={save}>Save size</Btn>
       </div>
+      <p className="mt-2 text-[11.5px] text-slate-500">Compounded: each leg gets its share of the balance after the last closed trade (put share = put capital ÷ both capitals). Fixed: every trade uses the capital above.</p>
     </Card>
   );
 }
@@ -90,7 +102,7 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
         <Stat label="Win ratio" value={pct(st.win_rate)} sub="net after fees > 0" />
         <Stat label="Gross P&L" value={signedUsd(st.gross, 0)} cls={tone(st.gross)} />
         <Stat label="Fees + GST" value={signedUsd(-st.fees, 0)} cls="text-slate-300" />
-        <Stat label="Net P&L" value={signedUsd(st.net, 0)} cls={tone(st.net)} sub={`${pct(st.return, 0)} on ${usd0(s.capital)}`} />
+        <Stat label="Net P&L" value={signedUsd(st.net, 0)} cls={tone(st.net)} sub={`${pct(st.return, 0)} on ${usd0(s.capital)} · balance ${usd0(st.final_equity ?? s.capital + st.net)}`} />
         {!viewer && <Stat label="With 5% worse fills + 2x fees" value={signedUsd(st.view2_net, 0)} cls={tone(st.view2_net)} sub={`real trades at fill on ${pct(st.real_fill, 0)} of days`} />}
       </div>
       {curve.length > 1 && (
@@ -101,11 +113,12 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="Yearly" sub="Net after fees">
           <div className="overflow-x-auto scroll-thin"><table className="desk-table">
-            <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th></tr></thead>
+            <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance at end</th></tr></thead>
             <tbody>{b.yearly.map((y) => (
               <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
                 <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pct(y.win_rate)}</td><td className={`num ${tone(y.gross)}`}>{signedUsd(y.gross, 0)}</td>
                 <td className="num">{signedUsd(-y.fees, 0)}</td><td className={`num font-semibold ${tone(y.net)}`}>{signedUsd(y.net, 0)}</td>
+                <td className="num">{y.equity != null ? usd0(y.equity) : "—"}</td>
               </tr>))}</tbody>
           </table></div>
         </Card>
@@ -123,11 +136,11 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
       <Card title="Backtest trades" sub={`Newest first · ${b.trades_total} trades${viewer ? "" : ` · ${sizeLabel}`}`} right={viewer ? null : <Btn tone="ghost" onClick={download}>Download all (CSV)</Btn>}>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Expiry</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Qty per leg</th><th>Legs: sell fill → exit</th><th className="num">Settlement</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th>Real fill</th></tr></thead>
+            <thead><tr><th>Expiry</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Capital</th><th className="num">Qty per leg</th><th>Legs: sell fill → exit</th><th className="num">Settlement</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance after</th><th>Real fill</th></tr></thead>
             <tbody>{b.trades.filter((r) => r.net != null).slice(0, limit).map((r) => (
-              <tr key={r.day + r.entry_ist}><td className="font-mono">{r.day}</td><td className="font-mono">{r.entry_ist.slice(11)}</td><td className="num">{n(r.price, 1)}</td><td className="num">{r.qty != null ? r.qty.toFixed(3) : "—"}</td>
+              <tr key={r.day + r.entry_ist}><td className="font-mono">{r.day}</td><td className="font-mono">{r.entry_ist.slice(11)}</td><td className="num">{n(r.price, 1)}</td><td className="num">{r.capital != null ? usd0(r.capital) : "—"}</td><td className="num">{r.qty != null ? r.qty.toFixed(3) : "—"}</td>
                 <td className="min-w-[300px] text-[11.5px]">{(r.legs || []).map((l) => <div key={l.sym}>{legsText([l])}</div>)}</td><td className="num">{n(r.settle, 1)}</td><td className={`num ${tone(r.gross)}`}>{signedUsd(r.gross)}</td>
-                <td className="num">{signedUsd(-r.fees)}</td><td className={`num font-semibold ${tone(r.net)}`}>{signedUsd(r.net)}</td><td>{r.real ? "Yes" : "No"}</td></tr>))}</tbody>
+                <td className="num">{signedUsd(-r.fees)}</td><td className={`num font-semibold ${tone(r.net)}`}>{signedUsd(r.net)}</td><td className="num">{r.equity != null ? usd0(r.equity) : "—"}</td><td>{r.real ? "Yes" : "No"}</td></tr>))}</tbody>
           </table>
           {b.trades.length > limit && <div className="p-2 text-center"><Btn tone="ghost" onClick={() => setLimit(limit + 60)}>Show more</Btn></div>}
         </div>
@@ -154,7 +167,7 @@ function Live({ d, viewer }) {
             <div key={k} className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5 text-[12px]" data-testid="opt-live-status">
               <div className="font-semibold text-slate-100">{viewer ? s.name : `Pick ${s.pick} · ${s.name}`}</div>
               {!viewer && <div className="text-slate-400">Next paper entry: {d.next_entry?.[k] || "—"}</div>}
-              <div className="text-slate-300">Paper: {ls.trades || 0} closed · {ls.wins || 0} won · net <span className={tone(ls.net)}>{signedUsd(ls.net || 0)}</span> · balance {usd0(s.capital + (ls.net || 0))} from {usd0(s.capital)}</div>
+              <div className="text-slate-300">Paper: {ls.trades || 0} closed · {ls.wins || 0} won · net <span className={tone(ls.net)}>{signedUsd(ls.net || 0)}</span> · balance {usd0(ls.final_equity ?? s.capital + (ls.net || 0))} from {usd0(s.capital)}{d.compounded ? " · compounded" : ""}</div>
             </div>
           );
         })}
@@ -163,18 +176,19 @@ function Live({ d, viewer }) {
         {!viewer && <Note tone="plain">Opened at the live Delta mark at the end of the entry minute; each leg stopped on the 1-minute mark; settled at Delta's official settlement index. No orders are sent.</Note>}
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Expiry</th><th>Status</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Qty per leg</th><th>Legs</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th>{!viewer && <th>Note</th>}</tr></thead>
+            <thead><tr><th>Expiry</th><th>Status</th><th>Entry (IST)</th><th className="num">BTC futures</th><th className="num">Capital</th><th className="num">Qty per leg</th><th>Legs</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance after</th>{!viewer && <th>Note</th>}</tr></thead>
             <tbody>{live.map((t) => (
               <tr key={t.id}><td className="font-mono">{t.day}</td><td className={STATUS_TONE[t.status] || ""}>{t.status}</td><td className="font-mono">{t.entry_ist ? t.entry_ist.slice(11) : "—"}</td>
-                <td className="num">{n(t.price, 1)}</td><td className="num">{t.qty != null ? t.qty.toFixed(3) : "—"}</td>
+                <td className="num">{n(t.price, 1)}</td><td className="num">{t.capital != null ? usd0(t.capital) : "—"}</td><td className="num">{t.qty != null ? t.qty.toFixed(3) : "—"}</td>
                 <td className="min-w-[300px] text-[11.5px]">{viewer ? (t.legs || []).map((l) => <div key={l.sym}>{legsText([l])}</div>) : (t.legs || []).map((l) => <div key={l.sym}>{legLive(l)}</div>)}</td>
                 <td className={`num ${tone(t.gross)}`}>{t.gross != null ? signedUsd(t.gross) : "—"}</td><td className="num">{t.fees != null ? signedUsd(-t.fees) : "—"}</td>
-                <td className={`num font-semibold ${tone(t.net)}`}>{t.net != null ? signedUsd(t.net) : t.status === "OPEN" ? "open" : "—"}</td>{!viewer && <td className="text-[12px] text-slate-400">{t.reason || ""}</td>}</tr>))}</tbody>
+                <td className={`num font-semibold ${tone(t.net)}`}>{t.net != null ? signedUsd(t.net) : t.status === "OPEN" ? "open" : "—"}</td>
+                <td className="num">{t.equity != null ? usd0(t.equity) : "—"}</td>{!viewer && <td className="text-[12px] text-slate-400">{t.reason || ""}</td>}</tr>))}</tbody>
           </table>
           {!live.length && <div className="p-4 text-center text-xs text-slate-500">No paper trades yet.</div>}
         </div>
       </Card>
-      <Card title="Paper vs backtest" sub={viewer ? "Each paper day next to the backtest of the same day." : "Each paper day next to the server's own backtest of the same expiry (worked out about 10 minutes after the 17:30 settlement), both at the current size."} testid="opt-compare">
+      <Card title="Paper vs backtest" sub={viewer ? "Each paper day next to the backtest of the same day." : "Each paper day next to the server's own backtest of the same expiry (worked out about 10 minutes after the 17:30 settlement), the backtest priced at the paper trade's own size."} testid="opt-compare">
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
             <thead><tr><th>Expiry</th><th>Paper</th><th className="num">Paper net</th><th>Backtest</th><th className="num">Backtest net</th></tr></thead>
@@ -201,17 +215,18 @@ export default function OptionPicks() {
   const z = d.sizing || {};
   const same = z.put_capital === z.call_capital && z.put_leverage === z.call_leverage;
   const sub = viewer ? "Backtest journal, net after fees" : `Pick 5: short ATM BTC straddle at 17:00 IST on Delta Exchange India (expiry 17:30 IST) · ${same
-    ? `$${n(z.put_capital, 0)} × ${z.put_leverage}x per leg (put + call), about $${n(z.put_capital * z.put_leverage, 0)} of BTC per leg` : d.size_label} · paper only`;
+    ? `$${n(z.put_capital, 0)} × ${z.put_leverage}x per leg (put + call), about $${n(z.put_capital * z.put_leverage, 0)} of BTC per leg` : d.size_label}${d.compounded ? " · compounded" : " · fixed capital"} · paper`;
   return (
     <div className="space-y-4" data-testid="option-picks-page">
       <PageHead title="Option Picks" sub={sub} />
-      <Note>{viewer ? "Backtest trades, not live trades. No orders are sent." : "Paper only: no orders are sent and no alerts."}</Note>
+      <Note>{viewer ? "Backtest trades, not live trades. No orders are sent." : <>This page is paper only: no orders are sent and no alerts. The same rules run as the <Link to="/straddle-bot?bot=op" className="text-amber-300 underline">Option Picks bot</Link> (paper by default; real orders only after its Live checklist and only when you switch them on).</>}</Note>
       {d.error && <Note tone="red">{viewer ? "The latest update is delayed. It retries automatically." : `Last update failed: ${d.error}`}</Note>}
       {s && d.backtest[s.key] && <RealData rows={d.backtest[s.key].realdata} notChecked={d.not_checked} viewer={viewer} />}
       {s && !viewer && (
         <div className="rounded-lg border border-line bg-panel2/60 px-3 py-2 text-[12px]">
-          <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name} <span className="font-mono text-[11px] font-normal text-slate-500">{s.code}</span></div>
-          <div className="text-slate-300">Sell the ATM put and ATM call (same strike, nearest to BTC futures) at the close of the 17:00 IST minute, filled {s.live_entry_ist} IST, at mark − max($0.10, 1%). Skip the day if the put mark is below $20 or BTC is up more than 2% since 17:31 IST yesterday. Each leg is bought back when its 1-minute mark high reaches 2× its sell price; the other leg stays open; otherwise both settle at 17:30 IST.</div>
+          <div className="font-semibold text-slate-100">Pick {s.pick} · {s.name} <span className="font-mono text-[11px] font-normal text-slate-500">{s.code}</span>
+            {s.recommended && <span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${s.recommended_active ? "bg-amber-500/20 text-amber-300" : "border border-amber-500/40 text-amber-300/80"}`} data-testid="opt-recommended">{s.recommended}{s.recommended_active ? "" : " (now set to fixed capital)"}</span>}</div>
+          <div className="text-slate-300">Sell the ATM put and ATM call (same strike, nearest to BTC futures) at the close of the 17:00 IST minute, filled {s.live_entry_ist} IST, at mark − max($0.10, 1%). Skip the day if the put mark is below $20 or BTC is up more than 2% since 17:31 IST yesterday. Each leg is bought back when its 1-minute mark high reaches 2× its sell price; the other leg stays open; otherwise both settle at 17:30 IST. {d.compounded ? "Size: compounded, each leg gets its share of the balance after the last closed trade." : "Size: fixed capital on every trade."}</div>
         </div>
       )}
       {d.is_admin && <Sizing d={d} reload={reload} />}

@@ -8,6 +8,13 @@ three can never disagree:
   stop           combined price (call + put) >= stop multiple x P, P = call fill + put fill
   expiry         in-the-money leg pays |settlement - strike|, the other leg expires worthless
 The replay of the owner's workbook must give $4,361.89 (mark, fixed) and $55,572.37 (mark, compounded): tests/test_straddle.py.
+
+The Option Picks bot (owner, 26 Nov 2026) uses the same maths with three differences, all carried by the day facts or the config:
+  leg_share 0.5  each leg is sized from half the equity (put capital + call capital = the starting capital)
+  per-leg stops  a day can have one leg stopped and the other settled: exit_spot_call / exit_spot_put give each leg's fee
+                 notional (the price at its stop, or the settlement), stopped_legs counts the legs bought back
+  fees           Option Picks books the taker rate on entry too (maker = taker in its day facts)
+Its replay must give $12,298.42 (fixed) and $77,107.84 (compounded, ★ Recommended) at $4,000 × 25x, 1 Jan 2024 – 25 Nov 2026.
 """
 import gzip
 import io
@@ -45,6 +52,10 @@ LIVE_EXTRA = [("mode", "Mode"), ("order_ids", "Order IDs"), ("fill_ts", "Fill ti
               ("entry_slip", "Entry slippage vs mark"), ("exit_slip", "Exit slippage vs mark"), ("liquidity_cap", "Liquidity cap applied"),
               ("size_reduced", "Size reduced"), ("leg_risk_cost", "Leg-risk cost ($)"), ("exchange_leverage", "Order leverage (x)"), ("margin_used", "Margin blocked ($)"),
               ("wallet_change", "Delta wallet change ($)"), ("settle_source", "Settlement source"), ("exit_note", "Exit note"), ("skip_reason", "Skip reason"), ("parity_note", "What the 1-minute rule would have done")]
+# the Option Picks bot's own columns (each leg has its own stop)
+OP_EXTRA = [("ref_price", "BTC futures at entry (strike reference)"), ("stop_call", "Call stop level"), ("stop_put", "Put stop level"),
+            ("call_exit", "Call exit"), ("call_stop_time", "Call stop time (IST)"), ("put_exit", "Put exit"), ("put_stop_time", "Put stop time (IST)"),
+            ("stopped_legs", "Legs stopped"), ("real", "Real trades at the fill (backtest)")]
 
 
 # ---------------- the rules ----------------
@@ -80,8 +91,10 @@ def pnl(t, lots, gst, lot=LOT):
     out_combined = t["exit_call"] + t["exit_put"]
     premium, cost = p * pos, out_combined * pos
     entry_fees = sum(leg_fee(t["maker"], t["cap"], t["spot"], t[k], pos, gst) for k in ("entry_call", "entry_put"))
-    # a stop pays the taker fee on both legs; at expiry only the leg with value pays the settlement fee (the other term is 0)
-    exit_fees = sum(leg_fee(t["taker"], t["cap"], t["exit_spot"], t[k], pos, gst) for k in ("exit_call", "exit_put"))
+    # a stop pays the taker fee on both legs; at expiry only the leg with value pays the settlement fee (the other term is 0).
+    # A leg with its own exit (Option Picks bot) pays on its own notional: the price at its stop, or the settlement.
+    xs = {"exit_call": t.get("exit_spot_call") or t["exit_spot"], "exit_put": t.get("exit_spot_put") or t["exit_spot"]}
+    exit_fees = sum(leg_fee(t["taker"], t["cap"], xs[k], t[k], pos, gst) for k in ("exit_call", "exit_put"))
     gross = premium - cost
     return {"p": p, "exit_combined": out_combined, "position": pos, "notional": t["spot"] * pos, "premium": premium, "cost": cost, "gross": gross,
             "entry_fees": entry_fees, "exit_fees": exit_fees, "fees": entry_fees + exit_fees, "net": gross - entry_fees - exit_fees,
@@ -90,10 +103,10 @@ def pnl(t, lots, gst, lot=LOT):
 
 def journal(days, cfg, sizing):
     """Full journal rows (COLUMNS) from raw day facts. sizing = 'fixed' or 'compounded'. Days with a skip_reason carry no money."""
-    start, lev, gst, mult = cfg["starting_capital"], cfg["leverage"], cfg["gst"], cfg["stop_multiple"]
+    start, lev, gst, mult, share = cfg["starting_capital"], cfg["leverage"], cfg["gst"], cfg["stop_multiple"], cfg.get("leg_share", 1.0)
     eq, peak, streak, rows = start, start, 0, []
     for d in sorted(days, key=lambda x: x["date"]):
-        base = {k: d.get(k) for k, _ in COLUMNS + LIVE_EXTRA if k in d}
+        base = {k: d.get(k) for k, _ in COLUMNS + LIVE_EXTRA + OP_EXTRA if k in d}
         base.update(date=d["date"], day=datetime.strptime(d["date"], "%Y-%m-%d").strftime("%a"), month=d["date"][:7])
         extra = d.get("leg_risk_cost") or 0.0          # live only: cost of buying back a leg that filled alone or unevenly
         if d.get("skip_reason") or d.get("entry_call") is None:
@@ -102,14 +115,14 @@ def journal(days, cfg, sizing):
                          "skip_net": -extra if extra else None})
             continue
         sizing_eq = start if sizing == "fixed" else eq
-        lots = d["lots"] if d.get("lots") is not None else lots_for(sizing_eq, lev, d["spot"])
+        lots = d["lots"] if d.get("lots") is not None else lots_for(sizing_eq * share, lev, d["spot"])
         m = pnl(d, lots, gst)
         m["net"] -= extra
         eq += m["net"]
         peak = max(peak, eq)
         win = m["net"] > 0
         streak = 0 if win else streak + 1
-        rows.append({**base, **m, "stop_level": stop_level(m["p"], d.get("stop_multiple") or mult), "sizing_equity": sizing_eq, "lots": lots,
+        rows.append({**base, **m, "stop_level": None if d.get("stop_call") is not None else stop_level(m["p"], d.get("stop_multiple") or mult), "sizing_equity": sizing_eq, "lots": lots,
                      "net_pct": m["net"] / sizing_eq if sizing_eq else None, "equity": eq, "peak": peak, "dd": eq - peak,
                      "dd_pct": (eq - peak) / peak if peak else 0, "result": "Win" if win else "Loss", "streak": streak})
     return rows
@@ -117,6 +130,11 @@ def journal(days, cfg, sizing):
 
 def _avg(xs):
     return sum(xs) / len(xs) if xs else None
+
+
+def stops_of(r):
+    """Stop exits of one row: legs stopped (Option Picks bot) or 1 for a straddle stop."""
+    return r["stopped_legs"] if r.get("stopped_legs") is not None else (1 if r.get("exit_reason") == "Stop" else 0)
 
 
 def metrics(rows, start, first=None, last=None):
@@ -138,7 +156,7 @@ def metrics(rows, start, first=None, last=None):
     best = max(tr, key=lambda r: r["net"]) if tr else None
     return {
         "days": len(rows), "trades": len(tr), "wins": len(wins), "losses": len(losses), "win_ratio": len(wins) / len(tr) if tr else None,
-        "expiry_exits": sum(1 for r in tr if r["exit_reason"] == "Expiry"), "stop_exits": len(stops), "skipped": len(rows) - len(tr),
+        "expiry_exits": sum(1 for r in tr if r["exit_reason"] == "Expiry"), "stop_exits": sum(stops_of(r) for r in tr), "skipped": len(rows) - len(tr),
         "premium": sum(r["premium"] for r in tr), "gross": sum(r["gross"] for r in tr), "fees": sum(r["fees"] for r in tr), "net": sum(nets) + side,
         "final_equity": final, "total_return": (final - start) / start if start else None,
         "cagr": (final / start) ** (365 / days) - 1 if tr and days > 0 and final > 0 and start > 0 else None,
@@ -161,7 +179,7 @@ def monthly(rows, start):
         tr = [r for r in rs if r.get("lots")]
         net = sum(r["net"] for r in tr)
         out.append({"month": m, "days": len(rs), "trades": len(tr), "before": eq, "net": net, "after": eq + net,
-                    "win_ratio": sum(1 for r in tr if r["net"] > 0) / len(tr) if tr else None, "stops": sum(1 for r in tr if r["exit_reason"] == "Stop")})
+                    "win_ratio": sum(1 for r in tr if r["net"] > 0) / len(tr) if tr else None, "stops": sum(stops_of(r) for r in tr)})
         eq += net
     return out
 
@@ -242,3 +260,30 @@ def backtest(data, key):
     """Journal rows of one of the four workbook variants, at the workbook's own inputs."""
     basis, sizing = VARIANTS[key]
     return journal(data[basis], data["inputs"], sizing)
+
+
+def op_days(raw, fee_rates):
+    """Option Picks pick 5 trade facts (history file + the server's own backtest days) -> this module's day facts.
+    fee_rates(leg, day) -> (taker, cap) is optpicks.fee_rates (Delta's fee record, or the dated fallback)."""
+    from datetime import date as _date
+    out = []
+    for t in sorted(raw, key=lambda r: str(r["day"])):
+        day = t["day"] if isinstance(t["day"], str) else t["day"].isoformat()
+        if t.get("skip") or not t.get("legs"):
+            out.append({"date": day, "skip_reason": t.get("skip") or "no trade"})
+            continue
+        legs = {("call" if (l.get("type") or l["sym"][0]) == "C" else "put"): l for l in t["legs"]}
+        c, p = legs["call"], legs["put"]
+        taker, cap = fee_rates({"taker": p.get("taker"), "cap": p.get("cap")}, _date.fromisoformat(day))
+        stopped = [n for n in ("call", "put") if legs[n].get("exit") == "Stop"]
+        ref, settle = float(t["price"]), float(t["settle"])
+        times = [legs[n].get("stop_ist") for n in stopped if legs[n].get("stop_ist")]
+        out.append({"date": day, "spot": ref, "ref_price": ref, "strike": float(p["k"]), "call": c["sym"], "put": p["sym"],
+                    "entry_call": float(c["fill"]), "entry_put": float(p["fill"]), "exit_call": float(c["exit_price"]), "exit_put": float(p["exit_price"]),
+                    "exit_reason": "Stop" if len(stopped) == 2 else "Stop+Expiry" if stopped else "Expiry",
+                    "exit_time": max(times) if len(stopped) == 2 and times else "17:30", "exit_spot": settle,
+                    "exit_spot_call": ref if "call" in stopped else settle, "exit_spot_put": ref if "put" in stopped else settle,
+                    "maker": taker, "taker": taker, "cap": cap, "stop_call": c.get("stop"), "stop_put": p.get("stop"),
+                    "call_exit": c.get("exit"), "call_stop_time": c.get("stop_ist"), "put_exit": p.get("exit"), "put_stop_time": p.get("stop_ist"),
+                    "stopped_legs": len(stopped), "real": bool(t.get("real")), "settle_source": "Delta settlement index"})
+    return out

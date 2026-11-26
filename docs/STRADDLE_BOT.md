@@ -78,6 +78,34 @@ The replay test proves it: the workbook's $4,361.89 (mark, fixed) and $55,572.37
 
 Both run on the bot's thread, never between 16:45 and 17:40 IST. Each step shows what it found and how long it took.
 
+## 4c. Option Picks bot (26 Nov 2026, ★ Recommended)
+
+The same page has a second bot: **Option Picks bot**, the owner's ★ Recommended setup — Option Picks pick 5 with compounded
+capital (`?bot=op`; the buttons at the top switch bots). It runs on the same engine, thread, guards, rehearsals and Live gate,
+with its own settings, state, journal, events, checks and change log (collections `opbot_*`; the Straddle Bot keeps `straddle_*`).
+
+| | Straddle Bot | Option Picks bot |
+|---|---|---|
+| Pre-flight / entry | 16:55 / 17:00:00 | 16:56 / 17:01:00 (the close of the 17:00 minute, as its backtest) |
+| Strike | nearest the BTC index | nearest BTCUSD futures (last traded price) |
+| Skip the day | — | ATM put mark below $20, or BTC futures up more than 2% since 17:31 IST yesterday |
+| Size per leg | equity × leverage ÷ BTC | half the equity × leverage ÷ BTC futures (put capital + call capital) |
+| Default capital | $1,000 × 25, fixed | $4,000 ($2,000 a leg) × 25, **compounded** |
+| Stop | call + put ≥ 2 × P, both legs bought back | each leg on its own when its mark ≥ 2 × its sell price; the other leg stays open to expiry. Default check: every price update (the backtest uses the 1-minute mark high) |
+| Backup stop on Delta | 3 × P on each leg | 3 × that leg's sell price |
+| Backtest | the owner's workbook | Option Picks pick 5's own data (Delta's real prices from 1 Jan 2024, then the server's daily backtest), re-sized at the bot's capital and leverage |
+
+The bot's backtest replay equals Option Picks to the cent: $12,298.42 fixed and $77,107.84 compounded at $4,000 × 25x,
+1 Jan 2024 – 25 Nov 2026 (`tests/test_opbot.py` checks it against Option Picks' own pricing). Its Testnet round trip also buys the
+call back on its own first, to exercise the per-leg stop path. **Only one bot may be on Testnet or Live at a time**: both sell the
+same contracts on the same account. Live needs the bot's own 30 paper days, its own passed Live connection test and Testnet
+round trip, and typed LIVE; real money stays off until the owner switches it on.
+
+The Option Picks page itself stays paper (no orders, no alerts). Its size setting now has **Capital: Compounded ★ Recommended**
+(default) or Fixed: compounded prices every backtest and paper trade in entry order, each leg sized from its share of the balance
+after the previous closed trade; the last-13-months row starts again from the starting capital; "Paper vs backtest" prices the
+backtest trade of a day at the paper trade's own size.
+
 ## 5. Deployment
 
 The bot ships with the site: push to `main`, CI runs the tests, the server updates itself.
@@ -96,5 +124,5 @@ A separate watchdog task alerts when the bot's heartbeat is missing in the minut
 ## 6. Tests
 
 ```
-cd backend && MONGO_URL=mongodb://localhost:27017 DB_NAME=test_db python -m pytest -q -p no:anyio tests/test_straddle.py tests/test_straddle_hardening.py
+cd backend && MONGO_URL=mongodb://localhost:27017 DB_NAME=test_db python -m pytest -q -p no:anyio tests/test_straddle.py tests/test_straddle_hardening.py tests/test_opbot.py
 ```

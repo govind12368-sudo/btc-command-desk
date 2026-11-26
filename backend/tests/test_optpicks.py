@@ -17,7 +17,8 @@ from mongomock_motor import AsyncMongoMockClient  # noqa: E402
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "test_db")
 DAY = date(2026, 11, 24)
-SZ = {"put_capital": 2000.0, "put_leverage": 25.0, "call_capital": 2000.0, "call_leverage": 25.0}
+SZ = {"put_capital": 2000.0, "put_leverage": 25.0, "call_capital": 2000.0, "call_leverage": 25.0, "compound": 0.0}       # fixed capital
+SZC = {**SZ, "compound": 1.0}                                                                                                 # ★ Recommended: compounded
 
 
 @pytest.fixture()
@@ -48,9 +49,10 @@ def test_setup(op):
     st = op.settle_t(DAY)
     assert datetime.fromtimestamp(st, op.IST).strftime("%H:%M") == "17:30"
     assert st - op.live_entry_t("SSTR", DAY) == 1740                         # filled at 17:01 = close of the 17:00 minute
-    assert op.ENABLED == ["SSTR"] and op.SIZING_DEFAULT == SZ
+    assert op.ENABLED == ["SSTR"] and op.SIZING_DEFAULT == SZC and op.RECOMMENDED["key"] == "SSTR" and op.RECOMMENDED["compound"] is True
     assert op.leg_qty("P", 61390.5, SZ) == pytest.approx(0.814)               # owner's example: $50,000 / 61,390.5 -> 0.814 BTC
-    assert op.capital_for("SSTR", SZ) == 4000.0 and op.size_label(SZ) == "$2,000 × 25x per leg (put + call)"
+    assert op.capital_for("SSTR", SZ) == 4000.0 and op.size_label(SZ) == "$2,000 × 25x per leg (put + call) · fixed"
+    assert op.size_label(SZC).endswith("· compounded")
 
 
 def straddle_day(op, call_high=None, put_mark=100.0, fut=60020.0, fut_prev=60500.0, settle=59000.0):
@@ -115,6 +117,31 @@ def test_stats_from_capital(op):
     assert s["trades"] == 3 and s["max_dd"] == 300 and s["lowest_balance"] == 3800 and s["return"] == pytest.approx(-150 / 4000) and s["max_dd_pct"] == pytest.approx(300 / 4000)
     tb = op.tables([r("2025-12-30", 100), r("2026-01-02", -300)], 4000.0)
     assert [y["year"] for y in tb["yearly"]] == ["2025", "2026", "Total till date"]
+
+
+def test_compounded_sizing_from_equity(op):
+    """Compounded: each trade's leg capital = its share of the equity after the previous closed trade (the workbook's OP Compounded sheet)."""
+    t, _ = op.build_trade("SSTR", straddle_day(op))                                  # both legs settle: a winner
+    t2 = {**t, "day": "2026-11-25", "entry_ist": "2026-11-25 17:00"}
+    fixed = op.price_seq("SSTR", [t, t2], SZ)
+    comp = op.price_seq("SSTR", [t2, t], SZC)                                        # order of the input does not matter
+    assert [r["day"] for r in comp] == [t["day"].isoformat() if hasattr(t["day"], "isoformat") else t["day"], "2026-11-25"]
+    assert comp[0]["net"] == pytest.approx(fixed[0]["net"]) and comp[0]["capital"] == 4000.0      # the first trade uses the starting capital
+    eq = 4000.0 + comp[0]["net"]
+    assert comp[0]["equity"] == pytest.approx(eq, abs=0.01) and comp[1]["capital"] == pytest.approx(eq, abs=0.01)
+    q2 = op.leg_qty("P", t["price"], {**SZ, "put_capital": eq / 2})
+    assert comp[1]["legs"][0]["qty"] == pytest.approx(q2) and comp[1]["legs"][1]["qty"] == pytest.approx(q2)
+    assert fixed[1]["capital"] == 4000.0 and fixed[1]["equity"] == pytest.approx(4000 + 2 * fixed[0]["net"], abs=0.02)
+    # a loss shrinks the next size; equity at or below zero sizes nothing
+    assert op.scaled("SSTR", SZC, 2000.0)["put_capital"] == 1000.0 and op.scaled("SSTR", SZC, -5.0)["call_capital"] == 0.0
+    assert op.scaled("SSTR", SZ, 2000.0)["put_capital"] == 2000.0
+    # yearly table: each year starts from the equity it began with
+    r = lambda d, net, eq: {"day": d, "entry_ist": d + " 17:00", "net": net, "gross": net + 1, "fees": 1, "equity": eq}
+    tb = op.tables([r("2025-12-30", 1000, 5000), r("2026-01-02", -500, 4500)], 4000.0, True)
+    y25, y26, tot = tb["yearly"]
+    assert y25["start_equity"] == 4000 and y26["start_equity"] == 5000 and y26["return"] == pytest.approx(-0.1) and tot["equity"] == 4500
+    s = op.stats([r("2025-12-30", 1000, 5000), r("2026-01-02", -500, 4500)], 4000.0, True)
+    assert s["max_dd_pct"] == pytest.approx(0.1) and s["final_equity"] == 4500
 
 
 def test_resize_everything_and_skips_left_out(op, monkeypatch):
@@ -192,4 +219,34 @@ def test_live_paper_engine(op, monkeypatch):
         q = 0.833
         assert lt["qty"] == q and lt["gross"] == pytest.approx((99.0 - 100.0) * q + (79.2 - 160.0) * q)
         assert d["live_stats"]["SSTR"]["trades"] == 1 and d["live_stats"]["SSTR"]["capital"] == 4000.0
+    run(go())
+
+
+def test_paper_trades_compound_and_the_comparison_is_like_for_like(op, monkeypatch):
+    """★ Recommended (compounded): each paper trade is sized from the paper balance after the previous one, and 'Paper vs backtest'
+    prices the backtest trade of that day at the paper trade's own size (the compounded backtest has grown far larger)."""
+    t, _ = op.build_trade("SSTR", straddle_day(op, settle=60010.0))                     # both legs settle near the strike: a winner
+    days = ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25"]
+    monkeypatch.setattr(op, "history", lambda: {"trades": {"SSTR": [{**t, "day": d, "entry_ist": f"{d} 17:00"} for d in days]}})
+
+    async def go():
+        for d in days[-2:]:
+            await op.db.opt_live.insert_one({**t, "_id": f"SSTR-{d}", "key": "SSTR", "day": d, "status": "CLOSED", "created": f"{d}T11:31:00+00:00",
+                                             "entry_ist": f"{d} 17:01:00"})
+        await op.compute()
+        d = await op.dashboard()
+        assert d["compounded"] and d["size_label"].endswith("· compounded")
+        live = sorted(d["live"], key=lambda r: r["day"])
+        assert live[0]["capital"] == 4000.0 and live[1]["capital"] == pytest.approx(4000 + live[0]["net"], abs=0.01)
+        assert live[1]["equity"] == pytest.approx(4000 + live[0]["net"] + live[1]["net"], abs=0.02)
+        assert d["live_stats"]["SSTR"]["final_equity"] == pytest.approx(live[1]["equity"], abs=0.01)
+        bt = {r["day"]: r for r in d["backtest"]["SSTR"]["trades"]}
+        assert bt["2026-11-25"]["capital"] > live[1]["capital"] and bt["2026-11-25"]["net"] > live[1]["net"]
+        c = next(c for c in d["compare"] if c["day"] == "2026-11-25")
+        assert c["bt_status"] == "TAKEN" and c["bt_net"] == pytest.approx(live[1]["net"])     # same facts, same size
+        csv_text = op.trades_csv("SSTR")
+        assert "Capital used ($)" in csv_text.splitlines()[0] and "Equity after ($)" in csv_text.splitlines()[0]
+        await op.set_sizing({"compound": False}, "owner")
+        d = await op.dashboard()
+        assert not d["compounded"] and all(r["capital"] == 4000.0 for r in d["backtest"]["SSTR"]["trades"])
     run(go())

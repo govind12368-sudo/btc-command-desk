@@ -459,8 +459,8 @@ def test_server_straddle_is_admin_only(monkeypatch):
     role = {"r": "user"}
     server.app.dependency_overrides[current_user] = lambda: {"id": "u1", "email": "x@example.com", "role": role["r"]}
 
-    async def dash():
-        return {"mode": "PAPER"}
+    async def dash(bot="sb"):
+        return {"mode": "PAPER", "bot": bot}
     monkeypatch.setattr(server.straddle, "dashboard", dash)
     try:
         c = TestClient(server.app, raise_server_exceptions=False)
@@ -469,8 +469,12 @@ def test_server_straddle_is_admin_only(monkeypatch):
                                    ("post", "/api/straddle/control", {"action": "kill"}), ("post", "/api/straddle/backtest/import", None)):
             r = getattr(c, method)(path, json=body) if body is not None else getattr(c, method)(path)
             assert r.status_code == 403, path
+        assert c.get("/api/straddle?bot=op").status_code == 403
         role["r"] = "admin"
-        assert c.get("/api/straddle").json() == {"mode": "PAPER"}
+        assert c.get("/api/straddle").json() == {"mode": "PAPER", "bot": "sb"}
+        assert c.get("/api/straddle?bot=op").json() == {"mode": "PAPER", "bot": "op"}                 # the Option Picks bot
+        assert c.get("/api/straddle?bot=other").status_code == 422
         assert c.get("/api/straddle/journal?src=nope").status_code == 400
+        assert c.post("/api/straddle/backtest/import?bot=op", content=b"x").status_code == 400
     finally:
         server.app.dependency_overrides.clear()

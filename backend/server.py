@@ -1088,6 +1088,7 @@ class OptSizingIn(BaseModel):
     put_leverage: float = Field(ge=1, le=100)
     call_capital: float = Field(gt=0, le=1_000_000)
     call_leverage: float = Field(ge=1, le=100)
+    compound: Optional[bool] = None             # True = compounded capital (★ Recommended), False = fixed; None = unchanged
 
 
 @api.post("/option-picks/sizing")
@@ -1183,90 +1184,97 @@ class StraddleCheckIn(BaseModel):
     mode: Literal["TESTNET", "LIVE"] = "TESTNET"
 
 
+BotKey = Literal["sb", "op"]        # sb = Straddle Bot rules, op = Option Picks bot (Option Picks pick 5 rules, ★ Recommended compounded)
+
+
 @api.get("/straddle")
-async def straddle_get(u=Depends(admin_user)):
-    """Short ATM BTC straddle bot: state, today's trade, backtest vs live numbers, monthly tables and curves."""
-    return await straddle.dashboard()
+async def straddle_get(bot: BotKey = "sb", u=Depends(admin_user)):
+    """Straddle bots (Straddle Bot / Option Picks bot): state, today's trade, backtest vs live numbers, monthly tables and curves."""
+    return await straddle.dashboard(bot)
 
 
 @api.get("/straddle/backtest")
-async def straddle_backtest(u=Depends(admin_user)):
-    return await straddle.backtest_view()
+async def straddle_backtest(bot: BotKey = "sb", u=Depends(admin_user)):
+    return await straddle.backtest_view(bot)
 
 
 @api.get("/straddle/journal")
-async def straddle_journal(src: str = "mark_fixed", offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), u=Depends(admin_user)):
+async def straddle_journal(src: str = "mark_fixed", bot: BotKey = "sb", offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), u=Depends(admin_user)):
     try:
-        return await straddle.journal_page(src, offset, limit)
+        return await straddle.journal_page(src, offset, limit, bot=bot)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @api.get("/straddle/journal.csv")
-async def straddle_journal_csv(src: str = "mark_fixed", u=Depends(admin_user)):
+async def straddle_journal_csv(src: str = "mark_fixed", bot: BotKey = "sb", u=Depends(admin_user)):
     try:
-        text = await straddle.journal_csv(src)
+        text = await straddle.journal_csv(src, bot)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return PlainTextResponse(text, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="straddle_{src.lower()}_journal.csv"'})
+    name = "straddle" if bot == "sb" else "option_picks_bot"
+    return PlainTextResponse(text, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}_{src.lower()}_journal.csv"'})
 
 
 @api.post("/straddle/settings")
-async def straddle_settings(body: StraddleSettingsIn, request: Request, u=Depends(admin_user)):
+async def straddle_settings(body: StraddleSettingsIn, request: Request, bot: BotKey = "sb", u=Depends(admin_user)):
     try:
-        await straddle.save_settings(body.patch, u["email"])
+        await straddle.save_settings(body.patch, u["email"], bot)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    await SEC.log_event("straddle_settings", request, u["email"], detail=", ".join(sorted(body.patch))[:200])
-    return await straddle.dashboard()
+    await SEC.log_event("straddle_settings", request, u["email"], detail=f"{bot}: " + ", ".join(sorted(body.patch))[:200])
+    return await straddle.dashboard(bot)
 
 
 @api.post("/straddle/mode")
-async def straddle_mode(body: StraddleModeIn, request: Request, u=Depends(admin_user)):
+async def straddle_mode(body: StraddleModeIn, request: Request, bot: BotKey = "sb", u=Depends(admin_user)):
     try:
-        await straddle.ENGINE.set_mode(body.mode, body.confirm, u["email"])
+        await straddle.ENGINES[bot].set_mode(body.mode, body.confirm, u["email"])
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(400, f"Delta did not accept the {body.mode} key: {e}")
-    await SEC.log_event("straddle_mode", request, u["email"], detail=body.mode)
-    return await straddle.dashboard()
+    await SEC.log_event("straddle_mode", request, u["email"], detail=f"{bot}: {body.mode}")
+    return await straddle.dashboard(bot)
 
 
 @api.post("/straddle/control")
-async def straddle_control(body: StraddleControlIn, request: Request, u=Depends(admin_user)):
+async def straddle_control(body: StraddleControlIn, request: Request, bot: BotKey = "sb", u=Depends(admin_user)):
+    name, cfg = straddle.BOTS[bot]["name"], {"_bot": bot}
     if body.action == "kill":
-        flat = await straddle.ENGINE.kill_switch(u["email"])
+        flat = await straddle.ENGINES[bot].kill_switch(u["email"])
         if not flat:
             raise HTTPException(500, "Kill switch sent, but the position is not confirmed flat yet. Check Delta now.")
     elif body.action == "clear_halt":
-        await straddle.set_state(halted=False, halt_reason=None)
-        await straddle.event(f"Trading halt cleared by {u['email']}", "warn")
+        await straddle.set_state(bot, halted=False, halt_reason=None)
+        await straddle.event(f"Trading halt cleared by {u['email']}", "warn", None, None, cfg)
     else:
-        await straddle.set_state(enabled=body.action == "enable")
-        await straddle.event(f"Bot switched {'on' if body.action == 'enable' else 'off'} by {u['email']}", "warn")
-    await SEC.log_event("straddle_control", request, u["email"], detail=body.action)
-    return await straddle.dashboard()
+        await straddle.set_state(bot, enabled=body.action == "enable")
+        await straddle.event(f"{name} switched {'on' if body.action == 'enable' else 'off'} by {u['email']}", "warn", None, None, cfg)
+    await SEC.log_event("straddle_control", request, u["email"], detail=f"{bot}: {body.action}")
+    return await straddle.dashboard(bot)
 
 
 @api.post("/straddle/check")
-async def straddle_check(body: StraddleCheckIn, request: Request, u=Depends(admin_user)):
+async def straddle_check(body: StraddleCheckIn, request: Request, bot: BotKey = "sb", u=Depends(admin_user)):
     """Rehearsals. connection: key, clock, wallet, contracts, prices, leverage and one resting order that cannot fill, cancelled at once.
-    round_trip: Testnet only – the bot's own entry, backup stops and exit with 1 lot."""
+    round_trip: Testnet only – the bot's own entry, backup stops and exit with 1 lot (the Option Picks bot also exits one leg on its own)."""
     try:
         if body.kind == "round_trip":
-            rec = await straddle.in_bot(straddle.round_trip(u["email"]))
+            rec = await straddle.in_bot(straddle.round_trip(u["email"], bot))
         else:
-            rec = await straddle.in_bot(straddle.connection_test(body.mode, u["email"]))
+            rec = await straddle.in_bot(straddle.connection_test(body.mode, u["email"], bot))
     except ValueError as e:
         raise HTTPException(400, str(e))
-    await SEC.log_event("straddle_check", request, u["email"], detail=f"{body.kind} {body.mode} {'ok' if rec['ok'] else 'failed'}")
-    return {"check": rec, "dashboard": await straddle.dashboard()}
+    await SEC.log_event("straddle_check", request, u["email"], detail=f"{bot}: {body.kind} {body.mode} {'ok' if rec['ok'] else 'failed'}")
+    return {"check": rec, "dashboard": await straddle.dashboard(bot)}
 
 
 @api.post("/straddle/backtest/import")
-async def straddle_import(request: Request, u=Depends(admin_user)):
+async def straddle_import(request: Request, bot: BotKey = "sb", u=Depends(admin_user)):
     """Body = the .xlsx file itself (sheets J_Mark_Fixed and J_Trade_Fixed give the day facts; the rest is re-computed)."""
+    if bot != "sb":
+        raise HTTPException(400, "The Option Picks bot's backtest comes from Option Picks' own data; there is no workbook to import")
     blob = await request.body()
     if not blob or len(blob) > 20_000_000:
         raise HTTPException(400, "Send one Excel file of at most 20 MB")
