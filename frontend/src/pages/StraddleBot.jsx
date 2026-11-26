@@ -30,7 +30,8 @@ const METRICS = [
 
 const SETTINGS = [
   ["Size", [["starting_capital", "Starting capital ($)"], ["leverage", "Leverage (× equity per leg)", "Notional of each leg = this × equity"], ["sizing_mode", "Sizing", "fixed = starting capital every day · compounded = current equity"],
-    ["max_lots", "Maximum lots per leg"], ["live_small_size", "Live: start small (0 or 1)", "1 = Live mode uses leverage 5 at most"]]],
+    ["max_lots", "Maximum lots per leg"], ["live_small_size", "Live: start small (0 or 1)", "1 = Live mode uses leverage 5 at most"],
+    ["exchange_leverage", "Order leverage on Delta (×)", "Sets the margin Delta blocks. The bot lowers it by itself when premiums are high, so the backup stop comes before a liquidation"]]],
   ["Stop", [["stop_multiple", "Stop multiple (× P)"], ["stop_mode", "Stop check", "parity = at each 1-minute close, like the backtest · tick = every price update"],
     ["disaster_multiple", "Backup stop on the exchange (× P)", "Each leg, in case this server stops"]]],
   ["Slippage", [["max_entry_slip", "Max entry slippage (%)", "Never sells below mark minus this"], ["max_exit_slip", "Max stop-exit slippage (%)", "First 5 seconds; market orders after"],
@@ -72,7 +73,7 @@ function LiveTrade({ d }) {
           <Fig label="Unrealised P&L" value={signedUsd(v.unrealised)} cls={tone(v.unrealised)} sub="before fees" />
           <Fig label="Break-evens" value={`${n(v.be_low, 0)} – ${n(v.be_high, 0)}`} sub={`BTC index now ${n(v.spot, 1)}`} />
           <Fig label="Time to expiry" value={cd} sub="17:30 IST" />
-          <Fig label="Margin used (estimate)" value={usd(v.margin_used)} sub={v.feed_ok ? "price feed connected" : "price feed reconnecting"} cls={v.feed_ok ? "" : "text-amber-300"} />
+          <Fig label="Margin blocked" value={usd(v.margin_used)} sub={v.feed_ok ? "price feed connected" : "price feed reconnecting"} cls={v.feed_ok ? "" : "text-amber-300"} />
         </div>
       </Card>
     );
@@ -108,7 +109,10 @@ function Controls({ d, act }) {
           <ul className="mb-2 space-y-0.5 text-[12px] text-slate-300">
             <li>1. Paper mode ran for {r.paper_days_needed} trading days: {r.paper_days >= r.paper_days_needed ? "yes" : `no (${r.paper_days} so far)`}</li>
             <li>2. Live API key saved (Auto-Trade page, trading permission only, no withdrawal, IP whitelisted): {r.live_key ? "yes" : "no"}</li>
-            <li>3. Live starts at leverage 5 at most until you set "Live: start small" to 0.</li>
+            <li>3. Live connection test passed (Rehearsal, below): {r.conn_ok_LIVE ? `yes, ${ist(r.conn_ok_LIVE)}` : "no"}</li>
+            <li>4. Testnet round trip passed (Rehearsal, below): {r.drill_ok_TESTNET ? `yes, ${ist(r.drill_ok_TESTNET)}` : r.drill_waived ? "waived: Testnet had no usable market" : "no"}</li>
+            <li>5. Delta's own automation and manual trades on the daily BTC options are stopped. The bot skips the day if it finds another position there.</li>
+            <li>6. Live starts at leverage 5 at most until you set "Live: start small" to 0. For the first live days, also set Maximum lots to 1.</li>
           </ul>
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Type LIVE to place real orders" hint="Real money."><Input value={word} onChange={(e) => setWord(e.target.value)} data-testid="straddle-live-word" /></Field>
@@ -116,6 +120,51 @@ function Controls({ d, act }) {
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+function Rehearsal({ d, setPushed }) {
+  const [busy, setBusy] = useState(null);
+  const r = d.ready;
+  const go = async (kind, mode, label) => {
+    setBusy(label);
+    try {
+      const res = await api.post("/straddle/check", { kind, mode }, { timeout: 120000 });
+      setPushed(res.data.dashboard);
+      (res.data.check.ok ? toast.success : toast.error)(res.data.check.ok ? `${label}: passed` : `${label}: failed. See the steps below.`);
+    } catch (e) { toast.error(errText(e)); } finally { setBusy(null); }
+  };
+  const off = !!busy || r.quiet;
+  return (
+    <Card title="Rehearsal" sub="Run these before real money. They use the bot's own code on Delta's real API, outside the 17:00 schedule." testid="straddle-rehearsal">
+      <div className="flex flex-wrap items-center gap-2">
+        <Btn tone="ghost" disabled={off || !r.testnet_key} onClick={() => go("connection", "TESTNET", "Testnet connection test")} data-testid="straddle-check-conn-testnet">Testnet connection test</Btn>
+        <Btn tone="ghost" disabled={off || !r.testnet_key} onClick={() => go("round_trip", "TESTNET", "Testnet round trip")} data-testid="straddle-check-drill">Testnet round trip (1 lot)</Btn>
+        <Btn tone="ghost" disabled={off || !r.live_key} onClick={() => go("connection", "LIVE", "Live connection test")} data-testid="straddle-check-conn-live">Live connection test (no trade)</Btn>
+        {busy && <span className="text-[12px] text-amber-300">{busy} is running, up to a minute…</span>}
+      </div>
+      <ul className="mt-2 space-y-0.5 text-[11.5px] text-slate-400">
+        <li><b className="text-slate-300">Connection test:</b> key, clock, wallet, today's contracts, prices, order leverage, and one order far above the market that is cancelled at once. It cannot fill.</li>
+        <li><b className="text-slate-300">Testnet round trip:</b> on Delta's practice exchange, sells 1 lot of each leg, checks the backup stops and the margin, buys both back, checks nothing is left.</li>
+        {r.quiet && <li className="text-amber-300">Not available between 16:45 and 17:40 IST: the bot is trading then.</li>}
+        {!r.testnet_key && <li className="text-amber-300">No Testnet key is saved (Auto-Trade page).</li>}
+        {!r.live_key && <li>No Live key is saved yet (Auto-Trade page). The Live test needs it.</li>}
+      </ul>
+      {d.checks.map((c, i) => (
+        <div key={i} className="mt-3 rounded-sm border border-line" data-testid="straddle-check-result">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel2 px-2 py-1 text-[12px]">
+            <span className="text-slate-200">{c.kind === "connection" ? "Connection test" : "Round trip"} · {MODE_NAME[c.mode]} · {ist(c.at)}</span>
+            <Chip status={c.ok ? "PASS" : c.waived ? "WARN" : "FAIL"} label={c.ok ? "PASSED" : c.waived ? "NO TESTNET MARKET" : "FAILED"} />
+          </div>
+          <table className="desk-table"><tbody>
+            {c.steps.map((x, j) => (
+              <tr key={j}><td className={`whitespace-nowrap font-semibold ${x.ok ? "text-teal-300" : "text-red-300"}`}>{x.ok ? "OK" : "FAILED"}</td>
+                <td className="whitespace-nowrap text-slate-200">{x.name}</td><td className="text-slate-300">{x.detail}</td><td className="num text-slate-500">{n(x.ms, 0)} ms</td></tr>
+            ))}
+          </tbody></table>
+        </div>
+      ))}
     </Card>
   );
 }
@@ -326,12 +375,14 @@ export default function StraddleBot() {
         { label: "Win ratio", value: m.trades ? pc(m.win_ratio, 0) : "—", sub: m.trades ? `break-even ${pc(m.breakeven_win_ratio, 0)}` : "after the first trades" },
         { label: "Risk : reward", value: m.risk_reward == null ? "—" : `1 : ${n(m.risk_reward, 2)}`, sub: "avg win ÷ avg loss" },
         { label: "Entry slippage", value: d.live.avg_entry_slip == null ? "—" : pc(d.live.avg_entry_slip, 2), sub: `limit ${n(s.max_entry_slip, 1)}% vs mark` },
-        { label: "Server clock", value: d.drift_ms == null ? "not checked" : `${n(Math.abs(d.drift_ms), 0)} ms off`, sub: "checked at 16:55 IST · limit 100 ms", cls: d.drift_ms != null && Math.abs(d.drift_ms) > 100 ? "text-red-300" : "" },
+        { label: "Server clock", value: d.drift_ms == null ? "not checked" : `${n(Math.abs(d.drift_ms), 0)} ms off`, sub: d.drift_source || "checked at 16:55 IST · limit 100 ms", cls: d.drift_ms != null && Math.abs(d.drift_ms) > 100 ? "text-red-300" : "" },
+        { label: "Bot loop delay", value: `${n(d.lag_ms, 0)} ms`, sub: d.own_thread ? "worst today · own thread" : "worst today", cls: d.lag_ms > 250 ? "text-amber-300" : "" },
       ]} />
       <Tabs items={[["live", "Live"], ["compare", "Backtest vs live"], ["monthly", "Monthly"], ["journal", "Journals"], ["settings", "Settings"]]} value={tab} onChange={setTab} testid="straddle-tab" />
       {tab === "live" && <>
         <LiveTrade d={d} />
         <Controls d={d} act={act} />
+        <Rehearsal d={d} setPushed={setPushed} />
         <Card title="Event log" sub="Every decision: pre-flight, entry, size cuts, stop, expiry, skips and why, halts, errors." testid="straddle-events" pad={false}>
           {d.events.length ? <div className="overflow-x-auto scroll-thin"><table className="desk-table"><tbody>
             {d.events.map((e, i) => <tr key={i}><td className="whitespace-nowrap font-mono text-slate-400">{ist(e.at)}</td><td className={e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-200"}>{e.text}</td></tr>)}

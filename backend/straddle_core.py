@@ -43,7 +43,8 @@ COLUMNS = [("date", "Date"), ("day", "Day"), ("spot", "BTC spot @17:00 IST (inde
            ("dd_pct", "Drawdown from peak (%)"), ("result", "Result"), ("exit_over_p", "Exit ÷ P"), ("streak", "Losing streak"), ("month", "Month")]
 LIVE_EXTRA = [("mode", "Mode"), ("order_ids", "Order IDs"), ("fill_ts", "Fill timestamps (ms)"), ("latency_ms", "Order latency (ms)"),
               ("entry_slip", "Entry slippage vs mark"), ("exit_slip", "Exit slippage vs mark"), ("liquidity_cap", "Liquidity cap applied"),
-              ("size_reduced", "Size reduced"), ("leg_risk_cost", "Leg-risk cost ($)"), ("skip_reason", "Skip reason"), ("parity_note", "What the 1-minute rule would have done")]
+              ("size_reduced", "Size reduced"), ("leg_risk_cost", "Leg-risk cost ($)"), ("exchange_leverage", "Order leverage (x)"), ("margin_used", "Margin blocked ($)"),
+              ("wallet_change", "Delta wallet change ($)"), ("settle_source", "Settlement source"), ("exit_note", "Exit note"), ("skip_reason", "Skip reason"), ("parity_note", "What the 1-minute rule would have done")]
 
 
 # ---------------- the rules ----------------

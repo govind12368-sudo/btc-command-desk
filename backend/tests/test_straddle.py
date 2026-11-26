@@ -99,6 +99,7 @@ def env(monkeypatch):
 
     async def fake_event(text, level="info", alert=None, mode=None, cfg=None):
         e.alerts.append((alert, text))
+    e.real_event = st.event
     monkeypatch.setattr(st, "event", fake_event)
 
     class FakeFeed(sx.Feed):
@@ -108,10 +109,10 @@ def env(monkeypatch):
         async def stop(self):
             pass
 
-        async def rest_refresh(self, symbols=None):
+        async def rest_refresh(self, symbols=None, min_gap=1.0):
             for s in (symbols or self.symbols):
                 if s in self.q:
-                    self.q[s]["at"] = sx.time.time()
+                    self.q[s]["mark_at"] = sx.time.time()
             self.spot_at = sx.time.time()
     e.feed = FakeFeed("LIVE")
     e.feed.connected = True
@@ -202,9 +203,9 @@ def test_liquidity_cap_spread_and_stale_data_rules(env):
         with pytest.raises(env.st.Skip, match="call bid-ask spread is 11.0%"):
             await env.eng.enter(env.doc(), env.legs, env.cfg)
         market(env)
-        env.feed.q[C]["at"] -= 10
+        env.feed.q[C]["mark_at"] -= 10
 
-        async def dead(symbols=None):
+        async def dead(symbols=None, min_gap=1.0):
             pass
         env.feed.rest_refresh = dead
         env.feed.spot_at = env.sx.time.time()
@@ -215,8 +216,12 @@ def test_liquidity_cap_spread_and_stale_data_rules(env):
 
 def test_margin_estimate_and_max_lots_reduce_the_size(env):
     market(env)
-    lots, notes = env.eng.plan_size(env.cfg, "PAPER", 1000.0, 61010.0, env.legs[K], available=100.0)
-    assert lots == int(100.0 / (2 * 61010.0 * 0.001 / 200)) == 163 and notes["size_reduced"] and "margin" in notes["why"][0]
+    lots, notes = env.eng.plan_size(env.cfg, "PAPER", 1000.0, 61010.0, env.legs[K], available=100.0)        # order leverage 100x by default
+    assert lots == int(97.0 / (2 * 61010.0 * 0.001 / 100)) == 79 and notes["size_reduced"] and "margin" in notes["why"][0]
+    assert env.eng.plan_size(env.cfg, "PAPER", 1000.0, 61010.0, env.legs[K], available=100.0, lev=50.0)[0] == 39
+    # the backup stop must come before a liquidation: the order leverage is lowered when premiums are high
+    assert env.eng.safe_leverage(env.cfg, 61010.0, 65.0, 65.0) == 100.0                 # 61010 / (1.3 x (390 - 65)) = 144 -> the 100x setting stands
+    assert env.eng.safe_leverage(env.cfg, 61010.0, 300.0, 300.0) == 31.0                # 61010 / (1.3 x 1500) = 31.3
     lots, notes = env.eng.plan_size({**env.cfg, "max_lots": 50.0}, "PAPER", 1000.0, 61010.0, env.legs[K], available=1000.0)
     assert lots == 50 and notes["size_reduced"]
     lots, _ = env.eng.plan_size(env.cfg, "LIVE", 1000.0, 61010.0, env.legs[K], available=1000.0)
@@ -241,7 +246,7 @@ def test_parity_stop_waits_for_the_minute_close_then_buys_both_back(env):
 
         async def spy(d, cfg, why):
             t["at"], t["why"] = env.now[0], why
-            await orig(d, cfg, why)
+            return await orig(d, cfg, why)
         env.eng.flatten = spy
         assert await env.eng.monitor(doc, env.cfg) == "stop"
         assert t["at"].minute == 31 and t["at"].second < 1 and "17:01 close" in t["why"]  # not before the 1-minute close
@@ -290,7 +295,7 @@ def test_expiry_uses_the_official_settlement_and_matches_the_formula(env):
         assert await env.eng.monitor(doc, env.cfg) == "expiry"
         assert env.now[0] >= datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc) and len(doc["parity_checked"]) == 29      # 17:01 … 17:29
 
-        async def settlement(env_, symbol):
+        async def settlement(symbol):
             return 61080.0
         env.eng.settlement = settlement
         assert await env.eng.settle(doc, env.cfg)
@@ -345,6 +350,12 @@ def test_settings_are_checked_and_change_logged_and_live_needs_typing_and_paper_
         with pytest.raises(ValueError, match="30 trading days first \\(0 so far\\)"):
             await env.eng.set_mode("LIVE", "LIVE", "a@x")
         await env.db.straddle_trades.insert_many([{"_id": f"d{i}:PAPER", "date": f"d{i}", "mode": "PAPER", "status": "SKIPPED"} for i in range(30)])
+        with pytest.raises(ValueError, match="Live connection test first"):                # the rehearsals are a hard gate
+            await env.eng.set_mode("LIVE", "LIVE", "a@x")
+        await env.st.set_state(conn_ok_LIVE="2026-11-26T05:00:00+00:00")
+        with pytest.raises(ValueError, match="Testnet round-trip rehearsal first"):
+            await env.eng.set_mode("LIVE", "LIVE", "a@x")
+        await env.st.set_state(drill_ok_TESTNET="2026-11-26T05:10:00+00:00")
         await env.eng.set_mode("LIVE", "LIVE", "a@x")
         assert (await env.st.get_state())["mode"] == "LIVE"
         await env.db.straddle_trades.insert_one({"_id": "x:LIVE", "mode": "LIVE", "status": "OPEN"})

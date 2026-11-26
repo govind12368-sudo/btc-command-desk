@@ -11,6 +11,11 @@ RUNS="$(curl -fsS -m 20 "https://api.github.com/repos/${REPO}/commits/${NEW}/che
 if [ -z "$RUNS" ] || ! echo "$RUNS" | grep -q '"conclusion": *"success"' || echo "$RUNS" | grep -qE '"conclusion": *("failure"|"cancelled"|"timed_out")|"status": *"(queued|in_progress)"'; then
   echo "$(date -u +%FT%TZ) waiting: CI for ${NEW:0:7} not passed yet"; exit 0
 fi
+# Never restart the site while the straddle bot is trading: 16:45-17:40 IST = 11:15-12:10 UTC.
+HM=$((10#$(date -u +%H) * 60 + 10#$(date -u +%M)))
+if [ "$HM" -ge 675 ] && [ "$HM" -lt 730 ]; then
+  echo "$(date -u +%FT%TZ) waiting: straddle trade window (16:45-17:40 IST), ${NEW:0:7} deploys after it"; exit 0
+fi
 echo "$(date -u +%FT%TZ) deploying ${NEW:0:7}"
 git pull --ff-only -q
 docker compose up -d --build --remove-orphans

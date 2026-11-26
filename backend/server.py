@@ -972,7 +972,7 @@ STARTED_AT = now_utc()
 
 @api.get("/health")
 async def health():
-    return {"ok": True, "time": iso(now_utc())}
+    return {"ok": True, "time": iso(now_utc()), "bot": straddle.alive()}
 
 
 @api.get("/admin/server")
@@ -990,6 +990,8 @@ async def health_deep(response: Response):
         age = (now_utc() - parse_iso(engine.STATE["computed_at"])).total_seconds()
     up = (now_utc() - STARTED_AT).total_seconds()
     stalled = (age is None and up > 180) or (age is not None and age > 120)
+    if straddle.hold_restart():      # the straddle bot is handling a trade on its own thread: a stalled website must not get the container restarted now
+        return {"ok": True, "held_for_trade": True}
     try:
         await asyncio.wait_for(db.command("ping"), 5)
         db_ok = True
@@ -1176,6 +1178,11 @@ class StraddleControlIn(BaseModel):
     action: Literal["kill", "enable", "disable", "clear_halt"]
 
 
+class StraddleCheckIn(BaseModel):
+    kind: Literal["connection", "round_trip"]
+    mode: Literal["TESTNET", "LIVE"] = "TESTNET"
+
+
 @api.get("/straddle")
 async def straddle_get(u=Depends(admin_user)):
     """Short ATM BTC straddle bot: state, today's trade, backtest vs live numbers, monthly tables and curves."""
@@ -1240,6 +1247,21 @@ async def straddle_control(body: StraddleControlIn, request: Request, u=Depends(
         await straddle.event(f"Bot switched {'on' if body.action == 'enable' else 'off'} by {u['email']}", "warn")
     await SEC.log_event("straddle_control", request, u["email"], detail=body.action)
     return await straddle.dashboard()
+
+
+@api.post("/straddle/check")
+async def straddle_check(body: StraddleCheckIn, request: Request, u=Depends(admin_user)):
+    """Rehearsals. connection: key, clock, wallet, contracts, prices, leverage and one resting order that cannot fill, cancelled at once.
+    round_trip: Testnet only – the bot's own entry, backup stops and exit with 1 lot."""
+    try:
+        if body.kind == "round_trip":
+            rec = await straddle.in_bot(straddle.round_trip(u["email"]))
+        else:
+            rec = await straddle.in_bot(straddle.connection_test(body.mode, u["email"]))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await SEC.log_event("straddle_check", request, u["email"], detail=f"{body.kind} {body.mode} {'ok' if rec['ok'] else 'failed'}")
+    return {"check": rec, "dashboard": await straddle.dashboard()}
 
 
 @api.post("/straddle/backtest/import")
@@ -1765,8 +1787,9 @@ async def startup():
     except Exception:
         logging.getLogger("alerts").exception("could not load alert channel settings")
     for coro in (workbook_archive.ensure_loaded(), recovery.scheduler_loop(), engine.compute_loop(), engine.slow_loop(), recovery.recovery_loop(), delta_loop(),
-                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), fundmgr.loop(), straddle.loop(), straddle.watchdog(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
+                 daily_summary.scheduler_loop(), maintenance_loop(), plan_a.loop(), regime.loop(), flush.loop(), runs.loop(), trio.loop(), elite.loop(), sysmon.loop(), optpicks.loop(), stream.pulse_loop(), broker_keys.loop(), fundmgr.loop(), straddle.watchdog(), observer.loop(), autotrade.loop(), daytype.loop(), scanner.loop(lambda: engine.STATE), intel.start()):
         asyncio.create_task(coro)
+    straddle.start(asyncio.get_running_loop())   # the straddle bot has its own thread, event loop and database connection
 
 
 @app.on_event("shutdown")
