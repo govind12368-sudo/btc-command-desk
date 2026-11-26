@@ -771,6 +771,53 @@ async def compute():
     STATE.update(data={"backtest": per, "sizing": sizing}, computed_at=iso(now_utc()), error=None)
 
 
+FILL = {"running": False, "done": 0, "total": 0, "failed": [], "at": None}
+FILL_PAUSE = 0.3                                       # seconds between back-filled days: stay gentle with Delta's API
+_BG = set()
+
+
+def _trading_now():
+    t = datetime.now(IST)
+    return (16, 45) <= (t.hour, t.minute) < (17, 40)
+
+
+async def fill_b():
+    """Journal B back-fill: every expiry from 1 Oct 2026 to the end of the history file, re-run by the server on Delta's data.
+    Runs in the background (the paper engine and journal A never wait for it), one day at a time; a day that fails is listed
+    and tried again on the next pass; the journals are re-computed every 10 days added and at the end."""
+    if FILL["running"]:
+        return
+    FILL.update(running=True, failed=[], at=iso(now_utc()))
+    try:
+        days, d = [], B_FROM
+        while d <= HISTORY_TO:
+            days.append(d)
+            d += timedelta(days=1)
+        have = {doc["_id"] async for doc in db.opt_backtest.find({"_id": {"$gte": B_FROM.isoformat(), "$lte": HISTORY_TO.isoformat()}}, {"_id": 1})}
+        todo = [x for x in days if x.isoformat() not in have]
+        FILL.update(total=len(days), done=len(days) - len(todo))
+        added = 0
+        for x in todo:
+            if _trading_now():
+                break                                  # 16:45-17:40 IST belongs to the paper trade; the next pass carries on
+            try:
+                if await backtest_day(x):
+                    added += 1
+                    FILL["done"] += 1
+                    await asyncio.sleep(FILL_PAUSE)
+                else:
+                    FILL["failed"].append(x.isoformat())
+            except Exception as e:
+                FILL["failed"].append(x.isoformat())
+                log.warning("option picks journal B %s: %s", x, e)
+            if added and added % 10 == 0:
+                await compute()
+        if added:
+            await compute()
+    finally:
+        FILL["running"] = False
+
+
 async def loop():
     await asyncio.sleep(30)
     last_bt = 0.0
@@ -782,19 +829,26 @@ async def loop():
             log.exception("option picks tick")
         if time.time() - last_bt > 900 or STATE["data"] is None:
             try:
-                now_ist = datetime.now(IST)
-                today = now_ist.date()
-                trading = (16, 45) <= (now_ist.hour, now_ist.minute) < (17, 40)    # never delay the paper trade with the journal B back-fill
-                d = B_FROM if not trading else HISTORY_TO + timedelta(days=1)       # journal B from 1 Oct 2026; journal A uses the days after the history file
+                if STATE["data"] is None:
+                    await compute()                        # journal A at once after a restart
+                today = datetime.now(IST).date()
+                d = HISTORY_TO + timedelta(days=1)         # journal A: the server's own days after the history file
                 while d <= today:
-                    if time.time() >= settle_t(d) + 600 and await backtest_day(d):
-                        await asyncio.sleep(0.3)              # a first run fills ~2 months: stay gentle with Delta's API
+                    if time.time() >= settle_t(d) + 600:
+                        try:
+                            await backtest_day(d)
+                        except Exception as e:             # one bad day never blocks the journals
+                            log.warning("option picks backtest %s: %s", d, e)
                     d += timedelta(days=1)
                 await compute()
             except Exception as e:
                 STATE["error"] = str(e)[:200]
                 log.exception("option picks backtest")
             last_bt = time.time()
+            if not FILL["running"] and not _trading_now():
+                t = asyncio.ensure_future(fill_b())        # journal B: older days in the background
+                _BG.add(t)
+                t.add_done_callback(_BG.discard)
         await asyncio.sleep(10)
 
 
@@ -842,7 +896,7 @@ async def dashboard():
     return {"name": NAME, "computed_at": STATE.get("computed_at"), "error": STATE.get("error"), "paper_only": True,
             "strategies": [_strat_view(k, sizing) for k in ENABLED], "enabled": ENABLED,
             "backtest": {k: ({**bt[k], "trades": bt[k]["trades"][:100], "trades_total": len(bt[k]["trades"])} if bt.get(k) else None) for k in ENABLED},
-            "b_from": B_FROM.isoformat(),
+            "b_from": B_FROM.isoformat(), "b_fill": {**FILL, "failed": FILL["failed"][:20]},
             "history_to": HISTORY_TO.isoformat(), "live": live, "live_stats": per_live, "compare": cmp_rows, "next_entry": nxt,
             "sizing": sizing, "size_label": size_label(sizing), "order_notional": notional, "not_checked": NOT_CHECKED,
             "compounded": compounding(sizing), "recommended": RECOMMENDED}

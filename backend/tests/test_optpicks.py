@@ -300,3 +300,31 @@ def test_server_backfill_runs_only_the_enabled_pick_on_history_days(op, monkeypa
         assert await op.backtest_day(date(2026, 10, 5)) is False and await op.backtest_day(date(2026, 11, 24)) is False      # not settled: tried again later
         assert calls == [(date(2026, 10, 5), ("SSTR",)), (date(2026, 11, 24), tuple(op.ORDER))]
     run(go())
+
+
+def test_journal_b_backfill_runs_in_the_background_and_one_bad_day_never_blocks_it(op, monkeypatch):
+    done, computed = [], []
+
+    async def fake_day(d):
+        if d.isoformat() == "2026-10-03":
+            raise RuntimeError("Delta 502")
+        if d.isoformat() == "2026-10-04":
+            return False                                                                    # no settlement data for that day
+        done.append(d)
+        return True
+
+    async def fake_compute():
+        computed.append(len(done))
+    monkeypatch.setattr(op, "backtest_day", fake_day)
+    monkeypatch.setattr(op, "compute", fake_compute)
+    monkeypatch.setattr(op, "_trading_now", lambda: False)
+    monkeypatch.setattr(op, "FILL_PAUSE", 0)
+
+    async def go():
+        await op.db.opt_backtest.insert_one({"_id": "2026-10-01", "trades": {}, "skips": {}})   # already there: not fetched again
+        await op.fill_b()
+        total = (op.HISTORY_TO - op.B_FROM).days + 1
+        assert op.FILL["total"] == total and op.FILL["done"] == total - 2 and op.FILL["failed"] == ["2026-10-03", "2026-10-04"] and not op.FILL["running"]
+        assert date(2026, 10, 1) not in done and len(done) == total - 3
+        assert computed[0] == 10 and computed[-1] == len(done)                               # re-computed every 10 days and at the end
+    run(go())

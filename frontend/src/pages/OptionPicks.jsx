@@ -235,13 +235,19 @@ function JournalA({ d, s, viewer }) {
 }
 
 function JournalB({ d, s }) {
-  const b = d.backtest[s.key]?.B;
-  if (!b) return <Note>Working out journal B…</Note>;
+  const b = d.backtest[s.key]?.B, f = d.b_fill || {};
+  const filling = !!(f.total && f.done < f.total);
+  const progress = !filling ? null : (
+    <Note tone="amber">Journal B is being filled: the server is re-running every expiry from {dmy(d.b_from)} on Delta's data, {f.done} of {f.total} days done so far
+      {f.running ? " (a few minutes)" : " (it carries on at the next pass, within 15 minutes)"}{f.failed?.length ? `; not available yet: ${f.failed.map(dmy).join(", ")}` : ""}. The numbers below grow as it fills.</Note>
+  );
+  if (!b) return <div className="space-y-4">{progress}<Note>Working out journal B…</Note></div>;
   const m = b.match || {};
-  if (!b.days) return <Note>Journal B is being filled: the server is re-running every expiry from {dmy(d.b_from)} on Delta's data. This takes a few minutes after an update.</Note>;
+  if (!b.days) return progress || <Note>Journal B is being filled: the server is re-running every expiry from {dmy(d.b_from)} on Delta's data. This takes a few minutes after an update.</Note>;
   const ok = m.checked && m.same === m.checked;
   return (
     <div className="space-y-4">
+      {progress}
       <Note>Same code on this server's Delta data from {dmy(b.from)}, starting again from {usd0(s.capital)}. Backtest trades, not live trades.</Note>
       <Totals s={b.stats} testid="opt-b-totals" />
       <div className="text-[12px] text-slate-400" data-testid="opt-b-check">
