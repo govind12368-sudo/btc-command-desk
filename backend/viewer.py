@@ -126,7 +126,7 @@ def _opt_trade(t):
     return out
 
 
-OPT_STAT_DROP = ("max_dd", "max_dd_pct", "lowest_balance", "worst", "best", "view2_net")
+OPT_STAT_DROP = ("max_dd", "max_dd_pct", "lowest_balance", "worst", "best", "view2_net", "compounded")
 
 
 def optpicks_view(out):

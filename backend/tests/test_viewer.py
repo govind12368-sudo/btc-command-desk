@@ -69,16 +69,17 @@ def test_optpicks_view_hides_the_strategy_definition():
                            "entry_ist": "17:00", "live_entry_ist": "17:01", "stop": "2x sell price (1-min mark high)", "verdict": "Profitable in 2024, 2025 and 2026"}],
            "sizing": {"put_capital": 2000, "put_leverage": 25, "call_capital": 2000, "call_leverage": 25}, "size_label": "$2,000 × 25x per leg (put + call)",
            "not_checked": "Not checked: Delta margin", "next_entry": {"SSTR": "24 Nov 17:01 IST"},
-           "backtest": {"SSTR": {"stats": {"net": 12281.74, "max_dd": 597.07, "worst": -208.12, "view2_net": -2340.33}, "yearly": [], "monthly": [], "trades": [t], "trades_total": 729,
+           "backtest": {"SSTR": {"stats": {"net": 12281.74, "max_dd": 597.07, "worst": -208.12, "view2_net": -2340.33, "compounded": True}, "yearly": [], "monthly": [], "trades": [t], "trades_total": 729,
                                  "realdata": [{"period": "1 Jan 2024 – 23 Nov 2026", "size": "$2,000 × 25x per leg (put + call)", "net": 12281.74, "verdict": "Sensitive to fills", "view2_net": -2340.33,
                                                "years": {"2024": 2874.86}}]}},
            "live": [t, {"id": "m", "day": "2026-11-24", "status": "SKIPPED", "reason": "put mark below $20"}], "live_stats": {"SSTR": {"net": 44.34, "trades": 1, "view2_net": 32.84}},
-           "compare": [{"day": "2026-11-23", "key": "SSTR", "live_status": "CLOSED", "live_net": 44.34, "bt_status": "TAKEN", "bt_net": 44.26, "bt_reason": None, "live_reason": None}]}
+           "compare": [{"day": "2026-11-23", "key": "SSTR", "live_status": "CLOSED", "live_net": 44.34, "bt_status": "TAKEN", "bt_net": 44.26, "bt_reason": None, "live_reason": None}],
+           "compounded": True, "recommended": {"key": "SSTR", "compound": True, "label": "★ Recommended: Option Picks · Compounded"}}
     before = _text(out)
     v = viewer.optpicks_view(out)
     assert _text(out) == before
     assert v["strategies"] == [{"key": "SSTR", "pick": 5, "capital": 4000, "enabled": True, "name": "Pick 5"}]
-    assert all(k not in v for k in ("sizing", "size_label", "not_checked", "next_entry", "live", "live_stats", "compare", "enabled", "order_notional"))
+    assert all(k not in v for k in ("sizing", "size_label", "not_checked", "next_entry", "live", "live_stats", "compare", "enabled", "order_notional", "compounded", "recommended"))
     b = v["backtest"]["SSTR"]
     assert b["stats"] == {"net": 12281.74} and b["trades"][0]["net"] == 44.34 and "net_v2" not in b["trades"][0]      # no max drawdown, worst trade or worse-fills figure
     assert "stop" not in b["trades"][0]["legs"][0] and b["trades"][0]["legs"][0]["fill"] == 54.9 and "verdict" not in b["realdata"][0] and "size" not in b["realdata"][0]
