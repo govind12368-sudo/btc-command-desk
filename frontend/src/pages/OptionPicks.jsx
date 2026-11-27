@@ -261,8 +261,8 @@ export default function OptionPicks() {
       {d.is_admin && <Sizing d={d} reload={reload} />}
       {!viewer && (
         <div className="flex flex-wrap gap-2">
-          <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="opt-tab-C">C · Live paper trading</button>
-          <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="opt-tab-A">A · 1 Jan 2024 → today</button>
+          <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="opt-tab-C">A · Live paper trading</button>
+          <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="opt-tab-A">B · 1 Jan 2024 → today</button>
         </div>
       )}
       {/* Users get journal A only (as Elite 4 Edge); live paper trading is not sent to them. */}
