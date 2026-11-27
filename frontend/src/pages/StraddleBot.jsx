@@ -19,7 +19,7 @@ const variantsOf = (bt) => (bt?.order || Object.keys(bt?.variants || {})).map((k
 const FIRST = { sb: "mark_fixed", op: "op_compound" };
 const BOT_SUB = {
   sb: "Sell the ATM BTC call + put on Delta India at 17:00 IST, stop at 2 × premium, otherwise hold to the 17:30 expiry. Admin only.",
-  op: "Option Picks pick 5 rules: sell the ATM BTC call + put at 17:01 IST (strike from BTC futures), each leg stopped on its own at 2 × its sell price, compounded capital. Admin only.",
+  op: "Option Picks pick 5 rules: sell the ATM BTC call + put at 17:01 IST (strike from BTC futures), skip when the put is below $20, each leg stopped on its own at 2 × its sell price, compounded capital. Admin only.",
 };
 // what a setting means for the Option Picks bot, where it differs
 const OP_LABEL = {
@@ -117,7 +117,7 @@ function LiveTrade({ d }) {
       </Card>
     );
   }
-  const fut = v.futures ? ` BTC futures ${n(v.futures, 1)}${v.fut_1731 ? ` (${n((v.futures / v.fut_1731 - 1) * 100, 2)}% since 17:31 IST yesterday)` : ""}.` : "";
+  const fut = v.futures ? ` BTC futures ${n(v.futures, 1)}.` : "";
   const msg = v.phase === "PREFLIGHT" ? `Pre-flight done. Entry in ${cd}. BTC index ${n(v.spot, 1)}.${fut} Strikes watched: ${(v.strikes || []).map((k) => n(k, 0)).join(", ")}.`
     : v.phase === "SETTLING" ? "Expired. Waiting for Delta's settlement price."
     : t?.status === "CLOSED" ? `Today's trade is closed: ${t.exit_reason === "Stop" ? `stop exit at ${t.exit_time} IST${t.exit_note ? ` (${t.exit_note})` : ""}`

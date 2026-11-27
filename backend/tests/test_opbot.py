@@ -1,6 +1,6 @@
 """Option Picks bot (owner, 26 Nov 2026): Option Picks pick 5 rules – ★ Recommended with compounded capital – on the straddle
 bot's engine, paper by default, Live gated like the Straddle Bot. Replay of Option Picks' own backtest to the cent, strike from
-BTCUSD futures, the two skip rules, half the equity per leg, each leg stopped on its own, restarts, one bot on the exchange at a
+BTCUSD futures, the put skip rule, half the equity per leg, each leg stopped on its own, restarts, one bot on the exchange at a
 time, and the Testnet round trip with a single-leg exit."""
 import asyncio
 import sys
@@ -130,7 +130,7 @@ def test_strike_is_the_one_nearest_btc_futures_not_the_index(env):
     run(go())
 
 
-def test_the_two_option_picks_skip_rules(env):
+def test_the_put_rule_skips_and_a_btc_rise_no_longer_does(env):
     async def go():
         Skip = env.st.Skip
         eng = op_engine(env)
@@ -138,15 +138,12 @@ def test_the_two_option_picks_skip_rules(env):
         with pytest.raises(Skip, match=r"put mark \$15.00 is below \$20"):
             await eng.enter(opdoc(), env.legs, opcfg(env))
         market(env)
-        eng = op_engine(env, futures=61900.0, fut_prev=60500.0)                                 # +2.31% since 17:31 IST yesterday
-        with pytest.raises(Skip, match=r"up \+2.31% since 17:31 IST yesterday"):
-            await eng.enter({**opdoc(), "fut_1731": 60500.0}, env.legs, opcfg(env))
-        eng = op_engine(env, futures=61600.0)                                                  # +1.82%: traded
+        eng = op_engine(env, futures=61900.0)                                                  # BTC up 2.31% since yesterday: traded (rule removed 27 Nov 2026)
         assert await eng.enter({**opdoc(), "fut_1731": 60500.0}, env.legs, opcfg(env))
         await env.db.opbot_trades.delete_many({})
         market(env, put=(15.0, 14.9, 15.1))
         eng = op_engine(env)
-        assert await eng.enter(opdoc(), env.legs, opcfg(env, _drill=True))                      # a rehearsal does not apply them
+        assert await eng.enter(opdoc(), env.legs, opcfg(env, _drill=True))                      # a rehearsal does not apply it
     run(go())
 
 

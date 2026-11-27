@@ -88,7 +88,7 @@ with its own settings, state, journal, events, checks and change log (collection
 |---|---|---|
 | Pre-flight / entry | 16:55 / 17:00:00 | 16:56 / 17:01:00 (the close of the 17:00 minute, as its backtest) |
 | Strike | nearest the BTC index | nearest BTCUSD futures (last traded price) |
-| Skip the day | — | ATM put mark below $20, or BTC futures up more than 2% since 17:31 IST yesterday |
+| Skip the day | — | ATM put mark below $20 (the +2% rise rule was removed on 27 Nov 2026: re-run on Delta's data, the 129 days it skipped made +$2,713 at $2,000 × 25 a leg, profitable in each of 2024, 2025, 2026) |
 | Size per leg | equity × leverage ÷ BTC | half the equity × leverage ÷ BTC futures (put capital + call capital) |
 | Default capital | $1,000 × 25, fixed | $4,000 ($2,000 a leg) × 25, **compounded** |
 | Stop | call + put ≥ 2 × P, both legs bought back | each leg on its own when its mark ≥ 2 × its sell price; the other leg stays open to expiry. Default check: every price update (the backtest uses the 1-minute mark high) |
@@ -96,7 +96,7 @@ with its own settings, state, journal, events, checks and change log (collection
 | Backtest | the owner's workbook | Option Picks pick 5's own data (Delta's real prices from 1 Jan 2024, then the server's daily backtest), re-sized at the bot's capital and leverage |
 
 The bot's backtest replay equals Option Picks to the cent: $12,298.42 fixed and $77,107.84 compounded at $4,000 × 25x,
-1 Jan 2024 – 25 Nov 2026 (`tests/test_opbot.py` checks it against Option Picks' own pricing). Its Testnet round trip also buys the
+1 Jan 2024 – 25 Nov 2026 with the old +2% rule; without it (27 Nov 2026) $15,012.61 fixed and $153,324.09 compounded to 26 Nov (`tests/test_opbot.py` checks it against Option Picks' own pricing). Its Testnet round trip also buys the
 call back on its own first, to exercise the per-leg stop path. **Only one bot may be on Testnet or Live at a time**: both sell the
 same contracts on the same account. Live needs the bot's own 30 paper days, its own passed Live connection test and Testnet
 round trip, and typed LIVE; real money stays off until the owner switches it on.

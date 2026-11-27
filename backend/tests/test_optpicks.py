@@ -75,7 +75,18 @@ def test_straddle_facts_stop_and_skips(op):
     assert call["exit"] == "Stop" and call["exit_price"] == pytest.approx(160.0) and put["exit"] == "Settle" and put["exit_price"] == pytest.approx(1000.0)
     assert put["real"] is True and call["real"] is False
     assert op.build_trade("SSTR", straddle_day(op, put_mark=15.0))[0]["skip"] == "put mark below $20"
-    assert "up more than 2%" in op.build_trade("SSTR", straddle_day(op, fut_prev=58500.0))[0]["skip"]
+    up, _ = op.build_trade("SSTR", straddle_day(op, fut_prev=58500.0))                       # BTC up 2.6% since 17:31 IST yesterday
+    assert up["skip"] is None and up["chg_1731"] == pytest.approx(60020 / 58500 - 1)            # traded: the +2% rule was removed (owner, 27 Nov 2026)
+
+
+def test_the_plus_2pct_rule_is_gone_everywhere_and_the_history_holds_those_days(op):
+    old = {**op.build_trade("SSTR", straddle_day(op, fut_prev=58500.0))[0], "skip": "BTC up more than 2% since 17:31 IST yesterday"}
+    low = op.build_trade("SSTR", straddle_day(op, put_mark=15.0))[0]
+    assert [r["skip"] for r in op.apply_rules("SSTR", [old, low])] == [None, "put mark below $20"]   # stored facts re-checked
+    sstr = op.history()["trades"]["SSTR"]
+    up = [t for t in sstr if not t.get("skip") and (t.get("chg_1731") or 0) > 0.02]
+    assert len(up) == 128 and sum(1 for t in sstr if t.get("skip") == "put mark below $20") == 172
+    assert all(op.skip_rule(t) == t.get("skip") for t in sstr)                                  # the file follows today's rule
 
 
 def test_price_at_size(op):

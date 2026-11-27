@@ -27,7 +27,7 @@ Two bots share this engine (owner, 26 Nov 2026), each with its own settings, sta
   sb  Straddle Bot       the rules above (owner's spec)
   op  Option Picks bot   Option Picks pick 5 rules, ★ Recommended with compounded capital:
         16:56 pre-flight, 17:01:00 IST entry (the close of the 17:00 minute, as its backtest), strike nearest BTCUSD futures,
-        skip the day when the ATM put mark is below $20 or futures are up more than 2% since 17:31 IST yesterday,
+        skip the day when the ATM put mark is below $20 (the +2% rule was removed on 27 Nov 2026, owner),
         each leg sized from half the equity, each leg stopped on its own when its mark reaches 2x its sell price (the other
         leg stays open to the 17:30 expiry), backup stop on the exchange at disaster multiple x each leg's sell price.
 Only one bot may be on Testnet or Live at a time: both sell the same contracts on the same account.
@@ -60,7 +60,7 @@ QUIET_FROM, QUIET_TO = (11, 15), (12, 10)                       # UTC: no rehear
 
 BOTS = {"sb": {"name": "Straddle Bot", "prefix": "straddle", "coid": "ST", "pre": PRE_T, "entry": ENTRY_T},
         "op": {"name": "Option Picks bot", "prefix": "opbot", "coid": "OP", "pre": (11, 26), "entry": (11, 31)}}   # 16:56 and 17:01:00 IST
-OP_PUT_MIN, OP_UP_MAX, FUTURES = 20.0, 0.02, "BTCUSD"           # Option Picks skip rules and the futures that set its strike
+OP_PUT_MIN, FUTURES = 20.0, "BTCUSD"                            # Option Picks skip rule and the futures that set its strike
 LEG_SHARE = {"sb": 1.0, "op": 0.5}                              # share of the equity each leg is sized from
 DEFAULTS = {"starting_capital": 1000.0, "leverage": 25.0, "sizing_mode": "fixed", "stop_multiple": 2.0, "stop_mode": "parity",
             "max_entry_slip": 2.0, "max_exit_slip": 5.0, "entry_deadline_sec": 30.0, "disaster_multiple": 3.0, "max_daily_loss_pct": 15.0,
@@ -355,15 +355,9 @@ class Engine:
                 "lev": sx._f(p.get("default_leverage")), "size_limit": int(p.get("position_size_limit") or 0)}
 
     async def futures(self):
-        """BTCUSD futures, last traded price (Option Picks sets its strike and its +2% rule on it)."""
+        """BTCUSD futures, last traded price (Option Picks sets its strike on it)."""
         t = await self.feed.get(f"/v2/tickers/{FUTURES}")
         return sx._f(t.get("close")) or sx._f(t.get("mark_price"))
-
-    async def fut_1731(self, day):
-        """BTCUSD futures at 17:31 IST the day before the expiry: close of the 1-minute candle opening at 17:31 (12:01 UTC)."""
-        t = int(_at(day, EXPIRY_T).timestamp()) - 86400 + 60
-        rows = await self.feed.get("/v2/history/candles", {"symbol": FUTURES, "resolution": "1m", "start": t - 300, "end": t + 600})
-        return next((float(r["close"]) for r in rows or [] if int(r["time"]) == t), None)
 
     async def ref_price(self, cfg, need=False):
         """The price the strike is chosen from: the BTC index (Straddle Bot) or BTCUSD futures (Option Picks bot)."""
@@ -401,11 +395,6 @@ class Engine:
         ref = spot
         if self.op:
             ref = await self.ref_price(cfg) or spot
-            try:
-                doc["fut_1731"] = await self.fut_1731(day)
-            except Exception as e:                                         # as the backtest: no reference price, no +2% skip
-                log.warning("option picks bot 17:31 futures: %s", e)
-                doc["fut_1731"] = None
         near = sorted(chain, key=lambda k: abs(k - ref))[:9]
         legs = {}
         try:
@@ -426,7 +415,7 @@ class Engine:
         self.armed = None
         await self._save(doc, status="PREFLIGHT", preflight_at=iso(self.clock()), clock_drift_ms=ms, clock_source=self.drift_src, wallet_available=bal["available"])
         self.view = {"phase": "PREFLIGHT", "date": doc["date"], "spot": spot, "strikes": sorted(near), "drift_ms": ms, "available": bal["available"],
-                     **({"futures": ref, "fut_1731": doc.get("fut_1731")} if self.op else {})}
+                     **({"futures": ref} if self.op else {})}
         return legs
 
     def safe_leverage(self, cfg, spot, mark_call, mark_put):
@@ -535,12 +524,8 @@ class Engine:
             if (q["ask"] - q["bid"]) / q["mark"] * 100 > cfg["max_spread_pct"]:
                 raise Skip(f"{name} bid-ask spread is {(q['ask'] - q['bid']) / q['mark'] * 100:.1f}% of mark (limit {cfg['max_spread_pct']:g}%)")
             mk[name] = q["mark"]
-        if self.op and not cfg.get("_drill"):                             # Option Picks skip rules, on the same numbers as its backtest
-            if mk["put"] < OP_PUT_MIN:
-                raise Skip(f"put mark ${mk['put']:.2f} is below ${OP_PUT_MIN:g} (Option Picks rule)")
-            fp = doc.get("fut_1731")
-            if fp and ref / fp - 1 > OP_UP_MAX:
-                raise Skip(f"BTC futures are up {(ref / fp - 1) * 100:+.2f}% since 17:31 IST yesterday ({fp:,.1f} → {ref:,.1f}); Option Picks skips above +{OP_UP_MAX * 100:g}%")
+        if self.op and not cfg.get("_drill") and mk["put"] < OP_PUT_MIN:  # Option Picks skip rule, on the same number as its backtest
+            raise Skip(f"put mark ${mk['put']:.2f} is below ${OP_PUT_MIN:g} (Option Picks rule)")
         sizing_eq = cfg["starting_capital"] if cfg["sizing_mode"] == "fixed" else await equity_now(mode, cfg)
         lots, notes = self.plan_size(cfg, mode, sizing_eq, ref, pair, self.armed["available"], self.armed["lev"])
         if lots < 1:
@@ -1662,9 +1647,9 @@ RULES = {
            "Size: equity × leverage ÷ BTC price per leg (lot 0.001 BTC).",
            "Stop: buy both legs back when call + put ≥ stop multiple × P (P = both sell prices).",
            "Otherwise hold to the 17:30 IST expiry; settled at Delta's official settlement price."],
-    "op": ["16:56 IST pre-flight: clock, option list, the 9 strikes around BTCUSD futures, live prices, balance, BTC futures at 17:31 IST yesterday.",
+    "op": ["16:56 IST pre-flight: clock, option list, the 9 strikes around BTCUSD futures, live prices, balance.",
            "17:01:00 IST (close of the 17:00 minute, as the backtest): sell the ATM call and ATM put, strike nearest BTCUSD futures.",
-           "Skip the day when the ATM put mark is below $20, or BTC futures are up more than 2% since 17:31 IST yesterday.",
+           "Skip the day when the ATM put mark is below $20 (premium too small for the fees). No skip after a BTC rise: that rule was removed on 27 Nov 2026.",
            "Size: each leg gets half the equity × leverage ÷ BTC futures (compounded: the equity after the last closed trade; lot 0.001 BTC).",
            "Stop: each leg on its own, bought back when its mark reaches stop multiple × its sell price; the other leg stays open.",
            "Open legs settle at the 17:30 IST expiry at Delta's official settlement price."],

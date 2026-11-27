@@ -11,7 +11,8 @@ Daily expiry 17:30 IST (12:00 UTC). Entry value = the candle that OPENS at the e
 others), so the live paper entry is at the end of that bar (SSTR 17:01). Strike = nearest listed strike (BTCUSD futures for SSTR/SP16,
 BTC index .DEXBTUSD for the others). SELL at mark - max($0.10, 1%), BUY at mark + max($0.10, 1%) (rounded to $0.1 for SSTR/SP16).
 SSTR/SP16: each leg stopped when a 1-minute mark high reaches 2x its sell price, bought back at stop + max($0.10, 1%) rounded up; the
-other leg stays open; skip the day if the ATM put mark < $20 or BTC futures are up > 2% since 17:31 IST yesterday. Otherwise legs
+other leg stays open; skip the day if the ATM put mark < $20 (the +2% rule was removed on 27 Nov 2026, owner: the days it skipped
+made money in every year 2024-2026). Otherwise legs
 settle at Delta's official settlement index.
 
 Trades are stored as FACTS (strikes, marks, fills, stop times, settlement index, each expiry's fee record); size, P&L and fees are
@@ -267,6 +268,23 @@ def pick_legs(key, prods, price, t):
     return legs, None
 
 
+PUT_MIN = 20.0          # pick 5's one skip rule: ATM put mark below $20 (premium too small for the fees)
+
+
+def skip_rule(t):
+    """Pick 5's skip rule on a trade's facts. The +2% rule (BTC futures up > 2% since 17:31 IST yesterday) was removed on
+    27 Nov 2026 by the owner; chg_1731 is still recorded."""
+    put = next((l["mark"] for l in t.get("legs") or [] if (l.get("type") or l["sym"][0]) == "P"), None)
+    return "put mark below $20" if put is not None and put < PUT_MIN else None
+
+
+def apply_rules(key, rows):
+    """Re-checks stored facts with today's rules (days stored before 27 Nov 2026 can carry the old +2% skip)."""
+    if STRATS[key]["kind"] != "stop":
+        return rows
+    return [{**r, "skip": skip_rule(r)} if r.get("legs") else r for r in rows]
+
+
 def build_trade(key, D):
     """The backtest trade of one strategy on one expiry day from fetched data D (see needs()): FACTS only (no size, no P&L).
     Returns (trade, reason). A trade the skip rules reject has t["skip"] set."""
@@ -296,7 +314,7 @@ def build_trade(key, D):
                                 "exit": "Settle", "exit_price": round(intrinsic(p, settle), 4), "taker": p.get("taker"), "cap": p.get("cap"), "real": ok, "vol": vol})
         out.update(exit="Settle", real=real_all)
         return out, None
-    # short ATM leg(s) with a 2x stop and the two skip rules
+    # short ATM leg(s) with a 2x stop and the put skip rule
     f = at(D["fut"], et)
     fprev = at(D["futp"], st - 86400 + 60)
     if f is None:
@@ -312,7 +330,7 @@ def build_trade(key, D):
             return None, f"no mark for {sym} at entry"
         marks[sym] = m
     put = next((marks[sym] for _, sym in legs if prods[sym]["type"] == "P"), None)
-    skip = "put mark below $20" if put is not None and put < 20 else "BTC up more than 2% since 17:31 IST yesterday" if chg is not None and chg > 0.02 else None
+    skip = "put mark below $20" if put is not None and put < PUT_MIN else None
     out.update(price=f, chg_1731=chg, skip=skip)
     real_all, exits = True, []
     for _, sym in legs:
@@ -542,7 +560,7 @@ async def backtest_day(d):
 
 def _facts(t):
     """What must be equal for journal B to confirm journal A on a day: contracts, fills, exits, stop times, prices."""
-    if not t or t.get("skip"):
+    if not t or not t.get("legs"):                      # facts are compared whether the rule trades the day or not
         return None
     return (round(float(t["price"]), 1), round(float(t.get("settle") or 0), 2),
             tuple((l["sym"], round(l["fill"], 4), l.get("exit"), round(l.get("exit_price") or 0, 4), l.get("stop_ist")) for l in t.get("legs", [])))
@@ -556,7 +574,7 @@ async def server_rows(key, since=B_FROM):
             out.append({**doc["trades"][key], "day": doc["_id"], "source": "server"})
         elif key in doc.get("skips", {}):
             out.append({"day": doc["_id"], "skip": doc["skips"][key], "source": "server", "legs": []})
-    return out
+    return apply_rules(key, out)
 
 
 def match_a(key, rows_b):
@@ -573,7 +591,7 @@ async def backtest_rows():
     async for doc in db.opt_backtest.find({"_id": {"$gt": HISTORY_TO.isoformat()}}).sort("_id", 1):
         for k, t in doc["trades"].items():
             rows.setdefault(k, []).append({**t, "source": "server"})
-    return rows
+    return {k: apply_rules(k, v) for k, v in rows.items()}
 
 
 # ================================================================ live paper engine
@@ -634,10 +652,8 @@ class Engine:
             chg = price / fp - 1 if fp else None
             put = next((ch[sym]["mark"] for _, sym in legs if sym.startswith("P-")), None)
             doc["chg_1731"] = chg
-            if put is not None and put < 20:
+            if put is not None and put < PUT_MIN:
                 doc.update(status="SKIPPED", reason=f"put mark ${put:.2f} below $20")
-            elif chg is not None and chg > 0.02:
-                doc.update(status="SKIPPED", reason=f"BTC up {chg:+.2%} since 17:31 IST yesterday")
         for side, sym in legs:
             c = ch[sym]
             info = await self.fee_info(sym)
