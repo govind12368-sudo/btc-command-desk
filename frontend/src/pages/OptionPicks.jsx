@@ -164,7 +164,8 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer, period = "A", fr
   );
 }
 
-function legLive(l) {
+function legLive(l, status) {
+  if (status === "SKIPPED") return `${l.sym} · mark ${n(l.mark, 1)} · best bid ${l.bid ?? "—"} · best ask ${l.ask ?? "—"} · not traded`;   // prices at the check, nothing sold
   const fill = l.real === true ? "real trade at our price ✓" : l.real === false ? "no real trade at our price" : "fill check pending";
   const exit = l.exit ? ` → ${l.exit} ${n(l.exit_price, 1)}${l.stop_ist ? ` (${l.stop_ist})` : ""}` : l.stop ? ` · stop ${n(l.stop, 1)} · high so far ${n(l.high, 1)}` : "";
   return `${l.side} ${l.sym} ${l.qty != null ? `${l.qty.toFixed(3)} BTC ` : ""}· mark ${n(l.mark, 1)} · best bid ${l.bid ?? "—"} → sold ${n(l.fill, 1)}${exit} · ${fill}`;
@@ -197,7 +198,7 @@ function Live({ d, viewer }) {
             <tbody>{live.map((t) => (
               <tr key={t.id}><td className="font-mono">{t.day}</td><td className={STATUS_TONE[t.status] || ""}>{t.status}</td><td className="font-mono">{t.entry_ist ? t.entry_ist.slice(11) : "—"}</td>
                 <td className="num">{n(t.price, 1)}</td><td className="num">{t.capital != null ? usd0(t.capital) : "—"}</td><td className="num">{t.qty != null ? t.qty.toFixed(3) : "—"}</td>
-                <td className="min-w-[300px] text-[11.5px]">{viewer ? (t.legs || []).map((l) => <div key={l.sym}>{legsText([l])}</div>) : (t.legs || []).map((l) => <div key={l.sym}>{legLive(l)}</div>)}</td>
+                <td className="min-w-[300px] text-[11.5px]">{viewer ? (t.legs || []).map((l) => <div key={l.sym}>{legsText([l])}</div>) : (t.legs || []).map((l) => <div key={l.sym}>{legLive(l, t.status)}</div>)}</td>
                 <td className={`num ${tone(t.gross)}`}>{t.gross != null ? signedUsd(t.gross) : "—"}</td><td className="num">{t.fees != null ? signedUsd(-t.fees) : "—"}</td>
                 <td className={`num font-semibold ${tone(t.net)}`}>{t.net != null ? signedUsd(t.net) : t.status === "OPEN" ? "open" : "—"}</td>
                 <td className="num">{t.equity != null ? usd0(t.equity) : "—"}</td>{!viewer && <td className="text-[12px] text-slate-400">{t.reason || ""}</td>}</tr>))}</tbody>
