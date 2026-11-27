@@ -25,14 +25,14 @@ export default function StrategyAudit() {
         right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={a.books?.since_date} />}>
         <div className="overflow-x-auto scroll-thin">
           <table className="desk-table">
-            <thead><tr><th>Method</th><th>Signals</th><th>Taken</th><th>Skipped</th><th>Target / Stop / 6h</th><th>Win rate</th><th>Net P&L</th><th>Worst drawdown</th></tr></thead>
+            <thead><tr><th>Method</th><th>Signals</th><th>Taken</th><th>Skipped</th><th>Target / Stop / 6h</th><th>Win rate</th><th>Net P&L</th></tr></thead>
             <tbody>
               {["follow", "plan_a", "switch"].map((k) => books[k] && (
                 <tr key={k}>
                   <td className={k === best ? "font-semibold text-slate-50" : ""}>{BOOK_NAME[k]}</td><td className="font-mono">{books[k].signals}</td><td className="font-mono">{books[k].taken}</td>
                   <td className="font-mono">{books[k].skipped + (books[k].stood_aside || 0)}</td><td className="font-mono">{books[k].target} / {books[k].stop} / {books[k].time}</td>
                   <td className="font-mono">{books[k].win_rate == null ? "—" : `${Math.round(books[k].win_rate * 100)}%`}</td>
-                  <td className={`font-mono ${pnl(books[k].net)}`}>{usd(books[k].net)}</td><td className="font-mono text-red-300">{usd(books[k].max_drawdown)}</td>
+                  <td className={`font-mono ${pnl(books[k].net)}`}>{usd(books[k].net)}</td>
                 </tr>
               ))}
             </tbody>

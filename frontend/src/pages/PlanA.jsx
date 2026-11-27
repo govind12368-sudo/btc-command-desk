@@ -37,7 +37,7 @@ export default function PlanA() {
     <div className="space-y-4" data-testid="plan-a-page">
       <PageHead title="Plan A – live" sub={`Reverse of every scalp signal, 1:2, 6-hour exit, one trade at a time · updated ${ist(data?.computed_at)} · BTC ${n(data?.live_price, 1)}`} />
       {data?.error && <Note>Last update failed: {data.error}. It retries every 2 minutes.</Note>}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         <Stat label="Signals" value={s.signals ?? "—"} />
         <Stat label="Trades taken" value={s.taken ?? "—"} />
         <Stat label="Skipped (busy)" value={s.skipped ?? "—"} />
@@ -45,7 +45,6 @@ export default function PlanA() {
         <Stat label="Target / Stop / 6h" value={`${s.target ?? 0} / ${s.stop ?? 0} / ${s.time ?? 0}`} />
         <Stat label="Win rate" value={s.win_rate == null ? "—" : `${Math.round(s.win_rate * 100)}%`} />
         <Stat label="Net P&L (est.)" value={signedUsd(s.net)} tone={(s.net || 0) >= 0 ? "text-teal-300" : "text-red-300"} />
-        <Stat label="Worst drawdown" value={usd(s.max_drawdown)} tone="text-red-300" />
       </div>
       {curve.length > 1 && (
         <Card title="Cumulative net P&L" sub="Closed Plan A trades, after estimated fees" testid="plan-a-curve">

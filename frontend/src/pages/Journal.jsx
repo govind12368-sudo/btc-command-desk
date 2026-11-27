@@ -61,9 +61,9 @@ function Actual({ isAdmin }) {
     <div className="space-y-4">
       <DeltaSyncCard isAdmin={isAdmin} onDone={reload} />
       {data?.capacity?.notice && <Note tone="amber">{data.capacity.notice}</Note>}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Equity" value={usd(st?.equity, 0)} testid="stat-equity" /><Stat label="Net P&L" value={usd(st?.net_pnl, 0)} valueClass={tone(st?.net_pnl)} />
-        <Stat label="Max drawdown" value={usd(st?.max_drawdown, 0)} /><Stat label="Observed win rate" value={pct(st?.win_rate, 0)} />
+        <Stat label="Observed win rate" value={pct(st?.win_rate, 0)} />
         <Stat label="Expectancy / trade" value={usd(st?.expectancy_usd, 0)} /><Stat label="Profit factor" value={n(st?.profit_factor, 2)} />
         <Stat label="Net R total" value={n(st?.net_r_total, 2)} /><Stat label="Unknown-cost trades" value={st?.unknown_cost_trades ?? "—"} />
       </div>

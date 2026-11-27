@@ -34,7 +34,7 @@ const METRICS = [
   ["Trading days", "days", (v) => num(v, 0)], ["Trades taken", "trades", (v) => num(v, 0)], ["Winning trades", "wins", (v) => num(v, 0)], ["Losing trades", "losses", (v) => num(v, 0)],
   ["Win ratio", "win_ratio", pc], ["Exits at expiry", "expiry_exits", (v) => num(v, 0)], ["Exits by stop-loss", "stop_exits", (v) => num(v, 0)], ["Days skipped", "skipped", (v) => num(v, 0)],
   ["Premium collected", "premium", usd], ["Gross P&L", "gross", signedUsd], ["Fees incl. GST", "fees", usd], ["Net P&L", "net", signedUsd], ["Final equity", "final_equity", usd],
-  ["Total return", "total_return", (v) => pc(v, 1)], ["CAGR", "cagr", (v) => pc(v, 1)], ["Max drawdown ($)", "max_dd", usd], ["Max drawdown (%)", "max_dd_pct", (v) => pc(v, 1)],
+  ["Total return", "total_return", (v) => pc(v, 1)], ["CAGR", "cagr", (v) => pc(v, 1)],
   ["Worst trade ($)", "worst", signedUsd], ["Worst trade (% of equity)", "worst_pct", (v) => pc(v, 2)], ["Best trade ($)", "best", signedUsd], ["Best trade (% of equity)", "best_pct", (v) => pc(v, 2)],
   ["Average win", "avg_win", signedUsd], ["Average loss", "avg_loss", signedUsd], ["Profit factor", "profit_factor", num], ["Average P&L per trade", "avg_net", signedUsd],
   ["Average daily return", "avg_daily_return", (v) => pc(v, 3)], ["Std. dev. of daily return", "std", (v) => pc(v, 3)], ["Sharpe (√365)", "sharpe", num],
@@ -214,7 +214,6 @@ function Rehearsal({ d, setPushed }) {
 function Compare({ bt, live, mode, variant, setVariant, op }) {
   const b = bt.variants[variant] || Object.values(bt.variants)[0], lm = live.metrics;
   const btCurve = useMemo(() => b.curve.map((p) => ({ t: p.t, v: p.equity })), [b]);
-  const btDd = useMemo(() => b.curve.map((p) => ({ t: p.t, v: p.dd_pct })), [b]);
   const day = (t) => t;
   return (
     <>
@@ -225,14 +224,10 @@ function Compare({ bt, live, mode, variant, setVariant, op }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title={`Backtest equity: ${b.name}`} sub={`$${n(bt.inputs.starting_capital, 0)} start, leverage ${n(bt.inputs.leverage, 0)}×${op ? " on each leg's half" : ""}`} testid="straddle-bt-equity">
           <LineChart series={[{ name: "Equity", color: VIZ.s1, points: btCurve }]} yFmt={(v) => `$${n(v, 0)}`} xFmt={day} height={190} testid="straddle-bt-equity-chart" />
-          <div className="mt-3 text-[12px] font-semibold text-slate-300">Drawdown from peak (%)</div>
-          <LineChart series={[{ name: "Drawdown", color: VIZ.down, points: btDd }]} yFmt={(v) => `${n(v, 1)}%`} xFmt={day} height={120} testid="straddle-bt-dd-chart" />
         </Card>
         <Card title={`${MODE_NAME[mode]} equity`} sub="The bot's own trades in the current mode" testid="straddle-live-equity">
           {live.curve.length >= 2 ? <>
             <LineChart series={[{ name: "Equity", color: VIZ.s3, points: live.curve.map((p) => ({ t: p.t, v: p.equity })) }]} yFmt={(v) => `$${n(v, 0)}`} xFmt={day} height={190} testid="straddle-live-equity-chart" />
-            <div className="mt-3 text-[12px] font-semibold text-slate-300">Drawdown from peak (%)</div>
-            <LineChart series={[{ name: "Drawdown", color: VIZ.down, points: live.curve.map((p) => ({ t: p.t, v: p.dd_pct })) }]} yFmt={(v) => `${n(v, 1)}%`} xFmt={day} height={120} testid="straddle-live-dd-chart" />
           </> : <Empty>The chart appears after two trading days in {MODE_NAME[mode]} mode.</Empty>}
         </Card>
       </div>
@@ -282,6 +277,7 @@ function Monthly({ bt, live, mode, variant, setVariant, op }) {
 
 const MONEY = new Set(["premium", "cost", "gross", "entry_fees", "exit_fees", "fees", "net", "equity", "peak", "dd", "sizing_equity", "notional", "leg_risk_cost"]);
 const PCT = new Set(["net_pct", "dd_pct", "entry_slip", "exit_slip"]);
+const NO_DD = new Set(["peak", "dd", "dd_pct"]);
 const RATE = new Set(["maker", "taker", "cap"]);
 function cell(k, v) {
   if (v == null || v === "") return "—";
@@ -311,6 +307,7 @@ function Journal({ mode, bot, bt }) {
     } catch (e) { toast.error(errText(e)); }
   };
   const items = [...(bt ? variantsOf(bt) : []).map(([k, l]) => [k, `Backtest: ${l}`]), [mode, `${MODE_NAME[mode]} journal (the bot)`]];
+  const cols = (page?.columns || []).filter((c) => !NO_DD.has(c.key));      // no drawdown on the page (owner, 27 Nov 2026); the CSV keeps every column
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -322,10 +319,10 @@ function Journal({ mode, bot, bt }) {
           <>
             <div className="overflow-x-auto scroll-thin">
               <table className="desk-table" data-testid="straddle-journal-table">
-                <thead><tr>{page.columns.map((c) => <th key={c.key} className={typeof page.rows[0][c.key] === "number" ? "num" : ""}>{c.label}</th>)}</tr></thead>
+                <thead><tr>{cols.map((c) => <th key={c.key} className={typeof page.rows[0][c.key] === "number" ? "num" : ""}>{c.label}</th>)}</tr></thead>
                 <tbody>
                   {page.rows.map((r) => (
-                    <tr key={r.date}>{page.columns.map((c) => (
+                    <tr key={r.date}>{cols.map((c) => (
                       <td key={c.key} className={`${typeof r[c.key] === "number" ? "num" : "whitespace-nowrap"} ${c.key === "net" ? tone(r.net) : c.key === "result" ? (r.result === "Win" ? "text-teal-300" : r.result === "Loss" ? "text-red-300" : "text-slate-400") : ""}`}>{cell(c.key, r[c.key])}</td>
                     ))}</tr>
                   ))}

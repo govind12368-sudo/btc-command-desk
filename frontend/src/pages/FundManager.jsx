@@ -149,7 +149,6 @@ function History({ h }) {
         { label: `Reached ${h.target_pct}%`, value: `${s.hit} of ${s.months}`, sub: `last 12 months: ${s.last12_hit} of ${s.last12_n}` },
         { label: "Losing months", value: `${s.negative} of ${s.months}`, cls: s.negative ? "text-red-300" : "text-slate-50" },
         { label: "Worst month", value: pc(s.worst_pct), cls: "text-red-300", sub: s.worst_month },
-        { label: "Deepest fall", value: pc(s.max_dd_pct), cls: "text-red-300", sub: `${usd0(s.max_dd)} from a peak, closed trades` },
         { label: "Last 12 months", value: pc(s.last12_avg_pct), cls: tone(s.last12_avg_pct), sub: "average month" },
       ]} />
       <Card title="Return by month" sub="% of the fund, by the month a trade closed" testid="fund-months">
@@ -174,10 +173,10 @@ function History({ h }) {
         <Card title="Bigger size is not a bigger return" sub="Same capital, every position multiplied, same stops" testid="fund-scale" pad={false}>
           <div className="overflow-x-auto scroll-thin">
             <table className="desk-table">
-              <thead><tr><th>Size</th><th className="num">Avg month</th><th className="num">Hit {h.target_pct}%</th><th className="num">Losing</th><th className="num">Worst</th><th className="num">Deepest fall</th><th className="num">Stops</th></tr></thead>
+              <thead><tr><th>Size</th><th className="num">Avg month</th><th className="num">Hit {h.target_pct}%</th><th className="num">Losing</th><th className="num">Worst</th><th className="num">Stops</th></tr></thead>
               <tbody>{h.scale.map((x) => (
                 <tr key={x.size} className={x.size === 1 ? "bg-amber-500/[0.06]" : ""}><td className="whitespace-nowrap font-mono">{n(x.size, 2)}×{x.size === 1 ? " plan" : ""}</td><td className={`num ${tone(x.avg_pct)}`}>{pc(x.avg_pct)}</td>
-                  <td className="num whitespace-nowrap">{x.hit} of {x.months}</td><td className="num">{x.negative}</td><td className="num text-red-300">{pc(x.worst_pct)}</td><td className="num text-red-300">{pc(x.max_dd_pct)}</td><td className="num">{x.stops}</td></tr>))}
+                  <td className="num whitespace-nowrap">{x.hit} of {x.months}</td><td className="num">{x.negative}</td><td className="num text-red-300">{pc(x.worst_pct)}</td><td className="num">{x.stops}</td></tr>))}
               </tbody>
             </table>
           </div>
@@ -185,9 +184,9 @@ function History({ h }) {
       </div>
       <Card title="By strategy in this view" pad={false} testid="fund-history-by">
         <div className="overflow-x-auto scroll-thin"><table className="desk-table">
-          <thead><tr><th>Strategy</th><th className="num">Net for the fund</th><th className="num">Its deepest fall</th><th className="num">Trades taken</th><th className="num">Not taken</th></tr></thead>
+          <thead><tr><th>Strategy</th><th className="num">Net for the fund</th><th className="num">Trades taken</th><th className="num">Not taken</th></tr></thead>
           <tbody>{["elite", "optpicks", "flush"].map((k) => (
-            <tr key={k}><td>{NAMES[k]}</td><td className={`num ${tone(v.by[k].net)}`}>{signedUsd(v.by[k].net, 0)}</td><td className="num text-red-300">{usd0(v.by[k].max_dd)}</td><td className="num">{v.by[k].taken}</td><td className="num">{v.by[k].skipped}</td></tr>))}
+            <tr key={k}><td>{NAMES[k]}</td><td className={`num ${tone(v.by[k].net)}`}>{signedUsd(v.by[k].net, 0)}</td><td className="num">{v.by[k].taken}</td><td className="num">{v.by[k].skipped}</td></tr>))}
           </tbody>
         </table></div>
       </Card>

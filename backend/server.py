@@ -1103,9 +1103,9 @@ async def option_picks_sizing(body: OptSizingIn, request: Request, u=Depends(adm
 
 
 @api.get("/option-picks/trades.csv")
-async def option_picks_csv(key: Literal["IFLY", "SP16", "SSTR", "BPS", "BCS"], period: Literal["A", "B"] = "A", u=Depends(admin_user)):
-    return PlainTextResponse(optpicks.trades_csv(key, period), media_type="text/csv",
-                             headers={"Content-Disposition": f'attachment; filename="option_picks_{key}_backtest_{period}.csv"'})
+async def option_picks_csv(key: Literal["IFLY", "SP16", "SSTR", "BPS", "BCS"], u=Depends(admin_user)):
+    return PlainTextResponse(optpicks.trades_csv(key), media_type="text/csv",
+                             headers={"Content-Disposition": f'attachment; filename="option_picks_{key}_backtest.csv"'})
 
 
 # ---------------- Elite 4 Edge (one trade at a time; paper by default, real orders only when an admin switches it on) ----------------

@@ -267,9 +267,8 @@ def test_paper_trades_compound_and_the_comparison_is_like_for_like(op, monkeypat
     run(go())
 
 
-def test_journal_b_is_the_servers_own_run_from_1_oct_checked_against_a(op, monkeypatch):
-    """Journal B (as Elite 4 Edge): the server re-runs the same code on Delta's data for every expiry from 1 Oct 2026, starts
-    again from the set capital, and is checked day by day against journal A (the history file). Users never get it."""
+def test_journal_a_is_the_history_file_then_the_servers_own_days_and_there_is_no_journal_b(op, monkeypatch):
+    """Owner, 27 Nov 2026: journal B (the server's re-run from 1 Oct 2026) was removed; journal A = history file, then server days."""
     t, _ = op.build_trade("SSTR", straddle_day(op, settle=60010.0))
     hist = ["2026-09-30", "2026-10-01", "2026-10-02", "2026-11-22"]
     monkeypatch.setattr(op, "history", lambda: {"trades": {"SSTR": [{**t, "day": d, "entry_ist": f"{d} 17:00"} for d in hist]}})
@@ -277,25 +276,17 @@ def test_journal_b_is_the_servers_own_run_from_1_oct_checked_against_a(op, monke
 
     async def go():
         await op.db.opt_backtest.insert_many([
-            {"_id": "2026-10-01", "trades": {"SSTR": day("2026-10-01")}, "skips": {}},
-            {"_id": "2026-10-02", "trades": {"SSTR": day("2026-10-02", legs=[{**t["legs"][0], "fill": 98.0}, t["legs"][1]])}, "skips": {}},   # differs from A
-            {"_id": "2026-10-03", "trades": {}, "skips": {"SSTR": "no option chain for this expiry"}},
-            {"_id": "2026-11-22", "trades": {"SSTR": day("2026-11-22")}, "skips": {}},
+            {"_id": "2026-10-01", "trades": {"SSTR": day("2026-10-01")}, "skips": {}},          # a server doc inside the history period: not used
             {"_id": "2026-11-23", "trades": {"SSTR": day("2026-11-23")}, "skips": {}}])
         await op.compute()
         d = await op.dashboard()
-        a, b = d["backtest"]["SSTR"], d["backtest"]["SSTR"]["B"]
-        assert a["stats"]["trades"] == 5 and d["b_from"] == "2026-10-01"                 # A: the history file, then server days after 22 Nov only
-        assert b["stats"]["trades"] == 4 and (b["days"], b["skipped"], b["from"], b["to"]) == (5, 1, "2026-10-01", "2026-11-23")
-        assert b["match"] == {"checked": 4, "same": 3, "differ": ["2026-10-02"], "to": "2026-11-22"}
-        assert b["trades"][-1]["capital"] == 4000.0 and b["trades"][0]["capital"] > 4000.0          # starts again from the capital, then compounds
-        assert [p["t"] for p in b["curve"]] == ["2026-10-01", "2026-10-02", "2026-11-22", "2026-11-23"] and b["curve"][-1]["v"] == b["stats"]["final_equity"]
+        a = d["backtest"]["SSTR"]
+        assert a["stats"]["trades"] == 5 and "B" not in a and "b_from" not in d and "b_fill" not in d
         assert len(a["curve"]) == 5 and a["curve"][-1]["v"] == a["stats"]["final_equity"]             # the whole balance path, not only the trades sent
-        assert b["stats"]["max_dd"] >= 0 and "max_dd" in b["stats"]
-        assert len(op.trades_csv("SSTR", "B").splitlines()) == 5 and len(op.trades_csv("SSTR").splitlines()) == 6
+        assert len(op.trades_csv("SSTR").splitlines()) == 6
         import viewer
         v = viewer.optpicks_view({**d, "is_admin": False})
-        assert "B" not in v["backtest"]["SSTR"] and "b_from" not in v and v["backtest"]["SSTR"]["stats"]["trades"] == 5
+        assert v["backtest"]["SSTR"]["stats"]["trades"] == 5 and "max_dd" not in v["backtest"]["SSTR"]["stats"]
     run(go())
 
 
@@ -310,32 +301,4 @@ def test_server_backfill_runs_only_the_enabled_pick_on_history_days(op, monkeypa
     async def go():
         assert await op.backtest_day(date(2026, 10, 5)) is False and await op.backtest_day(date(2026, 11, 24)) is False      # not settled: tried again later
         assert calls == [(date(2026, 10, 5), ("SSTR",)), (date(2026, 11, 24), tuple(op.ORDER))]
-    run(go())
-
-
-def test_journal_b_backfill_runs_in_the_background_and_one_bad_day_never_blocks_it(op, monkeypatch):
-    done, computed = [], []
-
-    async def fake_day(d):
-        if d.isoformat() == "2026-10-03":
-            raise RuntimeError("Delta 502")
-        if d.isoformat() == "2026-10-04":
-            return False                                                                    # no settlement data for that day
-        done.append(d)
-        return True
-
-    async def fake_compute():
-        computed.append(len(done))
-    monkeypatch.setattr(op, "backtest_day", fake_day)
-    monkeypatch.setattr(op, "compute", fake_compute)
-    monkeypatch.setattr(op, "_trading_now", lambda: False)
-    monkeypatch.setattr(op, "FILL_PAUSE", 0)
-
-    async def go():
-        await op.db.opt_backtest.insert_one({"_id": "2026-10-01", "trades": {}, "skips": {}})   # already there: not fetched again
-        await op.fill_b()
-        total = (op.HISTORY_TO - op.B_FROM).days + 1
-        assert op.FILL["total"] == total and op.FILL["done"] == total - 2 and op.FILL["failed"] == ["2026-10-03", "2026-10-04"] and not op.FILL["running"]
-        assert date(2026, 10, 1) not in done and len(done) == total - 3
-        assert computed[0] == 10 and computed[-1] == len(done)                               # re-computed every 10 days and at the end
     run(go())

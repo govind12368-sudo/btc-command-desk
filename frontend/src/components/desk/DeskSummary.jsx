@@ -155,13 +155,12 @@ export function SwitchFocus({ d }) {
   return (
     <Card title="Day-type switch: the plan Auto-Trade follows" testid="switch-focus" sub="Range day: Plan A (reverse the signal). Trend day and the signal goes with the trend: follow it. Anything else: no trade. From 19 Nov 17:45 IST only Strong support (4-5/5) is taken; Medium, Weak and unclear support are skipped."
       right={<PeriodSwitch value={period} onChange={setPeriod} sinceDate={b.since_date} />}>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" data-testid="switch-stats">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5" data-testid="switch-stats">
         <Stat label="Net result (est.)" value={signedUsd(sw.net)} tone={ink(sw.net)} />
         <Stat label="Trades taken" value={sw.taken ?? "—"} sub={sw.open ? `${sw.open} still open` : null} />
         <Stat label="Signals it stood aside on" value={sw.stood_aside ?? "—"} sub={`of ${sw.signals ?? 0} signals${sw.low_support ? ` · ${sw.low_support} skipped: support not Strong` : ""}`} />
         <Stat label="Win rate" value={sw.win_rate == null ? "—" : `${Math.round(sw.win_rate * 100)}%`} />
         <Stat label="Target / Stop / 6h exit" value={`${sw.target ?? 0} / ${sw.stop ?? 0} / ${sw.time ?? 0}`} />
-        <Stat label="Worst drawdown" value={signedUsd(sw.max_drawdown)} tone="text-red-300" />
       </div>
       {a && <p className="mt-3 rounded-md border border-line bg-chrome/60 px-3 py-2 text-[12.5px] text-slate-300" data-testid="switch-auto">
         <b className="text-slate-100">Auto-Trade:</b> {a.mode === "PAPER" ? "paper mode" : a.mode === "LIVE" ? "LIVE mode" : "testnet mode"} · {a.status} · {a.day_type_only ? "takes Day-type switch trades only" : "not set to Day-type switch"} · today <span className={`font-mono ${ink(a.today)}`}>{signedUsd(a.today)}</span>

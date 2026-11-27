@@ -32,13 +32,12 @@ function Stat({ label, value, tone = "text-slate-50", sub, testid }) {
 function Totals({ s, testid, viewer }) {
   if (!s) return null;
   return (
-    <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${viewer ? "lg:grid-cols-5" : "lg:grid-cols-6"}`} data-testid={testid}>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" data-testid={testid}>
       <Stat label="Trades (closed)" value={s.trades} sub={`${s.wins} won · ${s.losses} lost`} />
       <Stat label="Win ratio" value={pctTxt(s.win_rate)} sub="net after fees > 0" />
       <Stat label="Gross P&L" value={signedUsd(s.gross)} tone={pnlTone(s.gross)} sub="before fees" />
       <Stat label="Fees" value={signedUsd(-s.fees)} tone="text-slate-300" sub="0.05% each side + 18% GST" />
       <Stat label="Net P&L" value={signedUsd(s.net)} tone={pnlTone(s.net)} sub={s.per_trade != null ? `${signedUsd(s.per_trade)} a trade` : null} />
-      {!viewer && <Stat label="Max drawdown" value={signedUsd(s.max_dd)} tone="text-red-300" sub="closed trades, from the peak" />}
     </div>
   );
 }
@@ -48,7 +47,7 @@ function StratTable({ j, strategies, viewer }) {
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table">
-        <thead><tr><th>Priority</th><th>Strategy</th><th className="num">Trades</th><th className="num">Won</th><th className="num">Lost</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Per trade</th>{!viewer && <th className="num">Max DD</th>}</tr></thead>
+        <thead><tr><th>Priority</th><th>Strategy</th><th className="num">Trades</th><th className="num">Won</th><th className="num">Lost</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num">Per trade</th></tr></thead>
         <tbody>{all.map((s) => {
           const st = strategies.find((x) => x.key === s.key);
           return (
@@ -58,7 +57,6 @@ function StratTable({ j, strategies, viewer }) {
               <td className="num">{s.trades}</td><td className="num">{s.wins}</td><td className="num">{s.losses}</td><td className="num">{pctTxt(s.win_rate)}</td>
               <td className={`num ${pnlTone(s.gross)}`}>{signedUsd(s.gross)}</td><td className="num">{signedUsd(-s.fees)}</td>
               <td className={`num font-semibold ${pnlTone(s.net)}`}>{signedUsd(s.net)}</td><td className={`num ${pnlTone(s.per_trade)}`}>{signedUsd(s.per_trade)}</td>
-              {!viewer && <td className="num text-red-300">{signedUsd(s.max_dd)}</td>}
             </tr>);
         })}</tbody>
       </table>
@@ -70,12 +68,12 @@ function YearTable({ rows, wbs, viewer }) {
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="elite-yearly">
-        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{!viewer && <th className="num">Max DD</th>}{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
+        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
         <tbody>{rows.map((y) => (
           <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
             <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pctTxt(y.win_rate)}</td>
             <td className={`num ${pnlTone(y.gross)}`}>{signedUsd(y.gross, 0)}</td><td className="num">{signedUsd(-y.fees, 0)}</td>
-            <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td>{!viewer && <td className="num text-red-300">{signedUsd(y.max_dd, 0)}</td>}
+            <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td>
             {wbs.map((w) => <td key={w} className={`num ${pnlTone(y.by_strategy[w])}`}>{signedUsd(y.by_strategy[w], 0)}</td>)}
             <td className={`num ${pnlTone(y.cumulative)}`}>{signedUsd(y.cumulative, 0)}</td>
           </tr>))}
@@ -361,10 +359,8 @@ function EliteAdmin({ d }) {
       <div className="flex flex-wrap gap-2">
         <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="elite-tab-C">C · Live paper trading</button>
         <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="elite-tab-A">A · 1 Jan 2023 → today</button>
-        <button className={btn(tab === "B")} onClick={() => setTab("B")} data-testid="elite-tab-B">B · 1 Oct 2026 → today</button>
       </div>
       {tab === "A" && <Journal j={d.A} title="1 Jan 2023 → today" strategies={strategies} note={aNote} viewer={viewer} />}
-      {tab === "B" && <Journal j={d.B} title="1 Oct 2026 → today" strategies={strategies} note={viewer ? btNote : <Note>Same code on this server's Delta 5-minute candles from 1 Oct 2026. Backtest trades, not live trades.</Note>} viewer={viewer} />}
       {tab === "C" && <Live lv={lv} isAdmin={d.is_admin} reload={reload} />}
     </div>
   );
