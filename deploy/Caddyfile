@@ -1,6 +1,11 @@
 # DOMAIN comes from .env. Caddy gets and renews a free Let's Encrypt HTTPS certificate automatically.
+# mybtcpartner.in (owner's own domain, 27 Nov 2026) is served too; its certificate is issued as soon as its DNS points here.
 
-{$DOMAIN} {
+www.mybtcpartner.in {
+	redir https://mybtcpartner.in{uri} permanent
+}
+
+{$DOMAIN}, mybtcpartner.in {
 	encode zstd gzip
 
 	header {
