@@ -1,5 +1,6 @@
 # DOMAIN comes from .env. Caddy gets and renews a free Let's Encrypt HTTPS certificate automatically.
-# mybtcpartner.in (owner's own domain, 27 Nov 2026) is served too; its certificate is issued as soon as its DNS points here.
+# mybtcpartner.in (owner's own domain, 27 Nov 2026) is the site's address. The server's old address 157-180-33-43.sslip.io
+# still answers /api/* (webhooks, feeds, older links) and sends page visits to mybtcpartner.in.
 
 www.mybtcpartner.in {
 	redir https://mybtcpartner.in{uri} permanent
@@ -7,6 +8,12 @@ www.mybtcpartner.in {
 
 {$DOMAIN}, mybtcpartner.in {
 	encode zstd gzip
+
+	@oldaddress {
+		host 157-180-33-43.sslip.io
+		not path /api/*
+	}
+	redir @oldaddress https://mybtcpartner.in{uri} permanent
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
