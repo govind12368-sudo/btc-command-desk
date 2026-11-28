@@ -13,6 +13,7 @@ import { Ring, Sparkline, PillarBars, MtfStrip, VIZ } from "@/components/desk/ch
 import { PILLAR_NAMES } from "@/components/desk/Pillars";
 import { NextSetup } from "@/components/desk/NextSetup";
 import { MarketRead, ModuleCards } from "@/components/desk/DeskSummary";
+import { isRetired } from "@/lib/retired";
 
 const TONE = { BULLISH: "text-teal-300 border-teal-500/40 bg-teal-500/10", "LEAN BULLISH": "text-teal-300 border-teal-500/30 bg-teal-500/5",
   BEARISH: "text-red-300 border-red-500/40 bg-red-500/10", "LEAN BEARISH": "text-red-300 border-red-500/30 bg-red-500/5", NEUTRAL: "text-slate-300 border-slate-500/40 bg-slate-500/10" };
@@ -125,7 +126,7 @@ function JournalSummary() {
   const sig = useFetch("/signals?size=5", 30000);
   const val = useFetch("/validation?size=3", 60000);
   return (
-    <Card title="Automatic Journal & Validation" testid="journal-summary" right={<Link to="/journal" className="text-xs text-amber-400" data-testid="open-journal">Journal →</Link>}>
+    <Card title="Automatic Journal & Validation" testid="journal-summary" right={!isRetired("/journal") && <Link to="/journal" className="text-xs text-amber-400" data-testid="open-journal">Journal →</Link>}>
       <div className="font-mono text-[11px] text-slate-500 mb-1">Model signals captured: {sig.data?.total ?? "—"}</div>
       {sig.data?.items?.length ? sig.data.items.map((x) => (
         <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-line/50"><span className="font-mono">{x.strategy} {x.direction} @ {n(x.entry, 1)}</span><Chip status={x.observation} /></div>
@@ -134,7 +135,7 @@ function JournalSummary() {
       {val.data?.items?.map((x) => (
         <div key={x.id} className="flex items-center justify-between py-1 text-xs border-b border-line/50"><span className="font-mono">{x.model} {x.direction} {ist(x.capture_time)}</span><Chip status={x.outcome} /></div>
       ))}
-      <Link to="/validation" className="mt-2 inline-block text-xs text-amber-400" data-testid="open-validation">Validation →</Link>
+      {!isRetired("/validation") && <Link to="/validation" className="mt-2 inline-block text-xs text-amber-400" data-testid="open-validation">Validation →</Link>}
     </Card>
   );
 }
@@ -158,7 +159,7 @@ function SourceHealth({ sources, recovery }) {
   return (
     <Card title="Execution controls & source health" testid="source-health" right={isAdmin && <Link to="/audit" className="text-xs text-amber-400" data-testid="open-audit">Audit →</Link>}>
       <div className="flex flex-wrap gap-2 mb-3">
-        <Link to="/journal" data-testid="ctl-fill" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/40">Record actual fill</Link>
+        {!isRetired("/journal") && <Link to="/journal" data-testid="ctl-fill" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/40">Record actual fill</Link>}
         <Link to="/planner" data-testid="ctl-planner" className="rounded border border-line px-3 py-1.5 text-xs hover:border-amber-500/40">Trade planner</Link>
       </div>
       <Note tone="plain">Desk never places orders — trade on Delta, then record the fill.</Note>
@@ -204,7 +205,7 @@ export default function Dashboard() {
       <DeskBrief b={s.brief} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card title="BTC Direction · confirmed 15-minute model" sub="Completed-candle confirmation · OKX market data + Fed/EIA macro data · news/calendar excluded" testid="direction-card"><DirectionPanel live={s.live_direction} /></Card>
-        <Card title="Five-pillar balance" sub="Each bar = pillar score × its share of the model (same shares as the direction model). Striped = data unavailable." testid="pillar-balance" right={<Link to="/pillars" className="text-xs text-amber-400">Pillar details</Link>}>
+        <Card title="Five-pillar balance" sub="Each bar = pillar score × its share of the model (same shares as the direction model). Striped = data unavailable." testid="pillar-balance" right={!isRetired("/pillars") && <Link to="/pillars" className="text-xs text-amber-400">Pillar details</Link>}>
           <PillarBars pillars={s.pillars} names={PILLAR_NAMES} live={s.live_direction} />
           <div className="mt-4"><div className="mb-1.5 text-[12px] text-slate-400">Trend by timeframe (Delta completed candles)</div><MtfStrip rows={s.mtf?.rows} /></div>
         </Card>
@@ -212,8 +213,8 @@ export default function Dashboard() {
       <Card title="Price chart" sub="Hover a candle for its open, high, low, close and volume" testid="chart-card"><CandleChart levels={lv} /></Card>
       {view === "detailed" ? (<>
       <div className="grid gap-4 lg:grid-cols-2">
-        <StrategyCard ev={s.scalp} title="Scalping Trade Signal" to="/scalping" />
-        <StrategyCard ev={s.swing} title="Swing Trade Signal" to="/swing" />
+        <StrategyCard ev={s.scalp} title="Scalping Trade Signal" to={isRetired("/scalping") ? null : "/scalping"} />
+        <StrategyCard ev={s.swing} title="Swing Trade Signal" to={isRetired("/swing") ? null : "/swing"} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {Object.entries(s.pillars).map(([k, p]) => <PillarCard key={k} k={k} p={p} compact />)}

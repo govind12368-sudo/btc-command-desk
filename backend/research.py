@@ -14,13 +14,13 @@ from core import now_utc, iso
 log = logging.getLogger("research")
 
 DATA = [
-    {"what": "BTC price · Binance BTCUSDT perpetual, 5-minute candles", "from": "2023-01-01", "used": "Indicator strategies, the published-strategy library, the lab's own ideas"},
+    {"what": "BTC price · Binance BTCUSDT perpetual, 5-minute candles", "from": "2023-01-01", "used": "Indicator strategies (owner's 3-year workbook)"},
     {"what": "BTC price · Delta Exchange BTCUSD, 5-minute candles", "from": "2024-02-01", "used": "Re-checks on the exchange we trade: Elite 4 Edge, Candle Runs, Delta Top 3"},
     {"what": "BTC daily options · Delta Exchange India (every expiry: strikes, mark prices, real trades, settlement index, fee record)", "from": "2024-01-01",
      "used": "Option Picks and the options bots"},
     {"what": "Futures market data · funding rate, perp premium, open interest, long/short ratios, Coinbase premium", "from": "2023-01-01",
-     "used": "Signal search (crowding, flows, time of day)"},
-    {"what": "This site's own scalp signals, replayed", "from": "2024-09-01", "used": "Flush Short, Strategy Observer (26 months)"},
+     "used": "Research on crowding and flows"},
+    {"what": "This site's own scalp signals, replayed", "from": "2024-09-01", "used": "Flush Short (26 months)"},
 ]
 
 # Every search, with what passed each check. Counts are versions backtested (one rule set on one timeframe with one exit style
@@ -36,12 +36,6 @@ FUNNEL = [
      "kept": 1, "kept_as": "Option Picks (★ Recommended)"},
     {"search": "Rules built on this site's scalp signals", "data": "26 months of the site's signals", "tested": 10656,
      "passed": "40 passed both halves of the data; only the down-market rule beat a luck test", "kept": 1, "kept_as": "Flush Short (down markets)"},
-    {"search": "Published strategy library (49 rule sets × timeframes × exits × direction)", "data": "Binance BTCUSDT, 2023 → 2026", "tested": 1470,
-     "passed": "24 profitable in training; none held on unseen data", "kept": 0, "kept_as": "—"},
-    {"search": "Signal scan (funding, open interest, crowding, Coinbase premium, time of day)", "data": "Training years only", "tested": 1200,
-     "passed": "Used for ideas; each idea must pass the full test below", "kept": 0, "kept_as": "—"},
-    {"search": "The lab's own strategy ideas", "data": "Train 2023-01→2024-06, validation 2024-07→2025-06, locked test 2025-07→2026-10", "tested": 14,
-     "passed": "None passed all three periods with enough trades", "kept": 0, "kept_as": "—"},
 ]
 
 STEPS = [

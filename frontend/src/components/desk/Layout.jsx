@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { RETIRED, isRetired } from "@/lib/retired";
 import { NavLink, Outlet, useLocation, Link, Navigate } from "react-router-dom";
 import { BadgeCheck,
   LayoutDashboard, Activity, Zap, TrendingUp, Columns3, Radar, Telescope, Newspaper, BookOpen, ShieldCheck, Settings, Stethoscope, Lightbulb, Menu, X,
@@ -23,7 +24,7 @@ function Brand() {
   return <>{APP_NAME.slice(0, i)}<span className="text-amber-400">BTC</span>{APP_NAME.slice(i + 3)}</>;
 }
 
-export const NAV_GROUPS = [
+const NAV_GROUPS_ALL = [
   ["Market", [["/", "BTC Dashboard", LayoutDashboard], ["/market", "Live Market", Activity], ["/scanner", "BTC Scanner", Radar], ["/intel", "Market Intelligence", Telescope], ["/news", "News & Events", Newspaper]]],
   ["Signals", [["/scalping", "Scalping Signal", Zap], ["/swing", "Swing Signal", TrendingUp], ["/pillars", "Five Pillars", Columns3], ["/validation", "Trade Validation", ShieldCheck]]],
   ["Strategies", [["/research", "Research & Edge", Microscope], ["/plan-a", "Plan A – Live", FlaskConical], ["/flush-short", "Flush Short", TrendingDown], ["/candle-runs", "Candle Runs", Layers], ["/delta-top3", "Delta Top 3", Trophy],
@@ -32,6 +33,8 @@ export const NAV_GROUPS = [
   ["System", [["/data-health", "Data Health", HeartPulse], ["/server", "Server", Server], ["/settings", "Settings", Settings], ["/audit", "System Audit", Stethoscope],
     ["/upgrades", "Upgrade Requests", Lightbulb], ["/account", "Account Settings", UserCircle], ["/users", "User Management", Users]]],
 ];
+export { RETIRED, isRetired };
+export const NAV_GROUPS = NAV_GROUPS_ALL.map(([name, items]) => [name, items.filter(([to]) => !RETIRED.has(to))]).filter(([, items]) => items.length);
 export const NAV = NAV_GROUPS.flatMap(([, items]) => items);
 
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
@@ -233,7 +236,7 @@ export default function Layout() {
   const connStatus = !online ? "OFFLINE" : conn.ok === false ? "DISCONNECTED" : ws === "connected" ? (bad ? "DEGRADED" : "CONNECTED") : "RECONNECTING";
   const connTone = { CONNECTED: "PASS", DEGRADED: "WAIT", RECONNECTING: "WAIT", DISCONNECTED: "BLOCKED", OFFLINE: "BLOCKED" }[connStatus];
   const W = rail ? 56 : 216;
-  const hiddenForUsers = !isAdmin && (ui?.hidden_global || []).includes(loc.pathname);
+  const hiddenForUsers = !isAdmin && ((ui?.hidden_global || []).includes(loc.pathname) || isRetired(loc.pathname));
   const toggleRail = () => { setRail(!rail); lsSet("vb-rail", !rail); };
   return (
     <div className="min-h-screen">

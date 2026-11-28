@@ -51,6 +51,21 @@ def test_user_and_global_lists_are_separate_and_reversible(prefs):
     run(go())
 
 
+def test_retired_pages_stay_hidden_for_users(prefs):
+    """Owner, 28 Nov 2026: scalp-signal and Plan A / Day-type pages are off for users whatever the admin's own list says."""
+    async def go():
+        from core import db
+        uid = ObjectId()
+        await db.users.insert_one({"_id": uid, "email": "a@example.test", "role": "admin"})
+        user = {"id": str(uid), "email": "a@example.test", "role": "admin"}
+        assert set(prefs.RETIRED) <= set(await prefs.global_hidden())
+        await prefs.set_global(user, ["/delta-top3"])
+        assert set(await prefs.global_hidden()) == set(prefs.RETIRED) | {"/delta-top3"}
+        assert "/option-picks" not in await prefs.global_hidden() and "/auto-trade" not in prefs.RETIRED
+    assert set(prefs.RETIRED) <= set(prefs.PAGES)
+    run(go())
+
+
 def test_health_grades():
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     dh = importlib.import_module("datahealth")

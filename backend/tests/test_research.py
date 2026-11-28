@@ -10,7 +10,7 @@ def test_overview_totals_add_up_and_show_no_rules(monkeypatch):
         return []
     monkeypatch.setattr(research, "kept", no_kept)
     out = asyncio.run(research.overview())
-    assert out["totals"]["tested"] == sum(f["tested"] for f in out["funnel"]) == 47016
+    assert out["totals"]["tested"] == sum(f["tested"] for f in out["funnel"]) == 44332
     assert out["totals"]["kept"] == sum(f["kept"] for f in out["funnel"]) == 8
     assert out["totals"]["years"] >= 3.9 and all(d["years"] > 0 for d in out["data"])
     text = json.dumps({k: out[k] for k in ("data", "funnel", "steps", "note")})

@@ -14,6 +14,9 @@ PAGES = ["/", "/market", "/scalping", "/swing", "/pillars", "/scanner", "/intel"
          "/elite-4-edge", "/option-picks", "/research", "/real-account", "/straddle-bot", "/observer", "/fund-manager", "/auto-trade", "/journal", "/regime", "/validation", "/data-health", "/server", "/settings", "/audit",
          "/upgrades", "/account", "/users"]
 LOCKED = {"/"}
+# Off the menu for everyone (owner, 28 Nov 2026): pages on the scalp signals and the Plan A / Day-type switch. Users cannot open
+# them or get their data; admins keep the routes. Same list as frontend/src/lib/retired.js. Nothing else changes.
+RETIRED = ["/scalping", "/swing", "/pillars", "/validation", "/plan-a", "/observer", "/journal", "/regime"]
 
 
 def clean(pages):
@@ -38,7 +41,7 @@ async def set_user(user, pages):
 
 async def global_hidden():
     """Pages hidden for all users (the server refuses their data to non-admins: see viewer.py)."""
-    return clean(((await db.site_ui.find_one({"_id": "pages"})) or {}).get("hidden"))
+    return clean((((await db.site_ui.find_one({"_id": "pages"})) or {}).get("hidden") or []) + RETIRED)
 
 
 async def set_global(user, pages):

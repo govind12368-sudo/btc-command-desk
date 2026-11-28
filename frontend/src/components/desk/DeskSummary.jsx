@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSoften } from "@/lib/present";
+import { isRetired } from "@/lib/retired";
 import { Link } from "react-router-dom";
 import { Card, Note, More } from "@/components/desk/ui";
 import { n, ist, ago, signedUsd } from "@/lib/fmt";
@@ -56,7 +57,7 @@ function Read({ title, forPlan, r, plan }) {
           <thead><tr><th>Module</th><th className="num">Weight</th><th>Reading</th><th className="num">Points</th></tr></thead>
           <tbody>{r.rows.map((x) => (
             <tr key={x.key}>
-              <td className="min-w-[190px]"><Link to={x.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{x.name}</Link><div className="text-[11.5px] leading-snug text-slate-400">{x.detail}</div></td>
+              <td className="min-w-[190px]">{isRetired(x.to) ? <span className="font-semibold text-slate-100">{x.name}</span> : <Link to={x.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{x.name}</Link>}<div className="text-[11.5px] leading-snug text-slate-400">{x.detail}</div></td>
               <td className="num font-mono">{x.weight}%</td>
               <td className="min-w-[120px]"><div className={`text-[12px] font-semibold ${INK[x.reading_label] || "text-slate-500"}`}>{NAME[x.reading_label] || "No data"} {x.reading != null && <span className="font-mono font-normal text-slate-400">{signed(x.reading, 2)}</span>}</div>
                 <div className="mt-1"><Diverge value={x.reading} max={1} height={6} label={`${x.name} reading ${signed(x.reading, 2)} on a scale from minus 1 to plus 1`} /></div></td>
@@ -76,7 +77,7 @@ function Read({ title, forPlan, r, plan }) {
         <p className="mt-1.5 text-[12.5px] leading-snug text-slate-300">{plan.text}</p>
         {plan.playbook && <p className="mt-1.5 text-[12.5px] leading-snug text-slate-300">Day type now: <Link to={plan.playbook.to} className="font-semibold text-slate-100 underline decoration-slate-600 underline-offset-2 hover:decoration-amber-400">{plan.playbook.day_type}</Link>. {plan.playbook.text}</p>}
         {plan.levels && <p className="mt-1 font-mono text-[12px] text-slate-300">Entry {n(plan.levels.entry, 1)} · Stop {n(plan.levels.stop, 1)} · Target {n(plan.levels.target, 1)}</p>}
-        <Link to={plan.to} className={`mt-2 inline-block ${open}`} data-testid={`open-${r.view}-plan`}>Open the {plan.name.toLowerCase()}</Link>
+        {!isRetired(plan.to) && <Link to={plan.to} className={`mt-2 inline-block ${open}`} data-testid={`open-${r.view}-plan`}>Open the {plan.name.toLowerCase()}</Link>}
       </div>}
     </div>
   );
@@ -126,7 +127,7 @@ function ModuleCard({ c }) {
           : <p className="text-[12px] text-slate-500">No scheduled US data release in the next 3 days.</p>)}
         {c.headlines?.map((h) => <a key={h.link} href={h.link} target="_blank" rel="noopener noreferrer" className="block text-[12px] leading-snug text-slate-300 underline decoration-slate-700 underline-offset-2 hover:decoration-amber-400">{h.title}</a>)}
       </div>
-      <Link to={c.to} className={`mt-3 ${open}`} data-testid={`open-${c.key}`}>Open {c.title}</Link>
+      {!isRetired(c.to) && <Link to={c.to} className={`mt-3 ${open}`} data-testid={`open-${c.key}`}>Open {c.title}</Link>}
     </section>
   );
 }

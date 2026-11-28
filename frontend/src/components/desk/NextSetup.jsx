@@ -3,6 +3,7 @@ import { Note } from "./ui";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { n, usd, ist } from "@/lib/fmt";
+import { isRetired } from "@/lib/retired";
 
 // What each check protects you from, in plain words (shown when a check is not passing).
 export const CHECK_PLAIN = {
@@ -44,7 +45,7 @@ export function NextSetup({ scalp, swing, isAdmin }) {
           <h3 className={`mt-0.5 text-xl font-bold tracking-tight ${live ? (dir === "LONG" ? "text-teal-300" : "text-red-300") : "text-slate-50"}`} data-testid="next-setup-title">{head.replace(/\s+—/, " —")}</h3>
           <div className="text-[12px] text-slate-500">{ev.passed}/{total} checks pass · {CADENCE[ev.strategy]}</div>
         </div>
-        <Link to={ev.strategy === "scalp" ? "/scalping" : "/swing"} className="rounded-md border border-line px-3 py-1.5 text-xs text-slate-200 hover:border-amber-500/50">Full {name.toLowerCase()} checklist</Link>
+        {!isRetired(ev.strategy === "scalp" ? "/scalping" : "/swing") && <Link to={ev.strategy === "scalp" ? "/scalping" : "/swing"} className="rounded-md border border-line px-3 py-1.5 text-xs text-slate-200 hover:border-amber-500/50">Full {name.toLowerCase()} checklist</Link>}
       </div>
 
       <div className="mt-4 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
