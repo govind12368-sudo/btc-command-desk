@@ -80,8 +80,37 @@ function Verdict({ r }) {
   );
 }
 
-function KeptTable({ rows }) {
+function KeptRow({ r }) {
+  const dim = r.counted === false;
+  return (
+    <tr className={dim ? "opacity-60" : ""}>
+      <td className="min-w-[220px] max-w-[300px] whitespace-normal">
+        {r.page ? <Link to={r.page} className="text-slate-100 hover:text-amber-300">{r.strategy}</Link> : r.strategy}
+        {dim && <div className="mt-0.5 text-[11px] font-semibold text-amber-300/90">Not added to the total: {r.same_as}</div>}
+        {r.source && <div className="text-[11px] font-normal text-slate-400">Found in: {r.source}</div>}
+        {r.note && <div className="text-[11px] font-normal text-slate-500">{r.note}</div>}
+      </td>
+      <td className="whitespace-nowrap font-mono text-[11.5px]">{day(r.from)}<div className="text-slate-500">→ {day(r.to)}</div></td>
+      <td className="num">{r.years ? r.years : "—"}</td>
+      <td className="num">{int(r.trades)}</td>
+      <td className={`num font-semibold ${r.win_rate >= 0.5 ? "text-teal-300" : "text-slate-200"}`}>{pctTxt(r.win_rate)}</td>
+      <td className={`num font-semibold ${pnlTone(r.net)}`}>{signedUsd(r.net, 0)}</td>
+      <td className="num">{r.capital ? `$${Math.round(r.capital).toLocaleString("en-US")}` : "—"}</td>
+      <td className={`num font-semibold ${pnlTone(r.return)}`}>{retTxt(r.return)}</td>
+      <td className={`num ${pnlTone(r.per_year)}`}>{retTxt(r.per_year)}{r.compound && r.per_year != null && <div className="text-[10.5px] font-normal text-slate-500">growth rate</div>}</td>
+      <td className="min-w-[130px]"><Verdict r={r} /></td>
+    </tr>
+  );
+}
+
+// Grouped by idea (owner, 28 Nov 2026): rows that repeat trades already counted are dimmed and left out of the total.
+function KeptTable({ rows, combined }) {
   if (!rows.length) return <Empty>The kept strategies' results are loading; they appear here once each page has computed them.</Empty>;
+  const groups = [];
+  rows.forEach((r) => {
+    const g = groups[groups.length - 1];
+    if (g && g.idea === r.idea) g.rows.push(r); else groups.push({ idea: r.idea, name: r.idea_name, rows: [r] });
+  });
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="research-kept">
@@ -90,24 +119,27 @@ function KeptTable({ rows }) {
           <th className="num">Net P&L after fees</th><th className="num">Capital</th><th className="num" title="Net P&L ÷ capital">Return on capital</th>
           <th className="num" title="Fixed size: return ÷ years tested. Compounded: the yearly growth rate.">A year</th><th>Status</th>
         </tr></thead>
-        <tbody>{rows.map((r) => (
-          <tr key={r.strategy}>
-            <td className="min-w-[220px] max-w-[280px] whitespace-normal">
-              {r.page ? <Link to={r.page} className="text-slate-100 hover:text-amber-300">{r.strategy}</Link> : r.strategy}
-              {r.source && <div className="text-[11px] font-normal text-slate-400">Found in: {r.source}</div>}
-              {r.note && <div className="text-[11px] font-normal text-slate-500">{r.note}</div>}
+        {groups.map((g, gi) => (
+          <tbody key={g.idea || gi}>
+            {g.name && <tr className="bg-panel2/60"><td colSpan={10} className="py-1.5 text-[12px] font-semibold text-amber-200">Idea {gi + 1} · {g.name}</td></tr>}
+            {g.rows.map((r) => <KeptRow key={r.strategy} r={r} />)}
+          </tbody>))}
+        {combined && <tbody>
+          <tr className="border-t-2 border-amber-500/50 bg-amber-500/5 font-semibold" data-testid="research-combined">
+            <td className="whitespace-normal">{combined.strategy}
+              <div className="text-[11px] font-normal text-slate-400">Adds up: {combined.includes.join(" + ")}</div>
             </td>
-            <td className="whitespace-nowrap font-mono text-[11.5px]">{day(r.from)}<div className="text-slate-500">→ {day(r.to)}</div></td>
-            <td className="num">{r.years ? r.years : "—"}</td>
-            <td className="num">{int(r.trades)}</td>
-            <td className={`num font-semibold ${r.win_rate >= 0.5 ? "text-teal-300" : "text-slate-200"}`}>{pctTxt(r.win_rate)}</td>
-            <td className={`num font-semibold ${pnlTone(r.net)}`}>{signedUsd(r.net, 0)}</td>
-            <td className="num">{r.capital ? `$${Math.round(r.capital).toLocaleString("en-US")}` : "—"}</td>
-            <td className={`num font-semibold ${pnlTone(r.return)}`}>{retTxt(r.return)}</td>
-            <td className={`num ${pnlTone(r.per_year)}`}>{retTxt(r.per_year)}{r.compound && r.per_year != null && <div className="text-[10.5px] font-normal text-slate-500">growth rate</div>}</td>
-            <td className="min-w-[130px]"><Verdict r={r} /></td>
-          </tr>))}
-        </tbody>
+            <td className="whitespace-nowrap font-mono text-[11.5px]">{day(combined.from)}<div className="text-slate-500">→ {day(combined.to)}</div></td>
+            <td className="num">{combined.years}</td>
+            <td className="num">{int(combined.trades)}</td>
+            <td className={`num ${combined.win_rate >= 0.5 ? "text-teal-300" : "text-slate-200"}`}>{pctTxt(combined.win_rate)}</td>
+            <td className={`num ${pnlTone(combined.net)}`}>{signedUsd(combined.net, 0)}</td>
+            <td className="num">${Math.round(combined.capital).toLocaleString("en-US")}</td>
+            <td className={`num ${pnlTone(combined.return)}`}>{retTxt(combined.return)}</td>
+            <td className={`num ${pnlTone(combined.per_year)}`}>{retTxt(combined.per_year)}</td>
+            <td className="min-w-[130px]"><Verdict r={combined} /></td>
+          </tr>
+        </tbody>}
       </table>
     </div>
   );
@@ -134,17 +166,20 @@ export default function Research() {
   if (!d) return <><PageHead title="Research & Edge" /><Empty>Loading…</Empty></>;
   const t = d.totals || {};
   const kept = d.kept || [];
-  const proven = new Set(kept.filter((r) => r.status === "Proven").map((r) => r.page || r.strategy)).size;
-  const profitable = new Set(kept.filter((r) => r.net > 0).map((r) => r.page || r.strategy)).size;
+  const counted = kept.filter((r) => r.counted !== false);   // each idea's own trades once; variants left out
+  const proven = counted.filter((r) => r.status === "Proven").length;
+  const profitable = counted.filter((r) => r.net > 0).length;
+  const comb = d.combined;
   return (
     <div className="space-y-3" data-testid="research-page">
       <PageHead title="Research & Edge"
         sub="How the strategies on this site were found: the data we loaded, every search we ran, what passed each check, and what the strategies we kept have made after fees." />
       <KpiStrip testid="research-kpis" items={[
         { label: "Price history loaded", value: `${t.years} years`, sub: "BTC since 1 Jan 2023" },
-        { label: "Strategy versions backtested", value: int(t.tested), sub: `${t.searches} separate searches` },
+        { label: "Versions backtested", value: int(t.tested), sub: `${t.searches} separate searches` },
         { label: "Strategies kept", value: int(t.kept), sub: "now in paper trading", cls: "text-teal-300" },
-        kept.length ? { label: "Proven", value: `${proven} of ${profitable}`, sub: "profitable strategies meet every bar", cls: "text-teal-300" } : null,
+        kept.length ? { label: "Proven", value: `${proven} of ${profitable}`, sub: "profitable strategies meet every bar (no repeats)", cls: "text-teal-300" } : null,
+        comb ? { label: "All together, no repeats", value: signedUsd(comb.net, 0), sub: `${int(comb.trades)} trades · ${pctTxt(comb.win_rate)} won · ${comb.ideas} ideas`, cls: pnlTone(comb.net) } : null,
         { label: "Kept share", value: `1 in ${int(Math.round((t.tested || 0) / Math.max(t.kept || 1, 1)))}`, sub: "of the versions tested" },
       ]} />
       <Card title="Data loaded" sub="Real exchange data, each value as it was known at the time" testid="research-data-card"><DataTable rows={d.data || []} /></Card>
@@ -152,7 +187,7 @@ export default function Research() {
         <FunnelTable rows={d.funnel || []} totals={t} />
       </Card>
       <Card title="The strategies we kept: results after fees" sub={d.computed_at ? `read live from each strategy's page · ${ist(d.computed_at)}` : null} testid="research-kept-card">
-        <KeptTable rows={d.kept || []} />
+        <KeptTable rows={d.kept || []} combined={d.combined} />
         {d.proven_rule && <Note tone="teal" className="mt-2">{d.proven_rule}</Note>}
         <Note tone="plain" className="mt-1">Net P&L counts every fee and 18% GST. Return on capital = net P&L ÷ the capital shown. A year = that return ÷ the years tested (for the compounded row, the yearly growth rate). Shorter than half a year: not shown.</Note>
       </Card>

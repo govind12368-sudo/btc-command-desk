@@ -93,7 +93,7 @@ def _row(name, source, d0, d1, trades, wins, net, capital, stage, note="", page=
     wr = wins / trades if trades else None
     status, why = verdict(net, wr, yrs, trades, yearly)
     return {"strategy": name, "page": page, "source": source, "from": d0, "to": d1, "years": yrs, "trades": trades,
-            "win_rate": wr, "net": round(net, 2) if net is not None else None, "capital": capital,
+            "wins": wins, "win_rate": wr, "net": round(net, 2) if net is not None else None, "capital": capital,
             "return": ret, "per_year": per_year, "compound": bool(compound), "status": status, "status_why": why, "yearly": yearly or {},
             "stage": stage, "note": note}
 
@@ -166,12 +166,62 @@ async def kept():
     return out
 
 
-async def overview():
+# Same idea counted once (owner, 28 Nov 2026): rows that repeat trades already counted are shown as variants, not added to the total.
+IDEAS = [("straddle", "Short ATM straddle into Delta's 17:30 daily expiry"), ("trend", "Indicator trades on BTC futures"),
+         ("down", "Short breakdowns in down markets")]
+ROLES = {
+    "Option Picks · fixed size": ("straddle", None),
+    "Option Picks · compounded ★ Recommended": ("straddle", "Same trades as Option Picks · fixed size, each sized from the balance"),
+    "Straddle Bot": ("straddle", "Same trade on the same days as Option Picks (your own rules)"),
+    "Candle Runs": ("trend", None),
+    "Delta Top 3": ("trend", None),
+    "Elite 4 Edge": ("trend", "Made of P&L #1 and #5 (counted in Candle Runs) and Row 9 and Row 18 (counted in Delta Top 3)"),
+    "Flush Short (down markets only)": ("down", None),
+}
+
+
+def merge(rows):
+    """Tag each row with its idea; counted rows first within an idea. Returns (rows, combined row of counted rows only)."""
+    order = {k: i for i, (k, _) in enumerate(IDEAS)}
+    names = dict(IDEAS)
+    out, names_in = [], {r["strategy"] for r in rows}
+    trend_parts = {"Candle Runs", "Delta Top 3"} <= names_in    # both there: they hold every Elite rule; else Elite is counted
+    for r in rows:
+        idea, same = ROLES.get(r["strategy"], ("other", None))
+        if not trend_parts and r["strategy"] == "Elite 4 Edge":
+            same = None
+        elif not trend_parts and r["strategy"] in ("Candle Runs", "Delta Top 3"):
+            same = "Shares rules with Elite 4 Edge, which is counted instead"
+        out.append({**r, "idea": idea, "idea_name": names.get(idea, "Other"), "counted": same is None, "same_as": same})
+    out.sort(key=lambda r: (order.get(r["idea"], 99), not r["counted"]))
+    c = [r for r in out if r["counted"] and r.get("trades")]
+    if not c:
+        return out, None
+    trades, wins = sum(r["trades"] for r in c), sum(r.get("wins") or 0 for r in c)
+    net, cap = sum(r["net"] or 0.0 for r in c), sum(r["capital"] or 0.0 for r in c)
+    yearly = {}
+    for r in c:
+        for y, v in (r.get("yearly") or {}).items():
+            yearly[y] = round(yearly.get(y, 0.0) + v, 2)
+    yrs = max(r["years"] or 0 for r in c)
+    per_year = sum(r["net"] / r["years"] for r in c if r["years"] and r["years"] >= 0.5) / cap if cap else None
+    status, why = verdict(net, wins / trades if trades else None, yrs, trades, dict(sorted(yearly.items())))
+    comb = {"strategy": "All ideas together, each trade counted once", "includes": [r["strategy"] for r in c], "from": min(r["from"] for r in c if r["from"]),
+            "to": max(r["to"] for r in c if r["to"]), "years": yrs, "trades": trades, "wins": wins, "win_rate": wins / trades if trades else None,
+            "net": round(net, 2), "capital": cap, "return": net / cap if cap else None, "per_year": per_year, "yearly": dict(sorted(yearly.items())),
+            "status": status, "status_why": why, "ideas": len({r["idea"] for r in c})}
+    return out, comb
+
+
+async def overview(hidden=None):
     today = now_utc().date().isoformat()
     data = [{**d, "to": today, "years": _years(d["from"], today)} for d in DATA]
     tested = sum(f["tested"] for f in FUNNEL)
     k = await kept()
-    return {"computed_at": iso(now_utc()), "data": data, "funnel": FUNNEL, "steps": [{"title": a, "text": b} for a, b in STEPS], "kept": k,
+    if hidden:
+        k = [r for r in k if r.get("page") not in hidden]
+    k, combined = merge(k)
+    return {"computed_at": iso(now_utc()), "data": data, "funnel": FUNNEL, "steps": [{"title": a, "text": b} for a, b in STEPS], "kept": k, "combined": combined,
             "totals": {"tested": tested, "searches": len(FUNNEL), "kept": sum(f["kept"] for f in FUNNEL), "years": max(d["years"] for d in data),
                        "pass_rate": sum(f["kept"] for f in FUNNEL) / tested},
             "proven_rule": PROVEN_RULE, "note": "Backtests and paper trading, not a promise of future results. Each strategy's page shows its paper trading next to its backtest."}

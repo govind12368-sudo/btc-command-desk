@@ -1033,11 +1033,10 @@ async def flush_short_get(u=Depends(viewer.page("/flush-short"))):
 @api.get("/research")
 async def research_get(u=Depends(viewer.page("/research"))):
     """Research & Edge: data loaded, how many strategy versions were tested, what was kept and its results (no strategy rules)."""
-    out = await research.overview()
-    if not viewer.is_admin(u):         # users only see results of pages open to them
+    hidden = None
+    if not viewer.is_admin(u):         # users only see results of pages open to them (and a total of those only)
         hidden = set(await viewer.hidden_for_users()) | {"/straddle-bot", "/real-account"}
-        out["kept"] = [r for r in out["kept"] if r.get("page") not in hidden]
-    return out
+    return await research.overview(hidden)
 
 
 @api.get("/candle-runs")

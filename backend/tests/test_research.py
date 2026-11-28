@@ -58,3 +58,32 @@ def test_verdict_proven_only_when_every_bar_is_met():
 def test_row_carries_verdict_and_stage():
     r = research._row("X", "src", "2024-01-01", "2026-06-01", 300, 180, 900.0, 1000.0, "Paper trading", yearly={"2024": 300.0, "2025": 400.0, "2026": 200.0})
     assert r["status"] == "Proven" and r["stage"] == "Paper trading" and r["status_why"] == []
+
+
+def test_merge_counts_each_trade_once():
+    R = research._row
+    rows = [R("Elite 4 Edge", "s", "2023-01-01", "2026-11-28", 500, 205, 23000.0, 5000.0, "Paper trading", page="/elite-4-edge", yearly={"2023": 1.0}),
+            R("Option Picks · compounded ★ Recommended", "s", "2024-01-01", "2026-11-26", 860, 568, 153000.0, 4000.0, "Paper trading", page="/option-picks", compound=True),
+            R("Option Picks · fixed size", "s", "2024-01-01", "2026-11-26", 860, 568, 15000.0, 4000.0, "Paper trading", page="/option-picks", yearly={"2024": 3.0, "2025": 8.0, "2026": 3.0}),
+            R("Straddle Bot", "s", "2024-07-01", "2026-11-25", 878, 562, 4362.0, 1000.0, "Paper trading", page="/straddle-bot"),
+            R("Candle Runs", "s", "2023-01-02", "2026-11-28", 492, 256, 25900.0, 10000.0, "Paper trading", page="/candle-runs", yearly={"2023": 6.0, "2024": 2.0}),
+            R("Delta Top 3", "s", "2024-01-30", "2026-11-28", 1050, 410, 31565.0, 10000.0, "Paper trading", page="/delta-top3", yearly={"2024": 16.0})]
+    out, comb = research.merge(rows)
+    counted = [r["strategy"] for r in out if r["counted"]]
+    assert counted == ["Option Picks · fixed size", "Candle Runs", "Delta Top 3"]
+    assert comb["trades"] == 860 + 492 + 1050 and comb["net"] == 15000.0 + 25900.0 + 31565.0 and comb["capital"] == 24000.0
+    assert comb["yearly"] == {"2023": 6.0, "2024": 21.0, "2025": 8.0, "2026": 3.0} and comb["ideas"] == 2
+    assert out[0]["strategy"] == "Option Picks · fixed size" and all(r["same_as"] for r in out if not r["counted"])
+    _, none = research.merge([])
+    assert none is None
+
+
+def test_merge_counts_elite_when_its_parts_are_not_shown():
+    R = research._row
+    rows = [R("Elite 4 Edge", "s", "2023-01-01", "2026-11-28", 500, 205, 23000.0, 5000.0, "Paper trading", page="/elite-4-edge"),
+            R("Option Picks · fixed size", "s", "2024-01-01", "2026-11-26", 860, 568, 15000.0, 4000.0, "Paper trading", page="/option-picks")]
+    out, comb = research.merge(rows)
+    assert [r["strategy"] for r in out if r["counted"]] == ["Option Picks · fixed size", "Elite 4 Edge"]
+    assert comb["net"] == 38000.0 and comb["ideas"] == 2
+    out, _ = research.merge(rows + [R("Candle Runs", "s", "2023-01-02", "2026-11-28", 492, 256, 25900.0, 10000.0, "Paper trading", page="/candle-runs")])
+    assert next(r for r in out if r["strategy"] == "Candle Runs")["counted"] is False
