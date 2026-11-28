@@ -61,13 +61,32 @@ function FunnelTable({ rows, totals }) {
   );
 }
 
+const VERDICT_TONE = {
+  Proven: "border-teal-400/60 bg-teal-500/15 text-teal-200",
+  Profitable: "border-amber-400/60 bg-amber-500/10 text-amber-200",
+  "Not profitable": "border-red-400/60 bg-red-500/10 text-red-200",
+};
+
+function Verdict({ r }) {
+  const why = r.status_why || [];
+  return (
+    <div>
+      <span className={`inline-block rounded-sm border px-2 py-0.5 text-[12px] font-semibold ${VERDICT_TONE[r.status] || "border-line text-slate-300"}`}>
+        {r.status === "Proven" ? "✓ Proven" : r.status}
+      </span>
+      {why.length > 0 && <div className="mt-0.5 text-[11px] text-slate-500">{why.join(" · ")}</div>}
+      {r.stage && <div className="text-[11px] text-slate-500">{r.stage.toLowerCase().startsWith("paper") ? `in ${r.stage.charAt(0).toLowerCase()}${r.stage.slice(1)}` : r.stage}</div>}
+    </div>
+  );
+}
+
 function KeptTable({ rows }) {
   if (!rows.length) return <Empty>The kept strategies' results are loading; they appear here once each page has computed them.</Empty>;
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="research-kept">
         <thead><tr>
-          <th>Strategy</th><th>Found in</th><th>Tested period</th><th className="num">Years</th><th className="num">Trades</th><th className="num">Win rate</th>
+          <th>Strategy</th><th>Tested period</th><th className="num">Years</th><th className="num">Trades</th><th className="num">Win rate</th>
           <th className="num">Net P&L after fees</th><th className="num">Capital</th><th className="num" title="Net P&L ÷ capital">Return on capital</th>
           <th className="num" title="Fixed size: return ÷ years tested. Compounded: the yearly growth rate.">A year</th><th>Status</th>
         </tr></thead>
@@ -75,10 +94,10 @@ function KeptTable({ rows }) {
           <tr key={r.strategy}>
             <td className="min-w-[220px] max-w-[280px] whitespace-normal">
               {r.page ? <Link to={r.page} className="text-slate-100 hover:text-amber-300">{r.strategy}</Link> : r.strategy}
+              {r.source && <div className="text-[11px] font-normal text-slate-400">Found in: {r.source}</div>}
               {r.note && <div className="text-[11px] font-normal text-slate-500">{r.note}</div>}
             </td>
-            <td className="min-w-[150px] max-w-[200px] whitespace-normal text-slate-400">{r.source}</td>
-            <td className="whitespace-nowrap font-mono text-[11.5px]">{day(r.from)} → {day(r.to)}</td>
+            <td className="whitespace-nowrap font-mono text-[11.5px]">{day(r.from)}<div className="text-slate-500">→ {day(r.to)}</div></td>
             <td className="num">{r.years ? r.years : "—"}</td>
             <td className="num">{int(r.trades)}</td>
             <td className={`num font-semibold ${r.win_rate >= 0.5 ? "text-teal-300" : "text-slate-200"}`}>{pctTxt(r.win_rate)}</td>
@@ -86,7 +105,7 @@ function KeptTable({ rows }) {
             <td className="num">{r.capital ? `$${Math.round(r.capital).toLocaleString("en-US")}` : "—"}</td>
             <td className={`num font-semibold ${pnlTone(r.return)}`}>{retTxt(r.return)}</td>
             <td className={`num ${pnlTone(r.per_year)}`}>{retTxt(r.per_year)}{r.compound && r.per_year != null && <div className="text-[10.5px] font-normal text-slate-500">growth rate</div>}</td>
-            <td className="whitespace-nowrap text-slate-300">{r.status}</td>
+            <td className="min-w-[130px]"><Verdict r={r} /></td>
           </tr>))}
         </tbody>
       </table>
@@ -114,6 +133,9 @@ export default function Research() {
   if (error && !d) return <><PageHead title="Research & Edge" /><Note tone="red">Could not load this page: {String(error)}</Note></>;
   if (!d) return <><PageHead title="Research & Edge" /><Empty>Loading…</Empty></>;
   const t = d.totals || {};
+  const kept = d.kept || [];
+  const proven = new Set(kept.filter((r) => r.status === "Proven").map((r) => r.page || r.strategy)).size;
+  const profitable = new Set(kept.filter((r) => r.net > 0).map((r) => r.page || r.strategy)).size;
   return (
     <div className="space-y-3" data-testid="research-page">
       <PageHead title="Research & Edge"
@@ -122,6 +144,7 @@ export default function Research() {
         { label: "Price history loaded", value: `${t.years} years`, sub: "BTC since 1 Jan 2023" },
         { label: "Strategy versions backtested", value: int(t.tested), sub: `${t.searches} separate searches` },
         { label: "Strategies kept", value: int(t.kept), sub: "now in paper trading", cls: "text-teal-300" },
+        kept.length ? { label: "Proven", value: `${proven} of ${profitable}`, sub: "profitable strategies meet every bar", cls: "text-teal-300" } : null,
         { label: "Kept share", value: `1 in ${int(Math.round((t.tested || 0) / Math.max(t.kept || 1, 1)))}`, sub: "of the versions tested" },
       ]} />
       <Card title="Data loaded" sub="Real exchange data, each value as it was known at the time" testid="research-data-card"><DataTable rows={d.data || []} /></Card>
@@ -130,7 +153,8 @@ export default function Research() {
       </Card>
       <Card title="The strategies we kept: results after fees" sub={d.computed_at ? `read live from each strategy's page · ${ist(d.computed_at)}` : null} testid="research-kept-card">
         <KeptTable rows={d.kept || []} />
-        <Note tone="plain" className="mt-2">Net P&L counts every fee and 18% GST. Return on capital = net P&L ÷ the capital shown. A year = that return ÷ the years tested (for the compounded row, the yearly growth rate). Shorter than half a year: not shown.</Note>
+        {d.proven_rule && <Note tone="teal" className="mt-2">{d.proven_rule}</Note>}
+        <Note tone="plain" className="mt-1">Net P&L counts every fee and 18% GST. Return on capital = net P&L ÷ the capital shown. A year = that return ÷ the years tested (for the compounded row, the yearly growth rate). Shorter than half a year: not shown.</Note>
       </Card>
       <Card title="How a strategy earns its place" testid="research-steps-card"><Steps steps={d.steps || []} /></Card>
       <Note tone="amber">{d.note}</Note>

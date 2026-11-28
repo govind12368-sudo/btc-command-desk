@@ -43,3 +43,18 @@ def test_kept_reads_option_picks_from_its_own_rows(monkeypatch):
         assert not any(r["strategy"].startswith("Option Picks") for r in out)
     finally:
         op.STATE["rows"] = rows
+
+
+def test_verdict_proven_only_when_every_bar_is_met():
+    good = {"2024": 100.0, "2025": 50.0, "2026": 10.0}
+    assert research.verdict(160.0, 0.66, 2.9, 860, good) == ("Proven", [])
+    assert research.verdict(160.0, 0.41, 3.9, 498, good) == ("Profitable", ["win rate below 50%"])
+    assert research.verdict(160.0, 0.6, 2.9, 860, {**good, "2025": -5.0}) == ("Profitable", ["loss in 2025"])
+    assert research.verdict(288.0, 0.86, 0.1, 7, {"2026": 288.0}) == ("Profitable", ["less than 2 years tested"])
+    assert research.verdict(50.0, 0.6, 2.5, 40, good) == ("Profitable", ["fewer than 100 trades"])
+    assert research.verdict(-10.0, 0.6, 3.0, 300, good)[0] == "Not profitable"
+
+
+def test_row_carries_verdict_and_stage():
+    r = research._row("X", "src", "2024-01-01", "2026-06-01", 300, 180, 900.0, 1000.0, "Paper trading", yearly={"2024": 300.0, "2025": 400.0, "2026": 200.0})
+    assert r["status"] == "Proven" and r["stage"] == "Paper trading" and r["status_why"] == []

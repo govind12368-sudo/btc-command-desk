@@ -59,16 +59,49 @@ def _years(d0, d1):
     return round((b - a).days / 365.25, 1)
 
 
-def _row(name, source, d0, d1, trades, wins, net, capital, status, note="", page=None, compound=False):
+PROVEN_RULE = ("Proven = a profit after all fees on real exchange data, at least 50% winning trades, a profit in every calendar year tested, "
+               "and at least 2 years and 100 trades. Profitable = a profit after all fees, but not every one of these yet.")
+
+
+def _by_year(pairs):
+    """[(date string, net)] -> {year: net}."""
+    out = {}
+    for d, v in pairs:
+        if d and v is not None:
+            out[d[:4]] = out.get(d[:4], 0.0) + v
+    return {y: round(v, 2) for y, v in sorted(out.items())}
+
+
+def verdict(net, win_rate, yrs, trades, yearly):
+    """Proven / Profitable / Not profitable, with what is still missing (see PROVEN_RULE)."""
+    if net is None or net <= 0:
+        return "Not profitable", []
+    why = []
+    if win_rate is None or win_rate < 0.5:
+        why.append("win rate below 50%")
+    lost = [y for y, v in (yearly or {}).items() if v <= 0]
+    if lost:
+        why.append("loss in " + ", ".join(lost))
+    if not yrs or yrs < 2:
+        why.append("less than 2 years tested")
+    elif (trades or 0) < 100:
+        why.append("fewer than 100 trades")
+    return ("Proven" if not why else "Profitable"), why
+
+
+def _row(name, source, d0, d1, trades, wins, net, capital, stage, note="", page=None, compound=False, yearly=None):
     """One kept strategy. Return = net ÷ capital. A year: fixed size = return ÷ years; compounded = the yearly growth rate."""
     yrs = _years(d0, d1) if d0 and d1 else None
     ret = net / capital if capital and net is not None else None
     per_year = None
     if ret is not None and yrs and yrs >= 0.5:
         per_year = ((1 + ret) ** (1 / yrs) - 1 if ret > -1 else -1.0) if compound else ret / yrs
+    wr = wins / trades if trades else None
+    status, why = verdict(net, wr, yrs, trades, yearly)
     return {"strategy": name, "page": page, "source": source, "from": d0, "to": d1, "years": yrs, "trades": trades,
-            "win_rate": wins / trades if trades else None, "net": round(net, 2) if net is not None else None, "capital": capital,
-            "return": ret, "per_year": per_year, "compound": bool(compound), "status": status, "note": note}
+            "win_rate": wr, "net": round(net, 2) if net is not None else None, "capital": capital,
+            "return": ret, "per_year": per_year, "compound": bool(compound), "status": status, "status_why": why, "yearly": yearly or {},
+            "stage": stage, "note": note}
 
 
 async def kept():
@@ -82,7 +115,8 @@ async def kept():
         if c.get("trades"):
             cap = a.get("capital") or elite.PAPER_CAPITAL
             out.append(_row("Elite 4 Edge", "Indicator workbook + Delta top-20", a.get("from_ist", "2023-01-01"), (d.get("last_candle_ist") or today)[:10],
-                            c["trades"], c["wins"], c["net"], cap, "Paper trading", f"$10,000 position at 10x, one trade at a time; return on a ${cap:,.0f} account", "/elite-4-edge"))
+                            c["trades"], c["wins"], c["net"], cap, "Paper trading", f"$10,000 position at 10x, one trade at a time; return on a ${cap:,.0f} account", "/elite-4-edge",
+                            yearly={y["year"]: y["net"] for y in a.get("yearly") or [] if y["year"][:1].isdigit()}))
     except Exception as e:
         log.warning("research elite: %s", e)
     try:
@@ -94,10 +128,12 @@ async def kept():
             d0 = min([op.history().get("from") or "2024-01-01"] + [r["day"] for r in raw])
             d1 = max(r["day"] for r in raw)
             for comp, label in ((1.0, "Option Picks · compounded ★ Recommended"), (0.0, "Option Picks · fixed size")):
-                s = op.stats(op.price_seq("SSTR", raw, {**sizing, "compound": comp}), cap, bool(comp))
+                priced = op.price_seq("SSTR", raw, {**sizing, "compound": comp})
+                s = op.stats(priced, cap, bool(comp))
                 out.append(_row(label, "Options workbook (2,540 strategies)", d0, d1, s["trades"], s["wins"], s["net"], cap, "Paper trading · bot on paper",
                                 f"${sizing['put_capital']:,.0f} put + ${sizing['call_capital']:,.0f} call at {sizing['put_leverage']:g}x"
-                                + ("; each trade sized from the balance" if comp else "; same size every trade"), "/option-picks", bool(comp)))
+                                + ("; each trade sized from the balance" if comp else "; same size every trade"), "/option-picks", bool(comp),
+                                _by_year((r["day"], r.get("net")) for r in priced)))
     except Exception as e:
         log.warning("research option picks: %s", e)
     try:
@@ -107,7 +143,8 @@ async def kept():
         if v and v.get("rows"):
             m, rows, inp = v["metrics"], v["rows"], bt["inputs"]
             out.append(_row("Straddle Bot", "Owner's own straddle rules", rows[0]["date"], rows[-1]["date"], m["trades"], m["wins"], m["net"],
-                            inp["starting_capital"], "Paper trading", f"${inp['starting_capital']:,.0f} at {inp['leverage']:g}x, fixed size", "/straddle-bot"))
+                            inp["starting_capital"], "Paper trading", f"${inp['starting_capital']:,.0f} at {inp['leverage']:g}x, fixed size", "/straddle-bot",
+                            yearly=_by_year((r["date"], (r.get("net") if r.get("lots") else 0.0) + (r.get("skip_net") or 0.0)) for r in rows)))
     except Exception as e:
         log.warning("research straddle: %s", e)
     for mod, name, src, pg in (("runs", "Candle Runs", "Indicator workbook (31,116 backtests)", "/candle-runs"), ("trio", "Delta Top 3", "Delta top-20 workbook", "/delta-top3")):
@@ -117,7 +154,8 @@ async def kept():
             t = (d.get("totals") or {}).get("full") or {}
             if t.get("closed"):
                 out.append(_row(name, src, ((d.get("backtest") or {}).get("from_ist") or "")[:10] or None, (d.get("last_candle_ist") or today)[:10],
-                                t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Return on the $10,000 position (leverage not counted)", pg))
+                                t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Return on the $10,000 position (leverage not counted)", pg,
+                                yearly=_by_year((p["entry_ist"], p["net"]) for p in d.get("positions") or [] if p.get("status") == "CLOSED")))
         except Exception as e:
             log.warning("research %s: %s", mod, e)
     try:
@@ -127,7 +165,8 @@ async def kept():
         rows = d.get("rows") or []
         if t.get("closed") and rows:
             out.append(_row("Flush Short (down markets only)", "Site scalp-signal search (10,656 rules)", rows[-1]["time_ist"][:10], rows[0]["time_ist"][:10],
-                            t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Trades only in down markets; return on the $10,000 position", "/flush-short"))
+                            t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Trades only in down markets; return on the $10,000 position", "/flush-short",
+                            yearly=_by_year((r["time_ist"], r.get("net")) for r in rows if r.get("status") == "CLOSED")))
     except Exception as e:
         log.warning("research flush: %s", e)
     return out
@@ -141,4 +180,4 @@ async def overview():
     return {"computed_at": iso(now_utc()), "data": data, "funnel": FUNNEL, "steps": [{"title": a, "text": b} for a, b in STEPS], "kept": k,
             "totals": {"tested": tested, "searches": len(FUNNEL), "kept": sum(f["kept"] for f in FUNNEL), "years": max(d["years"] for d in data),
                        "pass_rate": sum(f["kept"] for f in FUNNEL) / tested},
-            "note": "Backtests and paper trading, not a promise of future results. Each strategy's page shows its paper trading next to its backtest."}
+            "proven_rule": PROVEN_RULE, "note": "Backtests and paper trading, not a promise of future results. Each strategy's page shows its paper trading next to its backtest."}
