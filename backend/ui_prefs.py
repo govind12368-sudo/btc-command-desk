@@ -11,7 +11,7 @@ from bson import ObjectId
 from core import db, iso, now_utc
 
 PAGES = ["/", "/market", "/scalping", "/swing", "/pillars", "/scanner", "/intel", "/news", "/plan-a", "/flush-short", "/candle-runs", "/delta-top3",
-         "/elite-4-edge", "/option-picks", "/real-account", "/straddle-bot", "/observer", "/fund-manager", "/auto-trade", "/journal", "/regime", "/validation", "/data-health", "/server", "/settings", "/audit",
+         "/elite-4-edge", "/option-picks", "/research", "/real-account", "/straddle-bot", "/observer", "/fund-manager", "/auto-trade", "/journal", "/regime", "/validation", "/data-health", "/server", "/settings", "/audit",
          "/upgrades", "/account", "/users"]
 LOCKED = {"/"}
 

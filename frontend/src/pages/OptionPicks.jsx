@@ -126,11 +126,13 @@ function StrategyBacktest({ s, b, historyTo, sizeLabel, viewer }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card title="Yearly" sub="Net after fees">
           <div className="overflow-x-auto scroll-thin"><table className="desk-table">
-            <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th><th className="num">Balance at end</th></tr></thead>
+            <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net</th>
+              <th className="num" title={st.compounded ? "Net P&L of the year ÷ the balance at the start of that year" : "Net P&L of the year ÷ the capital"}>Return on capital</th><th className="num">Balance at end</th></tr></thead>
             <tbody>{b.yearly.map((y) => (
               <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
                 <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pct(y.win_rate)}</td><td className={`num ${tone(y.gross)}`}>{signedUsd(y.gross, 0)}</td>
                 <td className="num">{signedUsd(-y.fees, 0)}</td><td className={`num font-semibold ${tone(y.net)}`}>{signedUsd(y.net, 0)}</td>
+                <td className={`num font-semibold ${tone(y.return)}`}>{y.return == null ? "—" : `${y.return >= 0 ? "+" : "−"}${Math.abs(y.return * 100).toFixed(1)}%`}</td>
                 <td className="num">{y.equity != null ? usd0(y.equity) : "—"}</td>
               </tr>))}</tbody>
           </table></div>

@@ -1,0 +1,144 @@
+"""Research & Edge page (owner, 28 Nov 2026): how the strategies on this site were found.
+
+What data was loaded, how many strategy versions were backtested in each search, how many passed each check, which ones were
+kept, and what the kept strategies made. The counts come from the research records (the strategy lab's REPORT.md, SCREENER.md,
+EXPLORE.md, research/WORKBOOK_TOP10.md and journals, and the owner's workbooks); the results of the kept strategies are read
+live from their own pages, so this page always shows the same numbers as Elite 4 Edge, Option Picks and the Straddle Bot.
+Read-only. No strategy rules are shown here; users do not get the admin-only pages' rows (server.py).
+"""
+import logging
+from datetime import date
+
+from core import now_utc, iso
+
+log = logging.getLogger("research")
+
+DATA = [
+    {"what": "BTC price · Binance BTCUSDT perpetual, 5-minute candles", "from": "2023-01-01", "used": "Indicator strategies, the published-strategy library, the lab's own ideas"},
+    {"what": "BTC price · Delta Exchange BTCUSD, 5-minute candles", "from": "2024-02-01", "used": "Re-checks on the exchange we trade: Elite 4 Edge, Candle Runs, Delta Top 3"},
+    {"what": "BTC daily options · Delta Exchange India (every expiry: strikes, mark prices, real trades, settlement index, fee record)", "from": "2024-01-01",
+     "used": "Option Picks and the options bots"},
+    {"what": "Futures market data · funding rate, perp premium, open interest, long/short ratios, Coinbase premium", "from": "2023-01-01",
+     "used": "Signal search (crowding, flows, time of day)"},
+    {"what": "This site's own scalp signals, replayed", "from": "2024-09-01", "used": "Flush Short, Strategy Observer (26 months)"},
+]
+
+# Every search, with what passed each check. Counts are versions backtested (one rule set on one timeframe with one exit style
+# and direction = one version).
+FUNNEL = [
+    {"search": "Indicator strategies (owner's 3-year backtest workbook)", "data": "Binance BTCUSDT, 3 years", "tested": 31116,
+     "passed": "Top 10 re-tested with our own code: 2 passed (also profitable on unseen 2023 data, and luck never did as well), 1 weaker one kept for its 60% win rate",
+     "kept": 3, "kept_as": "Candle Runs (P&L #1, P&L #5, Win #1); P&L #1 and #5 also in Elite 4 Edge"},
+    {"search": "Delta top-20 list (owner's Delta workbook)", "data": "Delta BTCUSD", "tested": 20,
+     "passed": "Top 3 by net profit re-tested on Delta candles with Delta fees", "kept": 3, "kept_as": "Delta Top 3; Row 9 and Row 18 also in Elite 4 Edge"},
+    {"search": "BTC option-selling strategies (owner's options workbook)", "data": "Delta options, Jan 2024 → Nov 2026", "tested": 2540,
+     "passed": "5 picks rebuilt on Delta's own option prices: 1 confirmed, 2 profitable but sensitive to fills, 2 not confirmed",
+     "kept": 1, "kept_as": "Option Picks (★ Recommended)"},
+    {"search": "Rules built on this site's scalp signals", "data": "26 months of the site's signals", "tested": 10656,
+     "passed": "40 passed both halves of the data; only the down-market rule beat a luck test", "kept": 1, "kept_as": "Flush Short (down markets)"},
+    {"search": "Published strategy library (49 rule sets × timeframes × exits × direction)", "data": "Binance BTCUSDT, 2023 → 2026", "tested": 1470,
+     "passed": "24 profitable in training; none held on unseen data", "kept": 0, "kept_as": "—"},
+    {"search": "Signal scan (funding, open interest, crowding, Coinbase premium, time of day)", "data": "Training years only", "tested": 1200,
+     "passed": "Used for ideas; each idea must pass the full test below", "kept": 0, "kept_as": "—"},
+    {"search": "The lab's own strategy ideas", "data": "Train 2023-01→2024-06, validation 2024-07→2025-06, locked test 2025-07→2026-10", "tested": 14,
+     "passed": "None passed all three periods with enough trades", "kept": 0, "kept_as": "—"},
+]
+
+STEPS = [
+    ("Backtest on real exchange data", "Every version is run on 3–4 years of real prices with the exchange's fees and 18% GST."),
+    ("Re-test with our own code", "A pick from a workbook is rebuilt from scratch and must give the same trades."),
+    ("Unseen data", "It must also make money on a period it was not picked on."),
+    ("Luck test", "Its result is compared with hundreds of runs of random trades in the same market; luck must not do as well."),
+    ("Paper trading", "It runs on live prices for weeks with no money at risk; paper and backtest are compared day by day."),
+    ("Real account, small size", "Only then a small real-money test (Real Account Tested)."),
+]
+
+
+def _years(d0, d1):
+    a, b = date.fromisoformat(d0[:10]), date.fromisoformat(d1[:10])
+    return round((b - a).days / 365.25, 1)
+
+
+def _row(name, source, d0, d1, trades, wins, net, capital, status, note="", page=None, compound=False):
+    """One kept strategy. Return = net ÷ capital. A year: fixed size = return ÷ years; compounded = the yearly growth rate."""
+    yrs = _years(d0, d1) if d0 and d1 else None
+    ret = net / capital if capital and net is not None else None
+    per_year = None
+    if ret is not None and yrs and yrs >= 0.5:
+        per_year = ((1 + ret) ** (1 / yrs) - 1 if ret > -1 else -1.0) if compound else ret / yrs
+    return {"strategy": name, "page": page, "source": source, "from": d0, "to": d1, "years": yrs, "trades": trades,
+            "win_rate": wins / trades if trades else None, "net": round(net, 2) if net is not None else None, "capital": capital,
+            "return": ret, "per_year": per_year, "compound": bool(compound), "status": status, "note": note}
+
+
+async def kept():
+    """The kept strategies' results, read from their own pages (same numbers as those pages)."""
+    out, today = [], now_utc().date().isoformat()
+    try:
+        import elite
+        d = elite.STATE.get("data") or {}
+        a = d.get("A") or {}
+        c = a.get("combined") or {}
+        if c.get("trades"):
+            cap = a.get("capital") or elite.PAPER_CAPITAL
+            out.append(_row("Elite 4 Edge", "Indicator workbook + Delta top-20", a.get("from_ist", "2023-01-01"), (d.get("last_candle_ist") or today)[:10],
+                            c["trades"], c["wins"], c["net"], cap, "Paper trading", f"$10,000 position at 10x, one trade at a time; return on a ${cap:,.0f} account", "/elite-4-edge"))
+    except Exception as e:
+        log.warning("research elite: %s", e)
+    try:
+        import optpicks as op
+        raw = (op.STATE.get("rows") or {}).get("SSTR") or []
+        if raw:
+            sizing = (op.STATE.get("data") or {}).get("sizing") or dict(op.SIZING_DEFAULT)
+            cap = op.capital_for("SSTR", sizing)
+            d0 = min([op.history().get("from") or "2024-01-01"] + [r["day"] for r in raw])
+            d1 = max(r["day"] for r in raw)
+            for comp, label in ((1.0, "Option Picks · compounded ★ Recommended"), (0.0, "Option Picks · fixed size")):
+                s = op.stats(op.price_seq("SSTR", raw, {**sizing, "compound": comp}), cap, bool(comp))
+                out.append(_row(label, "Options workbook (2,540 strategies)", d0, d1, s["trades"], s["wins"], s["net"], cap, "Paper trading · bot on paper",
+                                f"${sizing['put_capital']:,.0f} put + ${sizing['call_capital']:,.0f} call at {sizing['put_leverage']:g}x"
+                                + ("; each trade sized from the balance" if comp else "; same size every trade"), "/option-picks", bool(comp)))
+    except Exception as e:
+        log.warning("research option picks: %s", e)
+    try:
+        import straddle
+        bt = await straddle.backtest("sb")
+        v = (bt.get("variants") or {}).get("mark_fixed")
+        if v and v.get("rows"):
+            m, rows, inp = v["metrics"], v["rows"], bt["inputs"]
+            out.append(_row("Straddle Bot", "Owner's own straddle rules", rows[0]["date"], rows[-1]["date"], m["trades"], m["wins"], m["net"],
+                            inp["starting_capital"], "Paper trading", f"${inp['starting_capital']:,.0f} at {inp['leverage']:g}x, fixed size", "/straddle-bot"))
+    except Exception as e:
+        log.warning("research straddle: %s", e)
+    for mod, name, src, pg in (("runs", "Candle Runs", "Indicator workbook (31,116 backtests)", "/candle-runs"), ("trio", "Delta Top 3", "Delta top-20 workbook", "/delta-top3")):
+        try:
+            m = __import__(mod)
+            d = m.STATE.get("data") or {}
+            t = (d.get("totals") or {}).get("full") or {}
+            if t.get("closed"):
+                out.append(_row(name, src, ((d.get("backtest") or {}).get("from_ist") or "")[:10] or None, (d.get("last_candle_ist") or today)[:10],
+                                t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Return on the $10,000 position (leverage not counted)", pg))
+        except Exception as e:
+            log.warning("research %s: %s", mod, e)
+    try:
+        import flush
+        d = flush.STATE.get("data") or {}
+        t = d.get("all") or {}
+        rows = d.get("rows") or []
+        if t.get("closed") and rows:
+            out.append(_row("Flush Short (down markets only)", "Site scalp-signal search (10,656 rules)", rows[-1]["time_ist"][:10], rows[0]["time_ist"][:10],
+                            t["closed"], t["wins"], t["net"], 10000.0, "Paper trading", "Trades only in down markets; return on the $10,000 position", "/flush-short"))
+    except Exception as e:
+        log.warning("research flush: %s", e)
+    return out
+
+
+async def overview():
+    today = now_utc().date().isoformat()
+    data = [{**d, "to": today, "years": _years(d["from"], today)} for d in DATA]
+    tested = sum(f["tested"] for f in FUNNEL)
+    k = await kept()
+    return {"computed_at": iso(now_utc()), "data": data, "funnel": FUNNEL, "steps": [{"title": a, "text": b} for a, b in STEPS], "kept": k,
+            "totals": {"tested": tested, "searches": len(FUNNEL), "kept": sum(f["kept"] for f in FUNNEL), "years": max(d["years"] for d in data),
+                       "pass_rate": sum(f["kept"] for f in FUNNEL) / tested},
+            "note": "Backtests and paper trading, not a promise of future results. Each strategy's page shows its paper trading next to its backtest."}

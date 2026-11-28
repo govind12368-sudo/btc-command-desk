@@ -170,11 +170,12 @@ def tables(rows):
     for y in sorted(years):
         s = _stats(years[y]); cum += s["net"]
         ylist.append({"year": str(y), **{k: s[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd")}, "cumulative": round(cum, 2),
+                      "return": s["net"] / PAPER_CAPITAL,                     # return on the account capital (one $10,000 position at a time)
                       "by_strategy": {STRATS[k]["wb"]: round(sum(r["net"] for r in years[y] if r["strategy"] == k), 2) for k in ORDER}})
     tot = _stats(c)
     ylist.append({"year": "Total till date", **{k: tot[k] for k in ("trades", "wins", "win_rate", "gross", "fees", "net", "max_dd")}, "cumulative": tot["net"],
-                  "by_strategy": {p["wb"]: p["net"] for p in per}})
-    return {"combined": tot, "per_strategy": per, "monthly": mlist, "yearly": ylist}
+                  "return": tot["net"] / PAPER_CAPITAL, "by_strategy": {p["wb"]: p["net"] for p in per}})
+    return {"combined": tot, "per_strategy": per, "monthly": mlist, "yearly": ylist, "capital": PAPER_CAPITAL}
 
 
 def history():

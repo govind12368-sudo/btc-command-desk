@@ -51,6 +51,7 @@ import fundmgr
 import viewer
 import real_account
 import straddle
+import research
 from strategy import sided_ok
 from urllib.parse import urlparse
 import uuid
@@ -1027,6 +1028,16 @@ async def flush_short_get(u=Depends(viewer.page("/flush-short"))):
         await flush.compute()
     out = {**(st["data"] or {"name": flush.NAME, "paper_only": True}), "error": st["error"], "computed_at": st["computed_at"], "is_admin": viewer.is_admin(u)}
     return out if viewer.is_admin(u) else viewer.flush_view(out)
+
+
+@api.get("/research")
+async def research_get(u=Depends(viewer.page("/research"))):
+    """Research & Edge: data loaded, how many strategy versions were tested, what was kept and its results (no strategy rules)."""
+    out = await research.overview()
+    if not viewer.is_admin(u):         # users only see results of pages open to them
+        hidden = set(await viewer.hidden_for_users()) | {"/straddle-bot", "/real-account"}
+        out["kept"] = [r for r in out["kept"] if r.get("page") not in hidden]
+    return out
 
 
 @api.get("/candle-runs")

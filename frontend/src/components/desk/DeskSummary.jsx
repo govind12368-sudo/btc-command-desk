@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useSoften } from "@/lib/present";
 import { Link } from "react-router-dom";
 import { Card, Note, More } from "@/components/desk/ui";
 import { n, ist, ago, signedUsd } from "@/lib/fmt";
@@ -82,6 +83,7 @@ function Read({ title, forPlan, r, plan }) {
 }
 
 export function MarketRead({ d }) {
+  const soften = useSoften();
   if (!d) return <Card title="Market read and weightage" testid="market-read"><p className="text-[12.5px] text-slate-400">Loading the summary of every module…</p></Card>;
   return (
     <Card title="Market read and weightage" testid="market-read" sub={`All four modules in one number, and how it sits against each trade plan · updated ${ago(d.updated)}`}>
@@ -90,7 +92,7 @@ export function MarketRead({ d }) {
         <Read title="Intraday read" forPlan="used with the scalping plan" r={d.reads.intraday} plan={d.plans[0]} />
         <Read title="Swing read" forPlan="used with the swing plan" r={d.reads.swing} plan={d.plans[1]} />
       </div>
-      <More label="How it is worked out" className="mt-2">Each module gives a reading from −1 (bearish) to +1 (bullish); points = reading × weight; the market read is the total. {d.reads.intraday.rule} {d.note}</More>
+      <More label="How it is worked out" className="mt-2">Each module gives a reading from −1 (bearish) to +1 (bullish); points = reading × weight; the market read is the total. {d.reads.intraday.rule} {soften(d.note)}</More>
     </Card>
   );
 }
@@ -141,6 +143,7 @@ export function ModuleCards({ d }) {
 
 // The Day-type switch is the plan Auto-Trade follows, so it leads; the two fixed ways are kept below for comparison only.
 export function SwitchFocus({ d }) {
+  const soften = useSoften();
   const [period, setPeriod] = useState("since");
   const b = d?.books;
   if (!b) return null;
@@ -195,7 +198,7 @@ export function SwitchFocus({ d }) {
                   </tr>))}</tbody>
               </table>
             </div>
-            <Note tone="plain">{sp.ready ? `${sp.recorded} recorded trades.` : `Collecting: ${sp.recorded} of ${sp.need} recorded trades.`} {sp.note} Support is saved once, at the moment the signal fires; trades from before this was added are "not recorded".</Note>
+            <Note tone="plain">{sp.ready ? `${sp.recorded} recorded trades.` : `Collecting: ${sp.recorded} of ${sp.need} recorded trades.`} {soften(sp.note)} Support is saved once, at the moment the signal fires; trades from before this was added are "not recorded".</Note>
           </div>
         );
       })()}
@@ -204,7 +207,7 @@ export function SwitchFocus({ d }) {
         <SwitchTradesTable trades={tr} />
       </div>
       <p className="mt-3 text-[12px] text-slate-400" data-testid="switch-compare">For comparison only, not traded by Auto-Trade: {others.map((r, i) => <span key={r.key}>{i > 0 && " · "}<Link to={r.to} className="underline decoration-slate-600 underline-offset-2">{r.name}</Link> <span className={`font-mono ${ink(r.net)}`}>{signedUsd(r.net)}</span> on {r.taken ?? 0} trades</span>)}.</p>
-      <Note tone="plain">{b.note} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</Note>
+      <Note tone="plain">{soften(b.note)} These are the Trade Journal's simulated results on the same signals; Auto-Trade's own fills are on the Auto-Trade page.</Note>
     </Card>
   );
 }

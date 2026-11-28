@@ -64,16 +64,19 @@ function StratTable({ j, strategies, viewer }) {
   );
 }
 
-function YearTable({ rows, wbs, viewer }) {
+const retTxt = (v) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)}%`);
+
+function YearTable({ rows, wbs, viewer, capital }) {
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="desk-table" data-testid="elite-yearly">
-        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
+        <thead><tr><th>Year</th><th className="num">Trades</th><th className="num">Win %</th><th className="num">Gross</th><th className="num">Fees</th><th className="num">Net P&L</th><th className="num" title="Net P&L of the year ÷ the account capital">Return on {capital ? `$${Math.round(capital).toLocaleString()}` : "capital"}</th>{wbs.map((w) => <th key={w} className="num">{w}</th>)}<th className="num">Cumulative</th></tr></thead>
         <tbody>{rows.map((y) => (
           <tr key={y.year} className={y.year === "Total till date" ? "border-t-2 border-line2 font-semibold" : ""}>
             <td>{y.year}</td><td className="num">{y.trades}</td><td className="num">{pctTxt(y.win_rate)}</td>
             <td className={`num ${pnlTone(y.gross)}`}>{signedUsd(y.gross, 0)}</td><td className="num">{signedUsd(-y.fees, 0)}</td>
             <td className={`num font-semibold ${pnlTone(y.net)}`}>{signedUsd(y.net, 0)}</td>
+            <td className={`num font-semibold ${pnlTone(y.return)}`}>{retTxt(y.return)}</td>
             {wbs.map((w) => <td key={w} className={`num ${pnlTone(y.by_strategy[w])}`}>{signedUsd(y.by_strategy[w], 0)}</td>)}
             <td className={`num ${pnlTone(y.cumulative)}`}>{signedUsd(y.cumulative, 0)}</td>
           </tr>))}
@@ -140,7 +143,7 @@ function Journal({ j, title, strategies, note, viewer }) {
         <StratTable j={j} strategies={strategies} viewer={viewer} />
       </Card>
       <Card title="Yearly" sub="By entry date (IST). Net after fees.">
-        <YearTable rows={j.yearly} wbs={wbs} viewer={viewer} />
+        <YearTable rows={j.yearly} wbs={wbs} viewer={viewer} capital={j.capital} />
       </Card>
       {curve.length > 1 && (
         <Card title="Cumulative net P&L" sub="Closed trades, after fees">

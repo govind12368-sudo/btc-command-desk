@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useSoften } from "@/lib/present";
 import { Link } from "react-router-dom";
 import { useFetch } from "@/hooks/useFetch";
 import { Card, PageHead, Note } from "@/components/desk/ui";
@@ -156,6 +157,7 @@ function Places({ title, rows }) {
 }
 
 export default function StrategyObserver() {
+  const soften = useSoften();
   const { data } = useFetch("/observer", 120000);
   const d = data || {};
   const NAME = { follow: "Follow", fade: "Plan A", switch: "Day-type switch", regime: "Regime", regime_rev: "Regime reverse" };
@@ -179,7 +181,7 @@ export default function StrategyObserver() {
             {d.conclusions.map((c) => (
               <div key={c.title} className={`rounded-lg border px-3 py-2 ${c.title === "Main finding" ? "border-amber-500/50 bg-amber-950/20 lg:col-span-2" : "border-line bg-panel2/60"}`}>
                 <div className="text-[12px] font-semibold text-amber-300">{c.title}</div>
-                <div className="text-[13px] leading-relaxed text-slate-200">{c.text}</div>
+                <div className="text-[13px] leading-relaxed text-slate-200">{soften(c.text)}</div>
               </div>
             ))}
           </div>
@@ -274,7 +276,7 @@ export default function StrategyObserver() {
               <div key={p.page} className="rounded-lg border border-line bg-panel2/60 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2"><Link to={p.to} className="text-sm font-semibold text-amber-300 hover:underline">{p.page}</Link></div>
                 <div className="text-[12px] text-slate-400">{p.role}</div>
-                <div className="mt-1 text-[12.5px] font-semibold text-slate-100">{p.verdict}</div>
+                <div className="mt-1 text-[12.5px] font-semibold text-slate-100">{soften(p.verdict)}</div>
                 <div className="mt-1 text-[12px] leading-relaxed text-slate-300">{p.evidence}</div>
               </div>
             ))}

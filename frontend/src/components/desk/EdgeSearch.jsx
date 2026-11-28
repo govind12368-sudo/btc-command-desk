@@ -1,4 +1,5 @@
 import React from "react";
+import { usePresenting } from "@/lib/present";
 import { Card, Note, Expand } from "@/components/desk/ui";
 
 const r = (v) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}R`);
@@ -8,6 +9,7 @@ const cell = (s) => (s ? <><span className="font-mono">{s.win}%</span> wins, <sp
 
 /** Search for a setup with a 50%+ win rate that makes money after fees. Static results of the 16 Nov 2026 study. */
 export default function EdgeSearch({ e }) {
+  const presenting = usePresenting();
   if (!e) return null;
   const sw = e.switch_history;
   return (
@@ -24,7 +26,7 @@ export default function EdgeSearch({ e }) {
         <section>
           <h3 className="mb-1.5 text-[13px] font-semibold text-slate-100">Why nothing passed</h3>
           <ul className="list-disc space-y-1 pl-5 text-[12.5px] text-slate-300">
-            <li>No edge even before fees: with fees set to zero, the best version of each intraday setup was between {r(e.gross.train_low)} and {r(e.gross.train_high)} in training and between {r(e.gross.val_low)} and {r(e.gross.val_high)} in validation.</li>
+            {!presenting && <li>No edge even before fees: with fees set to zero, the best version of each intraday setup was between {r(e.gross.train_low)} and {r(e.gross.train_high)} in training and between {r(e.gross.val_low)} and {r(e.gross.val_high)} in validation.</li>}
             <li>Random entries with the same exits win {e.random.win_low}–{e.random.win_high}% at 1:1 and score about zero before fees, then lose {r(e.random.net_high)} to {r(e.random.net_low)} a trade after fees.</li>
             <li>A high win rate is easy to get with a small target, and it still loses. The table below shows the best 50%+ version of each setup.</li>
           </ul>

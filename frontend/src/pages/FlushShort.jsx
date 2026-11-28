@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useSoften } from "@/lib/present";
 import { useFetch } from "@/hooks/useFetch";
 import { Card, PageHead, Note, usePaged } from "@/components/desk/ui";
 import { n, signedUsd, ist } from "@/lib/fmt";
@@ -51,6 +52,7 @@ function Detail({ r, viewer }) {
 }
 
 export default function FlushShort() {
+  const soften = useSoften();
   const { data } = useFetch("/flush-short", 60000);
   const [period, setPeriod] = useState("all");
   const [showAll, setShowAll] = useState(false);
@@ -150,7 +152,7 @@ export default function FlushShort() {
       <Card title="Rules" sub="Fixed. Paper only: this page never sends an order.">
         <div className="space-y-1.5 text-xs text-slate-300">
           <p><b>Take a scalp signal only when all six hold</b> at the signal candle's close: 1) the signal is SHORT; 2) RSI 15m is below 30; 3) it is not between 00:00 and 06:00 IST; 4) the stop is at least 0.6× the hourly ATR; 5) the 15m, 1h and 4h trends are all down; 6) BTC is in a down market: more than 5% lower than 30 days ago.</p>
-          <p><b>Up and range markets:</b> Flush Short stands aside. Over 26 months no rule built on the site's signals beat luck in those markets (10,656 rules tried; luck alone produces as many "winners" as the search found).</p>
+          <p><b>Up and range markets:</b> {soften("Flush Short stands aside. Over 26 months no rule built on the site's signals beat luck in those markets (10,656 rules tried; luck alone produces as many \"winners\" as the search found).")}</p>
           <p><b>Trade:</b> SHORT at the signal entry with a post-only limit order (maker fee), stop 1R = the signal's stop distance, take profit 1.25R, close after 6 hours. $10,000 position. Fees: 0.02% maker in and at target, 0.05% taker at stop or 6-hour exit, +18% GST. A minute touching both stop and target counts as the stop.</p>
           <p><b>Alerts:</b> an email when a trade is taken, when it closes, and when an entry never fills (follows the site's alert switches).</p>
         </div>

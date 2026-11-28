@@ -1,4 +1,5 @@
 import React from "react";
+import { useSoften } from "@/lib/present";
 import { Card, Note } from "@/components/desk/ui";
 import { n, usd, ist } from "@/lib/fmt";
 import { LineChart, VIZ } from "@/components/desk/charts";
@@ -65,6 +66,7 @@ export function PeriodSwitch({ value, onChange, sinceDate }) {
 
 /** What the last 12 hours look like, with the five measurements behind the call. */
 export function DayTypeCard({ day, compact }) {
+  const soften = useSoften();
   if (!day) return null;
   const pb = day.playbook || {};
   return (
@@ -93,7 +95,7 @@ export function DayTypeCard({ day, compact }) {
               </table>
             </div>
           )}
-          <Note tone="plain" className="mt-1">Describes what price has done. In 11 months of testing it did not predict the next hours and switching by it did not make money. See the Strategy audit.</Note>
+          <Note tone="plain" className="mt-1">{soften("Describes what price has done. In 11 months of testing it did not predict the next hours and switching by it did not make money. See the Strategy audit.")}</Note>
         </>
       )}
     </Card>
