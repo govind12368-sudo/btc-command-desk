@@ -237,7 +237,7 @@ function JournalA({ d, s, viewer }) {
 
 export default function OptionPicks() {
   const { data: d, error, reload } = useFetch("/option-picks", 30000);
-  const [tab, setTab] = useState("C");
+  const [tab, setTab] = useState("A");   // A · 1 Jan 2024 → today first (owner, 28 Nov 2026)
   useEffect(() => { document.title = "Option Picks"; }, []);
   if (error && !d) return <Note tone="red">Could not load Option Picks: {String(error)}</Note>;
   if (!d) return <div className="text-sm text-slate-400">Loading Option Picks…</div>;
@@ -263,8 +263,8 @@ export default function OptionPicks() {
       {d.is_admin && <Sizing d={d} reload={reload} />}
       {!viewer && (
         <div className="flex flex-wrap gap-2">
-          <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="opt-tab-C">A · Live paper trading</button>
-          <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="opt-tab-A">B · 1 Jan 2024 → today</button>
+          <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="opt-tab-A">A · 1 Jan 2024 → today</button>
+          <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="opt-tab-C">B · Live paper trading</button>
         </div>
       )}
       {/* Users get journal A only (as Elite 4 Edge); live paper trading is not sent to them. */}

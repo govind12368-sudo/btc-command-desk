@@ -106,7 +106,7 @@ The Option Picks page itself stays paper (no orders, no alerts). Its size settin
 after the previous closed trade; the last-13-months row starts again from the starting capital; "Paper vs backtest" prices the
 backtest trade of a day at the paper trade's own size; the "5% worse fills + 2× fees" figure compounds along its own balance.
 The admin page has two journals with the same totals strip as Elite 4 Edge (trades, win ratio, gross, fees, net):
-**C · Live paper trading** and **A · 1 Jan 2024 → today** (history file, then the server's daily backtest). Users get journal A only.
+**A · 1 Jan 2024 → today** (shown first; history file, then the server's daily backtest) and **B · Live paper trading**. Users get journal A only.
 Owner, 27 Nov 2026: journal B and every max-drawdown figure were removed from the pages (Elite 4 Edge too).
 
 ## 5. Deployment

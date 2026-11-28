@@ -12,7 +12,7 @@ import { Sparkles } from "lucide-react";
 import { Ring, Sparkline, PillarBars, MtfStrip, VIZ } from "@/components/desk/charts";
 import { PILLAR_NAMES } from "@/components/desk/Pillars";
 import { NextSetup } from "@/components/desk/NextSetup";
-import { MarketRead, ModuleCards, SwitchFocus } from "@/components/desk/DeskSummary";
+import { MarketRead, ModuleCards } from "@/components/desk/DeskSummary";
 
 const TONE = { BULLISH: "text-teal-300 border-teal-500/40 bg-teal-500/10", "LEAN BULLISH": "text-teal-300 border-teal-500/30 bg-teal-500/5",
   BEARISH: "text-red-300 border-red-500/40 bg-red-500/10", "LEAN BEARISH": "text-red-300 border-red-500/30 bg-red-500/5", NEUTRAL: "text-slate-300 border-slate-500/40 bg-slate-500/10" };
@@ -197,7 +197,6 @@ export default function Dashboard() {
           ))}
         </div>} />
       <DecisionHero s={s} />
-      {isAdmin && <SwitchFocus d={sum} />}
       <DayTypeCard day={s.day_type} compact />
       <MarketRead d={sum} />
       <NextSetup scalp={s.scalp} swing={s.swing} isAdmin={isAdmin} />

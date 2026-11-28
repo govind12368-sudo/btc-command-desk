@@ -335,7 +335,7 @@ function EliteUser({ d }) {
 
 function EliteAdmin({ d }) {
   const { data: lvd, reload } = useFetch("/elite/live", 3000);
-  const [tab, setTab] = useState("C");
+  const [tab, setTab] = useState("A");   // A · 1 Jan 2023 → today first (owner, 28 Nov 2026)
   const lv = lvd?.live || d.live;
   const strategies = (d.strategies || []).filter((s) => !hidden(s)).map((s, i) => ({ ...s, priority: i + 1 }));
   const btn = (on) => `rounded px-3 py-1.5 text-xs font-semibold ${on ? "bg-amber-500 text-slate-950" : "border border-line text-slate-300 hover:text-white"}`;
@@ -360,8 +360,8 @@ function EliteAdmin({ d }) {
       </div>}
       {!viewer && <div className="text-[11.5px] text-slate-400">While a trade is open every new signal is skipped. Two signals on the same candle: the higher priority is taken. Market type = BTC now vs 30 days ago: Up above +5%, Down below −5%, otherwise Range.</div>}
       <div className="flex flex-wrap gap-2">
-        <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="elite-tab-C">A · Live paper trading</button>
-        <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="elite-tab-A">B · 1 Jan 2023 → today</button>
+        <button className={btn(tab === "A")} onClick={() => setTab("A")} data-testid="elite-tab-A">A · 1 Jan 2023 → today</button>
+        <button className={btn(tab === "C")} onClick={() => setTab("C")} data-testid="elite-tab-C">B · Live paper trading</button>
       </div>
       {tab === "A" && <Journal j={d.A} title="1 Jan 2023 → today" strategies={strategies} note={aNote} viewer={viewer} />}
       {tab === "C" && <Live lv={lv} isAdmin={d.is_admin} reload={reload} />}
